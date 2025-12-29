@@ -1,32 +1,41 @@
 package org.example.MediManage.config;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Properties;
 
 public class DatabaseConfig {
 
-    // 1. Point to your new MySQL Database
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/medimanage_db";
+    private static final Properties properties = new Properties();
 
-    // 2. Add your MySQL Credentials
-    private static final String DB_USER = "root";
-    private static final String DB_PASS = "Password@123"; // ⚠️ REPLACE THIS with the password you wrote down!
-
+    // Load the settings when the class is first used
     static {
-        try {
-            // 3. Load the MySQL Driver instead of SQLite
-            Class.forName("com.mysql.cj.jdbc.Driver");
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException("MySQL JDBC Driver not found", e);
+        try (InputStream input = DatabaseConfig.class.getClassLoader().getResourceAsStream("db_config.properties")) {
+            if (input == null) {
+                System.out.println("⚠️ Warning: db_config.properties not found! Make sure you created it.");
+            } else {
+                properties.load(input);
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
         }
     }
 
-    public static Connection getConnection() {
-        try {
-            return DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
-        } catch (Exception e) {
-            throw new RuntimeException("MySQL connection failed", e);
+    public static Connection getConnection() throws SQLException {
+        // Read values from the hidden file
+        String url = properties.getProperty("db.url");
+        String user = properties.getProperty("db.user");
+        String password = properties.getProperty("db.password");
+
+        // Safety check
+        if (url == null) {
+            throw new RuntimeException("❌ Database Config Missing! Check src/main/resources/db_config.properties");
         }
+
+        // Connect to MySQL
+        return DriverManager.getConnection(url, user, password);
     }
 }
