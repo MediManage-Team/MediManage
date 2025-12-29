@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<AnchorPane xmlns="http://javafx.com/javafx/11"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="org.example.MediManage.LoginController"
+            prefWidth="400" prefHeight="300">
+
+    <children>
+
+        <Label text="Login"
+               layoutX="170" layoutY="20">
+            <font>
+                <Font size="20"/>
+            </font>
+        </Label>
+
+        <TextField fx:id="username"
+                   promptText="Username"
+                   layoutX="100" layoutY="80"
+                   prefWidth="200"/>
+
+        <PasswordField fx:id="password"
+                       promptText="Password"
+                       layoutX="100" layoutY="120"
+                       prefWidth="200"/>
+
+        <Button text="Login"
+                layoutX="170" layoutY="170"
+                prefWidth="60"
+                onAction="#handleLogin"/>
+
+        <Label fx:id="message"
+               layoutX="100" layoutY="210"
+               prefWidth="200"
+               style="-fx-text-fill: red;"
+               alignment="CENTER"/>
+
+    </children>
+</AnchorPane>

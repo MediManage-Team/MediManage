@@ -1,0 +1,42 @@
+.login-root {
+    -fx-padding: 30;
+    -fx-background-color: linear-gradient(#4facfe, #00f2fe);
+}
+
+.title {
+    -fx-font-size: 22px;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.login-btn {
+    -fx-background-color: #2ecc71;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+}
+
+.error {
+    -fx-text-fill: red;
+}
+
+.dash-title {
+    -fx-font-size: 24px;
+    -fx-padding: 15;
+    -fx-background-color: #2c3e50;
+    -fx-text-fill: white;
+}
+
+.sidebar {
+    -fx-padding: 20;
+    -fx-background-color: #34495e;
+}
+
+.sidebar Button {
+    -fx-pref-width: 150;
+    -fx-background-color: #1abc9c;
+    -fx-text-fill: white;
+}
+
+.content {
+    -fx-padding: 30;
+}
