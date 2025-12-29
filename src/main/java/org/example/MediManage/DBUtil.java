@@ -7,29 +7,27 @@ import java.sql.Statement;
 
 public class DBUtil {
 
-    private static final String DB_URL = "jdbc:sqlite:users.db";
+    // 1. UPDATE WITH YOUR SPECIFIC INFO
+    // If you named your database "medimanage_db" in Workbench, keep it.
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/medimanage_db";
 
-    // Get DB connection
+    // 2. USE THE PASSWORD YOU WROTE DOWN EARLIER
+    private static final String DB_USER = "root";
+    private static final String DB_PASS = "Password@123";
+
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL);
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
     }
 
-    // Create users table if not exists
     public static void initDB() {
-        String sql =
-                "CREATE TABLE IF NOT EXISTS users (" +
-                        "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                        "username TEXT UNIQUE NOT NULL, " +
-                        "password TEXT NOT NULL" +
-                        ");";
+        try (Connection conn = getConnection()) {
+            System.out.println("✅ Connected to MySQL Database successfully");
 
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
-
-            stmt.execute(sql);
-            System.out.println("✅ Database initialized successfully");
+            // Optional: You can keep table creation logic here if you want to allow
+            // the app to create tables automatically, but for now, rely on Workbench.
 
         } catch (SQLException e) {
+            System.err.println("❌ Connection Failed: " + e.getMessage());
             e.printStackTrace();
         }
     }

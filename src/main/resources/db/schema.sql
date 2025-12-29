@@ -1,57 +1,59 @@
--- USERS (LOGIN)
+CREATE DATABASE IF NOT EXISTS medimanage_db;
+USE medimanage_db;  -- <--- THIS LINE FIXES YOUR ERROR
+
+-- USERS
 CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL
-);
--- user info by chandu
-INSERT OR IGNORE INTO users (username, password) VALUES
-('admin', 'admin123'),
-('staff', 'staff123');
-INSERT INTO users(username, password, role)
-VALUES ('admin', 'admin123', 'ADMIN');
+                                     user_id INT AUTO_INCREMENT PRIMARY KEY,
+                                     username VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'STAFF'
+    );
+
+INSERT IGNORE INTO users (username, password, role) VALUES
+('admin', 'admin123', 'ADMIN'),
+('staff', 'staff123', 'STAFF');
 
 -- MEDICINES
 CREATE TABLE IF NOT EXISTS medicines (
-    medicine_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    company TEXT,
-    price REAL NOT NULL,
-    expiry_date TEXT
-);
+                                         medicine_id INT AUTO_INCREMENT PRIMARY KEY,
+                                         name VARCHAR(255) NOT NULL,
+    company VARCHAR(255),
+    price DOUBLE NOT NULL,
+    expiry_date DATE
+    );
 
 -- STOCK
 CREATE TABLE IF NOT EXISTS stock (
-    stock_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    medicine_id INTEGER,
-    quantity INTEGER NOT NULL,
-    FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
-);
+                                     stock_id INT AUTO_INCREMENT PRIMARY KEY,
+                                     medicine_id INT,
+                                     quantity INT NOT NULL,
+                                     FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
+    );
 
 -- CUSTOMERS
 CREATE TABLE IF NOT EXISTS customers (
-    customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    phone TEXT
-);
+                                         customer_id INT AUTO_INCREMENT PRIMARY KEY,
+                                         name VARCHAR(255) NOT NULL,
+    phone VARCHAR(20)
+    );
 
 -- BILLS
 CREATE TABLE IF NOT EXISTS bills (
-    bill_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER,
-    total_amount REAL,
-    bill_date TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-);
+                                     bill_id INT AUTO_INCREMENT PRIMARY KEY,
+                                     customer_id INT,
+                                     total_amount DOUBLE,
+                                     bill_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                     FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+    );
 
 -- BILL ITEMS
 CREATE TABLE IF NOT EXISTS bill_items (
-    item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bill_id INTEGER,
-    medicine_id INTEGER,
-    quantity INTEGER,
-    price REAL,
-    total REAL,
-    FOREIGN KEY (bill_id) REFERENCES bills(bill_id),
+                                          item_id INT AUTO_INCREMENT PRIMARY KEY,
+                                          bill_id INT,
+                                          medicine_id INT,
+                                          quantity INT,
+                                          price DOUBLE,
+                                          total DOUBLE,
+                                          FOREIGN KEY (bill_id) REFERENCES bills(bill_id),
     FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
-);
+    );
