@@ -8,7 +8,7 @@ import java.util.List;
 
 public class BillDAO {
 
-    public int generateInvoice(double totalAmount, List<BillItem> items) throws SQLException {
+    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId) throws SQLException {
         Connection conn = null;
         int billId = -1;
         try {
@@ -16,9 +16,10 @@ public class BillDAO {
             conn.setAutoCommit(false);
 
             // 1. Insert Bill
-            String billSql = "INSERT INTO bills (total_amount, bill_date) VALUES (?, CURRENT_TIMESTAMP)";
+            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id) VALUES (?, CURRENT_TIMESTAMP, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
+                psBill.setObject(2, customerId);
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -77,5 +78,30 @@ public class BillDAO {
             e.printStackTrace();
         }
         return 0.0;
+    }
+
+    public java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> getBillHistory() {
+        java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> history = new java.util.ArrayList<>();
+        String sql = "SELECT b.bill_id, b.bill_date, b.total_amount, c.name, c.phone " +
+                "FROM bills b " +
+                "LEFT JOIN customers c ON b.customer_id = c.customer_id " +
+                "ORDER BY b.bill_date DESC";
+
+        try (Connection conn = DBUtil.getConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                history.add(new org.example.MediManage.DashboardController.BillHistoryDTO(
+                        rs.getInt("bill_id"),
+                        rs.getString("bill_date"),
+                        rs.getDouble("total_amount"),
+                        rs.getString("name"),
+                        rs.getString("phone")));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return history;
     }
 }

@@ -4,12 +4,19 @@ import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
+
+import java.util.ArrayList;
+import java.util.List;
 import javafx.collections.transformation.SortedList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.stage.FileChooser;
 import org.example.MediManage.dao.BillDAO;
+import org.example.MediManage.dao.CustomerDAO;
 import org.example.MediManage.dao.MedicineDAO;
+import org.example.MediManage.model.Customer;
 
+import java.io.File;
 import java.sql.SQLException;
 
 public class DashboardController {
@@ -54,20 +61,64 @@ public class DashboardController {
     private Label lblTotal;
 
     @FXML
-    private TextField txtCustomerName; // New
+    private TextField txtSearchCustomer;
     @FXML
-    private TextField txtDoctorName; // New
+    private Button btnSearchCustomer;
+    @FXML
+    private Label lblCustomerStatus;
+    @FXML
+    private Button btnNewCustomer;
+    @FXML
+    private TabPane mainTabPane;
+    @FXML
+    private Tab tabAddCustomer;
+    @FXML
+    private TextField txtCustomerName; // Keep for now if referenced elsewhere, or remove if unused. Checking usage...
+                                       // It was used in generateInvoice. Will update logic.
+    @FXML
+    private TextField txtDoctorName;
 
     @FXML
     private Button btnAddBill, btnGenerateInvoice;
+    @FXML
+    private Button btnUploadPhoto, btnSaveCustomer;
+
+    // Customer Form Fields
+    @FXML
+    private TextField txtName, txtPhone, txtEmail, txtAddress;
+    @FXML
+    private TextField txtNomineeName, txtNomineeRelation;
+    @FXML
+    private TextField txtInsuranceProvider, txtPolicyNo;
+    @FXML
+    private CheckBox checkDiabetes, checkBP, checkAsthma, checkAllergy;
+    @FXML
+    private Label lblPhotoPath;
+
+    // History Table
+    @FXML
+    private TableView<BillHistoryDTO> historyTable;
+    @FXML
+    private TableColumn<BillHistoryDTO, Integer> histColId;
+    @FXML
+    private TableColumn<BillHistoryDTO, String> histColDate;
+    @FXML
+    private TableColumn<BillHistoryDTO, String> histColCustomer;
+    @FXML
+    private TableColumn<BillHistoryDTO, String> histColPhone;
+    @FXML
+    private TableColumn<BillHistoryDTO, Double> histColAmount;
 
     // Data
     private ObservableList<Medicine> masterInventoryList = FXCollections.observableArrayList();
     private ObservableList<BillItem> billList = FXCollections.observableArrayList();
+    private ObservableList<BillHistoryDTO> historyList = FXCollections.observableArrayList();
+    private Customer selectedCustomer = null;
 
     // DAOs
     private final MedicineDAO medicineDAO = new MedicineDAO();
     private final BillDAO billDAO = new BillDAO();
+    private final CustomerDAO customerDAO = new CustomerDAO();
 
     @FXML
     private void initialize() {
@@ -76,9 +127,24 @@ public class DashboardController {
 
         setupInventoryTable();
         setupBillingTable();
+        setupHistoryTable();
         loadInventory();
+        loadHistory();
         loadKPIs(); // Refresh KPIs on load
         setupBillingButtons();
+    }
+
+    private void setupHistoryTable() {
+        histColId.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().getBillId()).asObject());
+        histColDate.setCellValueFactory(data -> data.getValue().dateProperty());
+        histColCustomer.setCellValueFactory(data -> data.getValue().customerNameProperty());
+        histColPhone.setCellValueFactory(data -> data.getValue().phoneProperty());
+        histColAmount.setCellValueFactory(data -> data.getValue().totalProperty().asObject());
+        historyTable.setItems(historyList);
+    }
+
+    private void loadHistory() {
+        historyList.setAll(billDAO.getBillHistory());
     }
 
     private void setupInventoryTable() {
@@ -175,6 +241,138 @@ public class DashboardController {
         updateTotal();
     }
 
+    @FXML
+    private void handlePhotoUpload() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Photo ID");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"));
+        File selectedFile = fileChooser.showOpenDialog(lblPhotoPath.getScene().getWindow());
+        if (selectedFile != null) {
+            lblPhotoPath.setText(selectedFile.getAbsolutePath());
+        }
+    }
+
+    @FXML
+    private void handleSearchCustomer() {
+        String query = txtSearchCustomer.getText();
+        if (query == null || query.trim().isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Input Required", "Please enter a name or phone number.");
+            return;
+        }
+
+        List<Customer> results = customerDAO.searchCustomer(query);
+        if (results.isEmpty()) {
+            selectedCustomer = null;
+            lblCustomerStatus.setText("Customer not found.");
+            lblCustomerStatus.setStyle("-fx-text-fill: red;");
+            btnNewCustomer.setVisible(true);
+            btnNewCustomer.setManaged(true);
+        } else {
+            // honest assumption: taking the first match for now, or could show a dialog
+            selectedCustomer = results.get(0);
+            lblCustomerStatus.setText(
+                    "Selected: " + selectedCustomer.getName() + " (" + selectedCustomer.getPhoneNumber() + ")");
+            lblCustomerStatus.setStyle("-fx-text-fill: green;");
+            btnNewCustomer.setVisible(false);
+            btnNewCustomer.setManaged(false);
+        }
+    }
+
+    @FXML
+    private void handleNewCustomer() {
+        mainTabPane.getSelectionModel().select(tabAddCustomer);
+        // Pre-fill phone if search query looks like a number
+        String query = txtSearchCustomer.getText();
+        if (query != null && query.matches("\\d+")) {
+            txtPhone.setText(query);
+        }
+        // Reset search state
+        txtSearchCustomer.clear();
+        btnNewCustomer.setVisible(false);
+        btnNewCustomer.setManaged(false);
+        lblCustomerStatus.setText("No customer selected");
+        lblCustomerStatus.setStyle("-fx-text-fill: #666;");
+    }
+
+    @FXML
+    private void handleSaveCustomer() {
+        // Validation
+        if (txtName.getText().isEmpty() || txtPhone.getText().isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Validation Error", "Name and Phone Number are required.");
+            return;
+        }
+
+        // Gather Diseases
+        List<String> diseasesList = new ArrayList<>();
+        if (checkDiabetes.isSelected())
+            diseasesList.add("Diabetes");
+        if (checkBP.isSelected())
+            diseasesList.add("Hypertension (BP)");
+        if (checkAsthma.isSelected())
+            diseasesList.add("Asthma");
+        if (checkAllergy.isSelected())
+            diseasesList.add("Allergies");
+
+        String diseases = String.join(",", diseasesList);
+        String photoPath = lblPhotoPath.getText().equals("No file selected") ? "" : lblPhotoPath.getText();
+
+        Customer customer = new Customer(
+                txtName.getText(),
+                txtEmail.getText(),
+                txtPhone.getText(),
+                txtAddress.getText(),
+                txtNomineeName.getText(),
+                txtNomineeRelation.getText(),
+                txtInsuranceProvider.getText(),
+                txtPolicyNo.getText(),
+                diseases,
+                photoPath);
+
+        try {
+            customerDAO.addCustomer(customer);
+            showAlert(Alert.AlertType.INFORMATION, "Success", "Customer Saved Successfully!");
+
+            // Auto-select the new customer for billing
+            selectedCustomer = customer; // Ideally fetch back efficiently, but object data is sufficient for now if ID
+                                         // is not critical immediately or handled
+            // However, we need ID for billing. addCustomer executes insert.
+            // We should reload or just let user search again. For better UX, let's search
+            // for it.
+            List<Customer> saved = customerDAO.searchCustomer(customer.getPhoneNumber());
+            if (!saved.isEmpty())
+                selectedCustomer = saved.get(0);
+
+            clearCustomerForm();
+            mainTabPane.getSelectionModel().select(0); // Switch back to Dashboard (Billing)
+            if (selectedCustomer != null) {
+                txtSearchCustomer.setText(selectedCustomer.getPhoneNumber());
+                lblCustomerStatus.setText("Selected: " + selectedCustomer.getName());
+                lblCustomerStatus.setStyle("-fx-text-fill: green;");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to save customer: " + e.getMessage());
+        }
+    }
+
+    private void clearCustomerForm() {
+        txtName.clear();
+        txtPhone.clear();
+        txtEmail.clear();
+        txtAddress.clear();
+        txtNomineeName.clear();
+        txtNomineeRelation.clear();
+        txtInsuranceProvider.clear();
+        txtPolicyNo.clear();
+        checkDiabetes.setSelected(false);
+        checkBP.setSelected(false);
+        checkAsthma.setSelected(false);
+        checkAllergy.setSelected(false);
+        lblPhotoPath.setText("No file selected");
+    }
+
     private void generateInvoice() {
         if (billList.isEmpty()) {
             showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add items to the bill first.");
@@ -183,17 +381,26 @@ public class DashboardController {
 
         double totalAmount = billList.stream().mapToDouble(BillItem::getTotal).sum();
 
+        Integer customerId = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
+        String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
+
         try {
-            int billId = billDAO.generateInvoice(totalAmount, billList);
+            int billId = billDAO.generateInvoice(totalAmount, billList, customerId);
             showAlert(Alert.AlertType.INFORMATION, "Success",
-                    "Invoice Generated! ID: " + billId + "\nCustomer: " + txtCustomerName.getText());
+                    "Invoice Generated! ID: " + billId + "\nCustomer: " + customerName);
 
             billList.clear();
-            txtCustomerName.clear(); // Reset inputs
-            txtDoctorName.clear();
             updateTotal();
             loadInventory();
+            loadHistory();
             loadKPIs();
+
+            // Reset customer selection
+            selectedCustomer = null;
+            lblCustomerStatus.setText("No customer selected");
+            lblCustomerStatus.setStyle("-fx-text-fill: #666;");
+            txtSearchCustomer.clear();
+
         } catch (SQLException e) {
             e.printStackTrace();
             showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to save invoice: " + e.getMessage());
@@ -323,6 +530,42 @@ public class DashboardController {
 
         public double getTotal() {
             return total.get();
+        }
+    }
+
+    public static class BillHistoryDTO {
+        private final int billId;
+        private final StringProperty date;
+        private final DoubleProperty total;
+        private final StringProperty customerName;
+        private final StringProperty phone;
+
+        public BillHistoryDTO(int billId, String date, double total, String customerName, String phone) {
+            this.billId = billId;
+            this.date = new SimpleStringProperty(date);
+            this.total = new SimpleDoubleProperty(total);
+            this.customerName = new SimpleStringProperty(customerName != null ? customerName : "N/A");
+            this.phone = new SimpleStringProperty(phone != null ? phone : "N/A");
+        }
+
+        public int getBillId() {
+            return billId;
+        }
+
+        public StringProperty dateProperty() {
+            return date;
+        }
+
+        public DoubleProperty totalProperty() {
+            return total;
+        }
+
+        public StringProperty customerNameProperty() {
+            return customerName;
+        }
+
+        public StringProperty phoneProperty() {
+            return phone;
         }
     }
 }

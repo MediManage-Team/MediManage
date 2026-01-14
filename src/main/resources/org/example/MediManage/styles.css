@@ -1,129 +1,182 @@
-/* Modern Color Palette */
-:root {
-    -fx-primary: #4F46E5;
-    -fx-secondary: #818CF8;
-    -fx-background: #F3F4F6;
-    -fx-surface: #FFFFFF;
-    -fx-text-dark: #1F2937;
-    -fx-text-light: #6B7280;
-    -fx-accent: #10B981;
-    -fx-danger: #EF4444;
-}
-
+/* Dark Red-Violet Theme */
 .root {
+    -fx-primary: #8B008B;
+    /* Dark Magenta / Red-Violet */
+    -fx-secondary: #4B0082;
+    /* Indigo */
+    -fx-background: #1e1e2f;
+    /* Dark Blue-Grey Background */
+    -fx-background-alt: #27293d;
+    /* Slightly lighter for cards */
+    -fx-text: #e1e1e6;
+    /* Off-white text */
+    -fx-text-secondary: #9a9a9a;
+    /* Grey text */
+    -fx-accent: #ff00ff;
+    /* Bright accent */
+    -fx-success: #00d284;
+    -fx-danger: #fd5d93;
+    -fx-warning: #ff8d72;
     -fx-font-family: 'Segoe UI', sans-serif;
-    -fx-background-color: -fx-background;
+    background-color: -fx-background;
 }
 
-/* Sidebar Styles */
-.sidebar {
-    -fx-background-color: -fx-surface;
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 5, 0, 0, 0);
-    -fx-padding: 20;
-    -fx-spacing: 15;
+/* Base Styles */
+.label {
+    -fx-text-fill: -fx-text;
+    font-family: 'Segoe UI', sans-serif;
 }
 
-.sidebar-button {
-    -fx-background-color: transparent;
-    -fx-text-fill: -fx-text-dark;
-    -fx-font-size: 14px;
-    -fx-alignment: CENTER_LEFT;
-    -fx-padding: 10 15;
+.button {
+    -fx-background-color: -fx-secondary;
+    -fx-text-fill: white;
+    -fx-background-radius: 5px;
+    -fx-padding: 8px 16px;
     -fx-cursor: hand;
-    -fx-background-radius: 8;
+    background-color: #4B0082;
+    /* standard property fallback */
+    color: white;
+    border-radius: 5px;
+    padding: 8px 16px;
+    cursor: pointer;
 }
 
-.sidebar-button:hover {
-    -fx-background-color: #EEF2FF;
-    -fx-text-fill: -fx-primary;
+.button:hover {
+    -fx-background-color: derive(-fx-secondary, 20%);
+    background-color: #5d00a3;
+}
+
+.button-primary {
+    -fx-background-color: -fx-primary;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    background-color: #8B008B;
+    font-weight: bold;
+}
+
+.button-primary:hover {
+    -fx-background-color: derive(-fx-primary, 20%);
+    background-color: #a300a3;
+}
+
+/* Sidebar */
+.sidebar {
+    -fx-background-color: -fx-background-alt;
+    -fx-padding: 20px;
+    background-color: #27293d;
+    padding: 20px;
 }
 
 .sidebar-title {
     -fx-font-size: 20px;
     -fx-font-weight: bold;
     -fx-text-fill: -fx-primary;
-    -fx-padding: 0 0 20 0;
+    -fx-padding: 0 0 20px 0;
+    font-size: 20px;
+    font-weight: bold;
+    color: #8B008B;
+    padding-bottom: 20px;
 }
 
-/* Card Styles */
+.sidebar-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-text;
+    -fx-alignment: CENTER_LEFT;
+    -fx-font-size: 14px;
+    -fx-cursor: hand;
+    background-color: transparent;
+    text-align: left;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.sidebar-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.05);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Cards */
 .card {
-    -fx-background-color: -fx-surface;
-    -fx-background-radius: 12;
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 10, 0, 0, 5);
-    -fx-padding: 20;
+    -fx-background-color: -fx-background-alt;
+    -fx-background-radius: 10px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.3), 10, 0, 0, 0);
+    -fx-padding: 20px;
+    background-color: #27293d;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    padding: 20px;
 }
 
 .card-title {
     -fx-font-size: 14px;
-    -fx-text-fill: -fx-text-light;
+    -fx-text-fill: -fx-text-secondary;
+    font-size: 14px;
+    color: #9a9a9a;
 }
 
 .card-value {
     -fx-font-size: 24px;
     -fx-font-weight: bold;
-    -fx-text-fill: -fx-text-dark;
+    -fx-text-fill: -fx-text;
+    font-size: 24px;
+    font-weight: bold;
+    color: #e1e1e6;
 }
 
-/* Table View Styles */
+/* TableView */
 .table-view {
     -fx-background-color: transparent;
-    -fx-background-radius: 8;
-    -fx-border-color: transparent;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-border-width: 1px;
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .table-view .column-header-background {
-    -fx-background-color: -fx-surface;
-    -fx-border-width: 0 0 1 0;
-    -fx-border-color: #E5E7EB;
+    -fx-background-color: -fx-background-alt;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 1px 0;
+    background-color: #27293d;
+    border-bottom: 1px solid transparent;
+}
+
+.table-view .column-header {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    background-color: transparent;
 }
 
 .table-view .column-header .label {
-    -fx-text-fill: -fx-text-light;
+    -fx-text-fill: -fx-text-secondary;
     -fx-font-weight: bold;
+    color: #9a9a9a;
+    font-weight: bold;
 }
 
 .table-row-cell {
-    -fx-background-color: -fx-surface;
+    -fx-background-color: -fx-background-alt;
     -fx-border-color: transparent;
+    background-color: #27293d;
 }
 
 .table-row-cell:odd {
-    -fx-background-color: #F9FAFB;
+    -fx-background-color: derive(-fx-background-alt, 5%);
+    background-color: #2f3147;
 }
 
 .table-row-cell:selected {
-    -fx-background-color: #EEF2FF;
-    -fx-text-fill: -fx-primary;
-}
-
-/* Button Styles */
-.button-primary {
     -fx-background-color: -fx-primary;
     -fx-text-fill: white;
-    -fx-background-radius: 8;
-    -fx-padding: 10 20;
-    -fx-font-weight: bold;
-    -fx-cursor: hand;
+    background-color: #8B008B;
+    color: white;
 }
 
-.button-primary:hover {
-    -fx-background-color: #4338CA;
+.table-cell {
+    -fx-text-fill: -fx-text;
+    color: #e1e1e6;
 }
 
-.button-secondary {
-    -fx-background-color: -fx-surface;
-    -fx-text-fill: -fx-text-dark;
-    -fx-border-color: #D1D5DB;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-padding: 10 20;
-    -fx-cursor: hand;
-}
-
-.button-secondary:hover {
-    -fx-background-color: #F9FAFB;
-}
-
+/* Inputs */
 .text-field {
     -fx-background-color: -fx-surface;
     -fx-border-color: #D1D5DB;

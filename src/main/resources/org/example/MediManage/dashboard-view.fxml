@@ -43,90 +43,197 @@
 
     <!-- Main Content -->
     <center>
-        <VBox spacing="20" style="-fx-padding: 30;">
-        
-            <!-- Header -->
-            <Label text="Overview" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
+        <TabPane fx:id="mainTabPane" tabClosingPolicy="UNAVAILABLE">
+            <Tab text="Dashboard">
+                <VBox spacing="20" style="-fx-padding: 30;">
+                
+                    <!-- Header -->
+                    <Label text="Overview" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
 
-            <!-- Stats Cards -->
-            <HBox spacing="20">
-                <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                    <Label text="Daily Sales" styleClass="card-title"/>
-                    <Label fx:id="dailySales" text="₹0.00" styleClass="card-value"/>
-                </VBox>
-                <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                    <Label text="Low Stock" styleClass="card-title"/>
-                    <Label fx:id="lowStock" text="0" styleClass="card-value"/>
-                </VBox>
-                 <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                    <Label text="Pending Rxs" styleClass="card-title"/>
-                    <Label fx:id="pendingRx" text="0" styleClass="card-value"/>
-                </VBox>
-                 <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                    <Label text="Total Profit" styleClass="card-title"/>
-                    <Label fx:id="totalProfit" text="₹0.00" styleClass="card-value"/>
-                </VBox>
-            </HBox>
-
-            <!-- Inventory & Billing Split -->
-            <SplitPane dividerPositions="0.6" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
-            
-                <!-- Inventory Panel -->
-                <VBox spacing="15" styleClass="card">
-                    <HBox alignment="CENTER_LEFT" spacing="10">
-                        <Label text="Inventory" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <TextField fx:id="searchMedicine" promptText="Search medicines..." prefWidth="250"/>
+                    <!-- Stats Cards -->
+                    <HBox spacing="20">
+                        <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                            <Label text="Daily Sales" styleClass="card-title"/>
+                            <Label fx:id="dailySales" text="₹0.00" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                            <Label text="Low Stock" styleClass="card-title"/>
+                            <Label fx:id="lowStock" text="0" styleClass="card-value"/>
+                        </VBox>
+                         <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                            <Label text="Pending Rxs" styleClass="card-title"/>
+                            <Label fx:id="pendingRx" text="0" styleClass="card-value"/>
+                        </VBox>
+                         <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                            <Label text="Total Profit" styleClass="card-title"/>
+                            <Label fx:id="totalProfit" text="₹0.00" styleClass="card-value"/>
+                        </VBox>
                     </HBox>
+
+                    <!-- Inventory & Billing Split -->
+                    <SplitPane dividerPositions="0.6" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
                     
-                    <TableView fx:id="inventoryTable" VBox.vgrow="ALWAYS">
+                        <!-- Inventory Panel -->
+                        <VBox spacing="15" styleClass="card">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="Inventory" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <TextField fx:id="searchMedicine" promptText="Search medicines..." prefWidth="250"/>
+                            </HBox>
+                            
+                            <TableView fx:id="inventoryTable" VBox.vgrow="ALWAYS">
+                                <columns>
+                                    <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="150"/>
+                                    <TableColumn fx:id="colCompany" text="Company" prefWidth="100"/>
+                                    <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
+                                     <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
+                                    <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
+                                    <!-- <TableColumn fx:id="colAction" text="Action" prefWidth="80"/> -->
+                                </columns>
+                                <columnResizePolicy>
+                                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                </columnResizePolicy>
+                            </TableView>
+                        </VBox>
+
+                        <!-- Billing Panel -->
+                        <VBox spacing="15" styleClass="card">
+                             <Label text="Current Bill" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+                             
+                             <!-- Customer Search Section -->
+                             <VBox spacing="5" style="-fx-background-color: #f8f9fa; -fx-padding: 10; -fx-background-radius: 5;">
+                                 <Label text="Customer Details" style="-fx-font-weight: bold;"/>
+                                 <HBox spacing="10" alignment="CENTER_LEFT">
+                                     <TextField fx:id="txtSearchCustomer" promptText="Search Name / Phone" HBox.hgrow="ALWAYS"/>
+                                     <Button fx:id="btnSearchCustomer" text="Search" onAction="#handleSearchCustomer"/>
+                                 </HBox>
+                                 <HBox spacing="10" alignment="CENTER_LEFT">
+                                     <Label fx:id="lblCustomerStatus" text="No customer selected" style="-fx-text-fill: #666;"/>
+                                     <Region HBox.hgrow="ALWAYS"/>
+                                     <Button fx:id="btnNewCustomer" text="New Customer" visible="false" managed="false" style="-fx-base: #28a745; -fx-text-fill: white;" onAction="#handleNewCustomer"/>
+                                 </HBox>
+                                 <TextField fx:id="txtDoctorName" promptText="Doctor Name"/>
+                             </VBox>
+
+                             <TableView fx:id="billingTable" VBox.vgrow="ALWAYS">
+                                <columns>
+                                    <TableColumn fx:id="billColName" text="Item" prefWidth="120"/>
+                                    <TableColumn fx:id="billColQty" text="Qty" prefWidth="50"/>
+                                    <TableColumn fx:id="billColTotal" text="Total" prefWidth="80"/>
+                                </columns>
+                                 <columnResizePolicy>
+                                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                </columnResizePolicy>
+                             </TableView>
+                             
+                             <HBox alignment="CENTER_RIGHT" spacing="20">
+                                 <Label text="Total:" style="-fx-font-size: 16px;"/>
+                                 <Label fx:id="lblTotal" text="₹0.00" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: -fx-primary;"/>
+                             </HBox>
+                             
+                             <HBox spacing="10">
+                                <Button fx:id="btnAddBill" text="Add Item" styleClass="button-secondary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="btnGenerateInvoice" text="Checkout" styleClass="button-primary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                             </HBox>
+                        </VBox>
+                        
+                    </SplitPane>
+                    
+                </VBox>
+            </Tab>
+            
+            <Tab fx:id="tabAddCustomer" text="Add Customer">
+                <VBox spacing="20" style="-fx-padding: 30;">
+                     <Label text="Add New Customer" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
+                     
+                     <GridPane hgap="20" vgap="15">
+                        <columnConstraints>
+                            <ColumnConstraints percentWidth="50"/>
+                            <ColumnConstraints percentWidth="50"/>
+                        </columnConstraints>
+                        
+                        <!-- Personal Info -->
+                        <VBox spacing="5" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                            <Label text="Full Name"/>
+                            <TextField fx:id="txtName" promptText="Enter full name"/>
+                        </VBox>
+                        <VBox spacing="5" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                            <Label text="Phone Number"/>
+                            <TextField fx:id="txtPhone" promptText="Enter phone number"/>
+                        </VBox>
+                        
+                        <VBox spacing="5" GridPane.columnIndex="0" GridPane.rowIndex="1">
+                            <Label text="Email Address"/>
+                            <TextField fx:id="txtEmail" promptText="Enter email"/>
+                        </VBox>
+                         <VBox spacing="5" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                            <Label text="Address"/>
+                            <TextField fx:id="txtAddress" promptText="Enter full address"/>
+                        </VBox>
+                        
+                        <!-- Nominee -->
+                        <VBox spacing="5" GridPane.columnIndex="0" GridPane.rowIndex="2">
+                            <Label text="Nominee Name"/>
+                            <TextField fx:id="txtNomineeName" promptText="Enter nominee name"/>
+                        </VBox>
+                        <VBox spacing="5" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                            <Label text="Nominee Relation"/>
+                            <TextField fx:id="txtNomineeRelation" promptText="e.g. Spouse, Son"/>
+                        </VBox>
+                        
+                        <!-- Insurance -->
+                        <VBox spacing="5" GridPane.columnIndex="0" GridPane.rowIndex="3">
+                            <Label text="Insurance Provider"/>
+                            <TextField fx:id="txtInsuranceProvider" promptText="Enter provider name"/>
+                        </VBox>
+                        <VBox spacing="5" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                            <Label text="Policy Number"/>
+                            <TextField fx:id="txtPolicyNo" promptText="Enter policy number"/>
+                        </VBox>
+                     </GridPane>
+                     
+                     <Separator/>
+                     
+                     <!-- Medical Conditions -->
+                     <Label text="Medical Conditions" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+                     <HBox spacing="20">
+                        <CheckBox fx:id="checkDiabetes" text="Diabetes"/>
+                        <CheckBox fx:id="checkBP" text="Hypertension (BP)"/>
+                        <CheckBox fx:id="checkAsthma" text="Asthma"/>
+                        <CheckBox fx:id="checkAllergy" text="Allergies"/>
+                     </HBox>
+                     
+                     <Separator/>
+                     
+                     <!-- Photo Upload -->
+                     <HBox spacing="15" alignment="CENTER_LEFT">
+                        <Button fx:id="btnUploadPhoto" text="Upload Photo ID" onAction="#handlePhotoUpload"/>
+                        <Label fx:id="lblPhotoPath" text="No file selected" style="-fx-text-fill: #888;"/>
+                     </HBox>
+                     
+                     <Region VBox.vgrow="ALWAYS"/>
+                     
+                     <Button fx:id="btnSaveCustomer" text="Save Customer" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSaveCustomer"/>
+                </VBox>
+            </Tab>
+
+            <Tab text="History">
+                <VBox spacing="20" style="-fx-padding: 30;">
+                    <Label text="Bill History" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
+                    <TableView fx:id="historyTable" VBox.vgrow="ALWAYS">
                         <columns>
-                            <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="150"/>
-                            <TableColumn fx:id="colCompany" text="Company" prefWidth="100"/>
-                            <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
-                             <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
-                            <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
-                            <!-- <TableColumn fx:id="colAction" text="Action" prefWidth="80"/> -->
+                            <TableColumn fx:id="histColId" text="Bill ID" prefWidth="80"/>
+                            <TableColumn fx:id="histColDate" text="Date" prefWidth="150"/>
+                            <TableColumn fx:id="histColCustomer" text="Customer Name" prefWidth="150"/>
+                            <TableColumn fx:id="histColPhone" text="Phone" prefWidth="120"/>
+                            <TableColumn fx:id="histColAmount" text="Amount (₹)" prefWidth="100"/>
                         </columns>
                         <columnResizePolicy>
                             <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
                         </columnResizePolicy>
                     </TableView>
                 </VBox>
-
-                <!-- Billing Panel -->
-                <VBox spacing="15" styleClass="card">
-                     <Label text="Current Bill" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
-                     
-                     <HBox spacing="10">
-                         <TextField fx:id="txtCustomerName" promptText="Customer Name" HBox.hgrow="ALWAYS"/>
-                         <TextField fx:id="txtDoctorName" promptText="Doctor Name" HBox.hgrow="ALWAYS"/>
-                     </HBox>
-
-                     <TableView fx:id="billingTable" VBox.vgrow="ALWAYS">
-                        <columns>
-                            <TableColumn fx:id="billColName" text="Item" prefWidth="120"/>
-                            <TableColumn fx:id="billColQty" text="Qty" prefWidth="50"/>
-                            <TableColumn fx:id="billColTotal" text="Total" prefWidth="80"/>
-                        </columns>
-                         <columnResizePolicy>
-                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                        </columnResizePolicy>
-                     </TableView>
-                     
-                     <HBox alignment="CENTER_RIGHT" spacing="20">
-                         <Label text="Total:" style="-fx-font-size: 16px;"/>
-                         <Label fx:id="lblTotal" text="₹0.00" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: -fx-primary;"/>
-                     </HBox>
-                     
-                     <HBox spacing="10">
-                        <Button fx:id="btnAddBill" text="Add Item" styleClass="button-secondary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="btnGenerateInvoice" text="Checkout" styleClass="button-primary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                     </HBox>
-                </VBox>
-                
-            </SplitPane>
-            
-        </VBox>
+            </Tab>
+        </TabPane>
     </center>
 </BorderPane>
