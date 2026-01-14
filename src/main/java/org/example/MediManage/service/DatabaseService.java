@@ -49,12 +49,10 @@ public class DatabaseService {
                                         ");";
                         stmt.execute(createCustomers);
 
-                        // Ensure phone exists (Migration fix)
+                        // Ensure phone exists (Migration for existing DBs)
                         try {
                                 stmt.execute("ALTER TABLE customers ADD COLUMN phone TEXT;");
                         } catch (Exception ignored) {
-                                // Column likely exists or other minor issue. Ignore for now as we want to
-                                // proceed.
                         }
 
                         // 4. Bills Table
