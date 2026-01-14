@@ -1,0 +1,137 @@
+/* Modern Color Palette */
+:root {
+    -fx-primary: #4F46E5;
+    -fx-secondary: #818CF8;
+    -fx-background: #F3F4F6;
+    -fx-surface: #FFFFFF;
+    -fx-text-dark: #1F2937;
+    -fx-text-light: #6B7280;
+    -fx-accent: #10B981;
+    -fx-danger: #EF4444;
+}
+
+.root {
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-background-color: -fx-background;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    -fx-background-color: -fx-surface;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 5, 0, 0, 0);
+    -fx-padding: 20;
+    -fx-spacing: 15;
+}
+
+.sidebar-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-text-dark;
+    -fx-font-size: 14px;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 10 15;
+    -fx-cursor: hand;
+    -fx-background-radius: 8;
+}
+
+.sidebar-button:hover {
+    -fx-background-color: #EEF2FF;
+    -fx-text-fill: -fx-primary;
+}
+
+.sidebar-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fx-primary;
+    -fx-padding: 0 0 20 0;
+}
+
+/* Card Styles */
+.card {
+    -fx-background-color: -fx-surface;
+    -fx-background-radius: 12;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 10, 0, 0, 5);
+    -fx-padding: 20;
+}
+
+.card-title {
+    -fx-font-size: 14px;
+    -fx-text-fill: -fx-text-light;
+}
+
+.card-value {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fx-text-dark;
+}
+
+/* Table View Styles */
+.table-view {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-border-color: transparent;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: -fx-surface;
+    -fx-border-width: 0 0 1 0;
+    -fx-border-color: #E5E7EB;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: -fx-text-light;
+    -fx-font-weight: bold;
+}
+
+.table-row-cell {
+    -fx-background-color: -fx-surface;
+    -fx-border-color: transparent;
+}
+
+.table-row-cell:odd {
+    -fx-background-color: #F9FAFB;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #EEF2FF;
+    -fx-text-fill: -fx-primary;
+}
+
+/* Button Styles */
+.button-primary {
+    -fx-background-color: -fx-primary;
+    -fx-text-fill: white;
+    -fx-background-radius: 8;
+    -fx-padding: 10 20;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.button-primary:hover {
+    -fx-background-color: #4338CA;
+}
+
+.button-secondary {
+    -fx-background-color: -fx-surface;
+    -fx-text-fill: -fx-text-dark;
+    -fx-border-color: #D1D5DB;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10 20;
+    -fx-cursor: hand;
+}
+
+.button-secondary:hover {
+    -fx-background-color: #F9FAFB;
+}
+
+.text-field {
+    -fx-background-color: -fx-surface;
+    -fx-border-color: #D1D5DB;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 8;
+}
+
+.text-field:focused {
+    -fx-border-color: -fx-primary;
+}

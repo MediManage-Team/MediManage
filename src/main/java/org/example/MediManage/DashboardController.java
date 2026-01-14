@@ -3,118 +3,138 @@ package org.example.MediManage;
 import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import org.example.MediManage.dao.BillDAO;
+import org.example.MediManage.dao.MedicineDAO;
 
-import java.sql.*;
-import java.time.LocalDate;
+import java.sql.SQLException;
 
 public class DashboardController {
 
-    @FXML private Label dailySales;
-    @FXML private Label totalProfit;
-    @FXML private Label pendingRx;
-    @FXML private Label lowStock;
+    // KPI Labels
+    @FXML
+    private Label dailySales;
+    @FXML
+    private Label totalProfit;
+    @FXML
+    private Label pendingRx;
+    @FXML
+    private Label lowStock;
 
-    @FXML private TableView<Medicine> inventoryTable;
-    @FXML private TableColumn<Medicine, String> colMedicine;
-    @FXML private TableColumn<Medicine, String> colBatch;
-    @FXML private TableColumn<Medicine, String> colExpiry;
-    @FXML private TableColumn<Medicine, String> colHSN;
-    @FXML private TableColumn<Medicine, Integer> colStock;
+    // Inventory Table
+    @FXML
+    private TableView<Medicine> inventoryTable;
+    @FXML
+    private TableColumn<Medicine, String> colMedicine;
+    @FXML
+    private TableColumn<Medicine, String> colCompany; // New
+    @FXML
+    private TableColumn<Medicine, String> colExpiry;
+    @FXML
+    private TableColumn<Medicine, Integer> colStock;
+    @FXML
+    private TableColumn<Medicine, Double> colPrice; // New
 
-    @FXML private TextField searchMedicine;
-    @FXML private TableView<BillItem> billingTable;
-    @FXML private TableColumn<BillItem, String> billColName;
-    @FXML private TableColumn<BillItem, Integer> billColQty;
-    @FXML private TableColumn<BillItem, Double> billColPrice;
-    @FXML private TableColumn<BillItem, Double> billColGST;
-    @FXML private TableColumn<BillItem, Double> billColTotal;
-    @FXML private Label lblTotal;
+    @FXML
+    private TextField searchMedicine;
 
-    @FXML private Button btnAddBill, btnGenerateInvoice;
+    // Billing Table
+    @FXML
+    private TableView<BillItem> billingTable;
+    @FXML
+    private TableColumn<BillItem, String> billColName;
+    @FXML
+    private TableColumn<BillItem, Integer> billColQty;
+    @FXML
+    private TableColumn<BillItem, Double> billColTotal;
+    @FXML
+    private Label lblTotal;
 
-    private ObservableList<Medicine> inventoryList = FXCollections.observableArrayList();
+    @FXML
+    private TextField txtCustomerName; // New
+    @FXML
+    private TextField txtDoctorName; // New
+
+    @FXML
+    private Button btnAddBill, btnGenerateInvoice;
+
+    // Data
+    private ObservableList<Medicine> masterInventoryList = FXCollections.observableArrayList();
     private ObservableList<BillItem> billList = FXCollections.observableArrayList();
+
+    // DAOs
+    private final MedicineDAO medicineDAO = new MedicineDAO();
+    private final BillDAO billDAO = new BillDAO();
 
     @FXML
     private void initialize() {
-        // Ensure DB is ready (optional if called in Launcher)
+        // Ensure DB is ready
         DBUtil.initDB();
 
         setupInventoryTable();
         setupBillingTable();
-        loadKPIs();
         loadInventory();
+        loadKPIs(); // Refresh KPIs on load
         setupBillingButtons();
     }
 
     private void setupInventoryTable() {
         colMedicine.setCellValueFactory(data -> data.getValue().nameProperty());
-        colBatch.setCellValueFactory(data -> data.getValue().batchProperty());
+        colCompany.setCellValueFactory(data -> data.getValue().companyProperty());
         colExpiry.setCellValueFactory(data -> data.getValue().expiryProperty());
-        colHSN.setCellValueFactory(data -> data.getValue().hsnProperty());
         colStock.setCellValueFactory(data -> data.getValue().stockProperty().asObject());
-        inventoryTable.setItems(inventoryList);
+        colPrice.setCellValueFactory(data -> data.getValue().priceProperty().asObject());
+
+        // SEARCH FUNCTIONALITY
+        FilteredList<Medicine> filteredData = new FilteredList<>(masterInventoryList, p -> true);
+
+        searchMedicine.textProperty().addListener((observable, oldValue, newValue) -> {
+            filteredData.setPredicate(medicine -> {
+                if (newValue == null || newValue.isEmpty()) {
+                    return true;
+                }
+                String lowerCaseFilter = newValue.toLowerCase();
+
+                if (medicine.getName().toLowerCase().contains(lowerCaseFilter)) {
+                    return true;
+                } else if (medicine.getCompany().toLowerCase().contains(lowerCaseFilter)) {
+                    return true;
+                }
+                return false;
+            });
+        });
+
+        SortedList<Medicine> sortedData = new SortedList<>(filteredData);
+        sortedData.comparatorProperty().bind(inventoryTable.comparatorProperty());
+        inventoryTable.setItems(sortedData);
     }
 
     private void setupBillingTable() {
         billColName.setCellValueFactory(data -> data.getValue().nameProperty());
         billColQty.setCellValueFactory(data -> data.getValue().qtyProperty().asObject());
-        billColPrice.setCellValueFactory(data -> data.getValue().priceProperty().asObject());
-        billColGST.setCellValueFactory(data -> data.getValue().gstProperty().asObject());
         billColTotal.setCellValueFactory(data -> data.getValue().totalProperty().asObject());
         billingTable.setItems(billList);
     }
 
     private void loadKPIs() {
-        try (Connection conn = DBUtil.getConnection()) {
-            Statement stmt = conn.createStatement();
+        double sales = billDAO.getDailySales();
+        dailySales.setText(String.format("₹%.2f", sales));
 
-            // 1. Daily Sales (MySQL Syntax: CURDATE())
-            String salesSql = "SELECT IFNULL(SUM(total_amount), 0) AS daily_sales FROM bills WHERE DATE(bill_date) = CURDATE()";
-            ResultSet rs = stmt.executeQuery(salesSql);
-            if (rs.next()) dailySales.setText("₹" + rs.getDouble("daily_sales"));
+        long lowStockCount = masterInventoryList.stream().filter(m -> m.getStock() < 10).count();
+        if (lowStock != null)
+            lowStock.setText(String.valueOf(lowStockCount));
 
-            // 2. Low Stock (Using 'stock' table)
-            String stockSql = "SELECT COUNT(*) AS low_stock FROM stock WHERE quantity < 10";
-            rs = stmt.executeQuery(stockSql);
-            if (rs.next()) lowStock.setText(rs.getString("low_stock"));
-
-            // 3. Pending Rx & Profit (Placeholders as schema doesn't have these tables/columns yet)
-            totalProfit.setText("₹0.0");
+        if (totalProfit != null)
+            totalProfit.setText("₹" + (sales * 0.2)); // Dummy logic for demo
+        if (pendingRx != null)
             pendingRx.setText("0");
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     private void loadInventory() {
-        inventoryList.clear();
-        // JOIN medicines and stock tables
-        String sql = "SELECT m.medicine_id, m.name, m.company, m.expiry_date, m.price, s.quantity " +
-                "FROM medicines m " +
-                "JOIN stock s ON m.medicine_id = s.medicine_id";
-
-        try (Connection conn = DBUtil.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            while (rs.next()) {
-                inventoryList.add(new Medicine(
-                        rs.getInt("medicine_id"),
-                        rs.getString("name"),
-                        "N/A", // Batch not in schema
-                        rs.getString("expiry_date"),
-                        "N/A", // HSN not in schema
-                        rs.getInt("quantity"),
-                        rs.getDouble("price")
-                ));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        masterInventoryList.setAll(medicineDAO.getAllMedicines());
     }
 
     private void setupBillingButtons() {
@@ -129,16 +149,26 @@ public class DashboardController {
             return;
         }
 
-        // Check if stock is sufficient
         if (selected.getStock() <= 0) {
             showAlert(Alert.AlertType.ERROR, "Out of Stock", "This medicine is out of stock.");
             return;
         }
 
-        // Add to bill list
-        // Assuming GST is 18% for now (You can add GST column to DB later)
         double gstRate = 0.18;
         double gstAmount = selected.getPrice() * gstRate;
+
+        // Check availability in current bill list to prevent over-adding
+        // For simplicity, we just add new item or increment. Implementation below just
+        // adds new row.
+        // Ideally should merge.
+
+        // Check if already in bill
+        boolean alreadyInBill = billList.stream().anyMatch(item -> item.getMedicineId() == selected.getId());
+        if (alreadyInBill) {
+            showAlert(Alert.AlertType.INFORMATION, "Item Added",
+                    "Item already in bill. (Quantity update feature pending)");
+            return;
+        }
 
         BillItem item = new BillItem(selected.getId(), selected.getName(), 1, selected.getPrice(), gstAmount);
         billList.add(item);
@@ -152,66 +182,21 @@ public class DashboardController {
         }
 
         double totalAmount = billList.stream().mapToDouble(BillItem::getTotal).sum();
-        Connection conn = null;
 
         try {
-            conn = DBUtil.getConnection();
-            conn.setAutoCommit(false); // Start Transaction
+            int billId = billDAO.generateInvoice(totalAmount, billList);
+            showAlert(Alert.AlertType.INFORMATION, "Success",
+                    "Invoice Generated! ID: " + billId + "\nCustomer: " + txtCustomerName.getText());
 
-            // 1. Insert into bills table
-            String billSql = "INSERT INTO bills (total_amount, bill_date) VALUES (?, NOW())";
-            PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS);
-            psBill.setDouble(1, totalAmount);
-            psBill.executeUpdate();
-
-            // Get generated Bill ID
-            ResultSet rs = psBill.getGeneratedKeys();
-            int billId = 0;
-            if (rs.next()) {
-                billId = rs.getInt(1);
-            }
-
-            // 2. Insert items and Update Stock
-            String itemSql = "INSERT INTO bill_items (bill_id, medicine_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)";
-            String stockSql = "UPDATE stock SET quantity = quantity - ? WHERE medicine_id = ?";
-
-            PreparedStatement psItem = conn.prepareStatement(itemSql);
-            PreparedStatement psStock = conn.prepareStatement(stockSql);
-
-            for (BillItem item : billList) {
-                // Add Item
-                psItem.setInt(1, billId);
-                psItem.setInt(2, item.getMedicineId());
-                psItem.setInt(3, item.getQty());
-                psItem.setDouble(4, item.getPrice());
-                psItem.setDouble(5, item.getTotal());
-                psItem.addBatch();
-
-                // Decrease Stock
-                psStock.setInt(1, item.getQty());
-                psStock.setInt(2, item.getMedicineId());
-                psStock.addBatch();
-            }
-
-            psItem.executeBatch();
-            psStock.executeBatch();
-
-            conn.commit(); // Commit Transaction
-
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice Generated! ID: " + billId);
-
-            // Cleanup
             billList.clear();
+            txtCustomerName.clear(); // Reset inputs
+            txtDoctorName.clear();
             updateTotal();
-            loadInventory(); // Refresh stock in table
-            loadKPIs();      // Refresh sales KPI
-
-        } catch (Exception e) {
-            try { if (conn != null) conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            loadInventory();
+            loadKPIs();
+        } catch (SQLException e) {
             e.printStackTrace();
             showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to save invoice: " + e.getMessage());
-        } finally {
-            try { if (conn != null) conn.setAutoCommit(true); conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
     }
 
@@ -228,41 +213,67 @@ public class DashboardController {
         alert.showAndWait();
     }
 
-    // ---------------- Inner Classes ----------------
-
+    // ---------------- Inner Classes (DTOs) ----------------
     public static class Medicine {
-        private final int id; // Added ID for Database operations
+        private final int id;
         private final StringProperty name;
-        private final StringProperty batch;
+        private final StringProperty company; // New Field
         private final StringProperty expiry;
-        private final StringProperty hsn;
         private final IntegerProperty stock;
-        private final double price; // Added Price for billing
+        private final double price;
 
-        public Medicine(int id, String name, String batch, String expiry, String hsn, int stock, double price) {
+        public Medicine(int id, String name, String company, String expiry, int stock, double price) {
             this.id = id;
             this.name = new SimpleStringProperty(name);
-            this.batch = new SimpleStringProperty(batch);
+            this.company = new SimpleStringProperty(company);
             this.expiry = new SimpleStringProperty(expiry);
-            this.hsn = new SimpleStringProperty(hsn);
             this.stock = new SimpleIntegerProperty(stock);
             this.price = price;
         }
 
-        public StringProperty nameProperty() { return name; }
-        public StringProperty batchProperty() { return batch; }
-        public StringProperty expiryProperty() { return expiry; }
-        public StringProperty hsnProperty() { return hsn; }
-        public IntegerProperty stockProperty() { return stock; }
+        public StringProperty nameProperty() {
+            return name;
+        }
 
-        public int getId() { return id; }
-        public String getName() { return name.get(); }
-        public int getStock() { return stock.get(); }
-        public double getPrice() { return price; }
+        public StringProperty companyProperty() {
+            return company;
+        }
+
+        public StringProperty expiryProperty() {
+            return expiry;
+        }
+
+        public IntegerProperty stockProperty() {
+            return stock;
+        }
+
+        public DoubleProperty priceProperty() {
+            return new SimpleDoubleProperty(price);
+        } // Wrap for TableColumn
+
+        public int getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name.get();
+        }
+
+        public String getCompany() {
+            return company.get();
+        } // Getter for search
+
+        public int getStock() {
+            return stock.get();
+        }
+
+        public double getPrice() {
+            return price;
+        }
     }
 
     public static class BillItem {
-        private final int medicineId; // Store ID to link back to DB
+        private final int medicineId;
         private final StringProperty name;
         private final IntegerProperty qty;
         private final DoubleProperty price;
@@ -278,15 +289,40 @@ public class DashboardController {
             this.total = new SimpleDoubleProperty((price * qty) + gst);
         }
 
-        public StringProperty nameProperty() { return name; }
-        public IntegerProperty qtyProperty() { return qty; }
-        public DoubleProperty priceProperty() { return price; }
-        public DoubleProperty gstProperty() { return gst; }
-        public DoubleProperty totalProperty() { return total; }
+        public StringProperty nameProperty() {
+            return name;
+        }
 
-        public int getMedicineId() { return medicineId; }
-        public int getQty() { return qty.get(); }
-        public double getPrice() { return price.get(); }
-        public double getTotal() { return total.get(); }
+        public IntegerProperty qtyProperty() {
+            return qty;
+        }
+
+        public DoubleProperty priceProperty() {
+            return price;
+        }
+
+        public DoubleProperty gstProperty() {
+            return gst;
+        }
+
+        public DoubleProperty totalProperty() {
+            return total;
+        }
+
+        public int getMedicineId() {
+            return medicineId;
+        }
+
+        public int getQty() {
+            return qty.get();
+        }
+
+        public double getPrice() {
+            return price.get();
+        }
+
+        public double getTotal() {
+            return total.get();
+        }
     }
 }
