@@ -33,7 +33,7 @@
 | :--- | :--- |
 | **Language** | Java 21 |
 | **UI Framework** | JavaFX / Scene Builder / CSS3 |
-| **Database** | SQLite (Lightweight & Portable) |
+| **Database** | My SQL |
 | **Build Tool** | Maven |
 
 ---
