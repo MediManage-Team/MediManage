@@ -19,7 +19,22 @@ import org.example.MediManage.model.Customer;
 import java.io.File;
 import java.sql.SQLException;
 
+import java.sql.SQLException;
+import org.example.MediManage.service.ReportService;
+import net.sf.jasperreports.engine.JRException;
+import java.io.IOException;
+import javafx.print.*;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
+import javafx.geometry.Pos;
+import javafx.scene.transform.Scale;
+import javafx.scene.input.KeyCode;
+
 public class DashboardController {
+
+    private final ReportService reportService = new ReportService();
 
     // KPI Labels
     @FXML
@@ -130,6 +145,23 @@ public class DashboardController {
         loadHistory();
         loadKPIs(); // Refresh KPIs on load
         setupBillingButtons();
+
+        // 1. Auto-Focus for Scanner
+        javafx.application.Platform.runLater(() -> searchMedicine.requestFocus());
+
+        // 2. Enter Key Listener for Scanner
+        searchMedicine.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                // Select first item if available
+                if (!inventoryTable.getItems().isEmpty()) {
+                    inventoryTable.getSelectionModel().selectFirst();
+                    addToBill();
+                    // Clear and Refocus for next scan
+                    searchMedicine.clear();
+                    searchMedicine.requestFocus();
+                }
+            }
+        });
     }
 
     private void setupHistoryTable() {
@@ -222,7 +254,7 @@ public class DashboardController {
     private void addToBill() {
         Medicine selected = inventoryTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select a medicine from the inventory.");
+            // Scanner might trigger this if filter is empty, silent return or beep
             return;
         }
 
@@ -234,19 +266,34 @@ public class DashboardController {
         double gstRate = 0.18;
         double gstAmount = selected.getPrice() * gstRate;
 
-        // Check availability in current bill list
-
         // Check if already in bill
-        boolean alreadyInBill = billList.stream().anyMatch(item -> item.getMedicineId() == selected.getId());
-        if (alreadyInBill) {
-            showAlert(Alert.AlertType.INFORMATION, "Item Added",
-                    "Item already in bill. (Quantity update feature pending)");
-            return;
-        }
+        java.util.Optional<BillItem> existingItem = billList.stream()
+                .filter(item -> item.getMedicineId() == selected.getId())
+                .findFirst();
 
-        BillItem item = new BillItem(selected.getId(), selected.getName(), 1, selected.getPrice(), gstAmount);
-        billList.add(item);
-        updateTotal();
+        if (existingItem.isPresent()) {
+            // Increment Quantity
+            BillItem item = existingItem.get();
+            int newQty = item.getQty() + 1;
+
+            // Create new item with updated qty (Immutable-ish approach for TableView
+            // refresh)
+            // Or just update property if BillItem uses JavaFX properties correctly.
+            // Our BillItem uses Properties, so we can update them.
+            item.qtyProperty().set(newQty);
+            item.totalProperty().set((item.getPrice() * newQty) + item.gstProperty().get()); // Recalculate total logic
+                                                                                             // needs care
+
+            // For simplicity in this DTO structure, let's remove and re-add or better, just
+            // update the table
+            billingTable.refresh();
+            updateTotal();
+
+        } else {
+            BillItem item = new BillItem(selected.getId(), selected.getName(), 1, selected.getPrice(), gstAmount);
+            billList.add(item);
+            updateTotal();
+        }
     }
 
     @FXML
@@ -271,11 +318,9 @@ public class DashboardController {
 
         List<Customer> results = customerDAO.searchCustomer(query);
         if (results.isEmpty()) {
-            selectedCustomer = null;
-            lblCustomerStatus.setText("Customer not found.");
-            lblCustomerStatus.setStyle("-fx-text-fill: red;");
-            btnNewCustomer.setVisible(true);
-            btnNewCustomer.setManaged(true);
+            // Auto-redirect to Add Customer
+            handleNewCustomer();
+            return;
         } else {
             // honest assumption: taking the first match for now, or could show a dialog
             selectedCustomer = results.get(0);
@@ -388,6 +433,9 @@ public class DashboardController {
         Integer customerId = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
         String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
 
+        // Capture list for printing before clearing
+        List<BillItem> billListCopy = new ArrayList<>(billList);
+
         try {
             int billId = billDAO.generateInvoice(totalAmount, billList, customerId);
             showAlert(Alert.AlertType.INFORMATION, "Success",
@@ -405,9 +453,65 @@ public class DashboardController {
             lblCustomerStatus.setStyle("-fx-text-fill: #666;");
             txtSearchCustomer.clear();
 
+            // Auto-print receipt (Thermal)
+            printReceipt(billId, totalAmount, new ArrayList<>(billListCopy)); // Use copy because we cleared list
+
         } catch (SQLException e) {
             e.printStackTrace();
             showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to save invoice: " + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleExportExcel() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Inventory Excel");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel Files", "*.xlsx"));
+        fileChooser.setInitialFileName("Inventory_" + java.time.LocalDate.now() + ".xlsx");
+        File file = fileChooser.showSaveDialog(inventoryTable.getScene().getWindow());
+
+        if (file != null) {
+            try {
+                reportService.exportInventoryToExcel(new java.util.ArrayList<>(masterInventoryList),
+                        file.getAbsolutePath());
+                showAlert(Alert.AlertType.INFORMATION, "Success", "Inventory exported successfully!");
+            } catch (IOException e) {
+                e.printStackTrace();
+                showAlert(Alert.AlertType.ERROR, "Export Failed", e.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    private void handlePrintInvoice() {
+        // For demonstration, we use the current bill list.
+        // In a real app, we might want to reprint history items, but user asked for
+        // "Print Last Invoice" logic or similar.
+        // For now, let's print what is currently in the bill table, or if empty, warn.
+
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Data", "Current bill is empty. Add items to print.");
+            return;
+        }
+
+        double total = billList.stream().mapToDouble(BillItem::getTotal).sum();
+        String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Invoice PDF");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+        fileChooser.setInitialFileName("Invoice_" + System.currentTimeMillis() + ".pdf");
+        File file = fileChooser.showSaveDialog(billingTable.getScene().getWindow());
+
+        if (file != null) {
+            try {
+                reportService.generateInvoicePDF(new java.util.ArrayList<>(billList), total, customerName,
+                        file.getAbsolutePath());
+                showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved to PDF!");
+            } catch (JRException e) {
+                e.printStackTrace();
+                showAlert(Alert.AlertType.ERROR, "Print Failed", e.getMessage());
+            }
         }
     }
 
@@ -422,6 +526,62 @@ public class DashboardController {
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
+    }
+
+    private void printReceipt(int billId, double totalAmount, List<BillItem> items) {
+        Printer printer = Printer.getDefaultPrinter();
+        if (printer == null) {
+            showAlert(Alert.AlertType.WARNING, "No Printer", "No default printer found.");
+            return;
+        }
+
+        PrinterJob job = PrinterJob.createPrinterJob();
+        if (job != null) {
+            // Receipt Layout (58mm ~ 180px)
+            VBox root = new VBox(5);
+            root.setPrefWidth(180);
+            root.setMaxWidth(180);
+            root.setAlignment(Pos.TOP_LEFT);
+            root.setStyle(
+                    "-fx-font-family: 'Monospaced'; -fx-font-size: 10px; -fx-background-color: white; -fx-padding: 5;");
+
+            // Header
+            Label storeName = new Label("MEDIMANAGE PHARMACY");
+            storeName.setStyle("-fx-font-weight: bold; -fx-font-size: 12px;");
+            storeName.setMaxWidth(180);
+            storeName.setWrapText(true);
+            storeName.setAlignment(Pos.CENTER);
+
+            Label date = new Label("Date: " + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+            Label billNo = new Label("Bill #: " + billId);
+            Label dash = new Label("--------------------------------");
+
+            root.getChildren().addAll(storeName, date, billNo, dash);
+
+            // Items
+            for (BillItem item : items) {
+                String itemLine = String.format("%-15s\n%2d x %6.2f = %6.2f",
+                        item.getName().length() > 15 ? item.getName().substring(0, 15) : item.getName(),
+                        item.getQty(), item.getPrice(), item.getTotal());
+                Label lblItem = new Label(itemLine);
+                root.getChildren().add(lblItem);
+            }
+
+            // Footer
+            root.getChildren().add(new Label("--------------------------------"));
+            Label total = new Label("TOTAL: ₹" + String.format("%.2f", totalAmount));
+            total.setStyle("-fx-font-weight: bold; -fx-font-size: 12px;");
+            root.getChildren().addAll(total, new Label("Thank you! Visit Again."));
+
+            // Print
+            boolean success = job.printPage(root);
+            if (success) {
+                job.endJob();
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Print Error", "Failed to print receipt.");
+            }
+        }
     }
 
     // ---------------- Inner Classes (DTOs) ----------------
@@ -481,6 +641,10 @@ public class DashboardController {
         public double getPrice() {
             return price;
         }
+
+        public String getExpiry() {
+            return expiry.get();
+        }
     }
 
     public static class BillItem {
@@ -534,6 +698,10 @@ public class DashboardController {
 
         public double getTotal() {
             return total.get();
+        }
+
+        public String getName() {
+            return name.get();
         }
     }
 

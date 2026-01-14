@@ -1,68 +1,69 @@
-# 🏥 MediManage: Smart Medical Billing & Inventory System
+# MediManage - Medical Shop Management System
 
-**MediManage** is a modern, comprehensive pharmaceutical management solution designed to digitize medical stores. It combines robust billing features with AI-driven insights to optimize stock management and improve patient service, all wrapped in a premium, responsive JavaFX interface.
+A modern, robust Desktop application for managing pharmacy inventory, billing, and customer records. Built with JavaFX and optimized for performance and usability.
 
----
+## 🚀 Key Features
 
-## 🚀 Core Features
+### 🛒 Point of Sale (POS)
+- **Fast Billing**: Keyboard-optimized checkout flow.
+- **Barcode Scanner Support**: Auto-focus search, "Scan to Add", and auto-increment quantity logic using **ZXing** integration.
+- **Thermal Printing**: Automatic 58mm receipt printing support.
+- **Smart Search**: Search medicines by name or company.
 
-### 🛒 Intelligent Billing & POS
-* **Automated Invoicing:** Generates GST-compliant digital and printed bills.
-* **Batch Tracking:** Automatically selects medicines from the oldest batch first (FIFO) to minimize waste.
-* **Expiry Alerts:** Real-time dashboard notifications for medicines nearing their expiry date.
+### 📦 Inventory Management
+- **Excel Export**: Export your entire inventory to `.xlsx` format using **Apache POI**.
+- **Stock Tracking**: Low stock alerts and KPI dashboard.
+- **Expiry Management**: Track medicine expiry dates.
+
+### 📄 Reporting & Invoices
+- **PDF Invoices**: Generate pixel-perfect A4 invoices with **JasperReports** and **iText**.
+- **Bill History**: View and reprint past invoices.
+
+### 👥 Customer Management
+- **CRM Features**: Track customer purchase history and disease profiles.
+- **Smart Flow**: Auto-redirect to "Add Customer" with pre-filled data if a search fails.
 
 ### 🎨 Modern UI/UX
-* **Premium Design:** Sleek, dark-themed interface with glassmorphism effects.
-* **Interactive Elements:** Smooth animations, hover effects, and responsive layout.
-* **Dashboard:** Visual analytics for sales, stock levels, and critical alerts.
-
-### 🤖 AI-Powered Capabilities
-* **Smart Substitute Engine:** Suggests alternative medicines based on salt composition/generic name when a specific brand is out of stock.
-* **Predictive Inventory:** Analyzes sales patterns to forecast stock requirements.
-* **NLP Search:** Search for medicines using fuzzy logic to handle common misspellings.
-
-### 📦 Inventory & Supplier Management
-* **Stock Monitoring:** Real-time tracking of SKUs across multiple categories.
-* **Supplier Portal:** Manage vendor contacts, purchase orders, and payment history.
+- **AtlantaFX**: styled with the `PrimerLight` theme for a clean, modern look.
+- **Responsive Design**: Adaptive layouts using JavaFX `BorderPane` and `SplitPane`.
 
 ---
 
-## 🛠️ Technical Stack
+## 🛠️ Technology Stack
 
-| Component | Technology |
-| :--- | :--- |
-| **Language** | Java 21 |
-| **UI Framework** | JavaFX / Scene Builder / CSS3 |
-| **Database** | My SQL |
-| **Build Tool** | Maven |
-
----
-
-## 💻 Setup & Installation
-
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/MediManage-Team/MediManage.git
-    cd MediManage
-    ```
-
-2.  **Build the Project**
-    ```bash
-    mvn clean install
-    ```
-
-3.  **Run the Application**
-    ```bash
-    mvn javafx:run
-    ```
+- **Language**: Java 21
+- **UI Framework**: JavaFX 17+
+- **Styling**: [AtlantaFX](https://github.com/mkpaz/atlantafx) (PrimerLight Theme)
+- **Database**: MySQL (Connector/J 9.5.0)
+- **Reporting**: 
+  - [JasperReports](https://community.jaspersoft.com/) (v6.21.0)
+  - [iText](https://github.com/itext/itext) (v2.1.7)
+- **Data Export**: [Apache POI](https://poi.apache.org/) (v5.2.5)
+- **Barcode/Scanning**: [ZXing](https://github.com/zxing/zxing) (v3.5.3)
+- **Build Tool**: Maven
 
 ---
 
-## 📁 Project Structure
-```text
-├── src/main/java         # Backend Logic, Controllers & DAO
-├── src/main/resources    # FXML layouts, CSS Styles & Assets
-├── database.db           # Local SQLite Database
-├── pom.xml               # Maven Dependencies
-└── README.md
-```
+## ⚙️ Setup & Installation
+
+1.  **Prerequisites**:
+    - Java 21 SDK
+    - Maven
+    - MySQL Server
+
+2.  **Database Configuration**:
+    - Ensure MySQL is running.
+    - Update `src/main/resources/db_config.properties` with your credentials:
+        ```properties
+        db.url=jdbc:mysql://localhost:3306/medimanage_db
+        db.user=your_username
+        db.password=your_password
+        ```
+
+3.  **Build & Run**:
+    ```bash
+    mvn clean compile javafx:run
+    ```
+
+## 📝 License
+This project is for educational and commercial management use.
