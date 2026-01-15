@@ -1,0 +1,13 @@
+/* Admin Theme: Standard Professional */
+.root {
+    -fx-base: #f0f0f0;
+    -fx-accent: #2c3e50;
+}
+.sidebar-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #34495e;
+    -fx-font-size: 14px;
+}
+.sidebar-button:hover {
+    -fx-background-color: #bdc3c7;
+}

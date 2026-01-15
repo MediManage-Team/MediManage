@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<BorderPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.MedicineSearchController" style="-fx-background-color: #f4f6f8;">
+
+    <top>
+        <VBox spacing="10" style="-fx-padding: 20; -fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);">
+            <Label text="Medicine Search" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"/>
+            <TextField fx:id="txtSearch" promptText="Search by Name, Company, or Brand..." style="-fx-font-size: 14px; -fx-padding: 10;"/>
+        </VBox>
+    </top>
+
+    <center>
+        <TableView fx:id="searchTable" style="-fx-font-size: 13px;">
+            <columns>
+                <TableColumn fx:id="colName" text="Medicine Name" prefWidth="200"/>
+                <TableColumn fx:id="colCompany" text="Company" prefWidth="150"/>
+                <TableColumn fx:id="colLocation" text="Loc" prefWidth="80"/>
+                <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
+                <TableColumn fx:id="colExpiry" text="Expiry Date" prefWidth="100"/>
+            </columns>
+            <columnResizePolicy>
+                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+            </columnResizePolicy>
+        </TableView>
+    </center>
+
+    <right>
+        <VBox fx:id="detailsPanel" spacing="15" style="-fx-padding: 20; -fx-background-color: white; -fx-border-color: #ddd; -fx-border-width: 0 0 0 1;" prefWidth="300" visible="false">
+            <Label text="Drug Details" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #34495e;"/>
+
+            <VBox spacing="5" style="-fx-padding: 10; -fx-background-color: #edf2f7; -fx-background-radius: 5;">
+                <Label text="Name" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                <Label fx:id="lblDetailName" text="-" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+            </VBox>
+
+            <VBox spacing="5">
+                <Label text="Manufacturer" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                <Label fx:id="lblDetailCompany" text="-"/>
+            </VBox>
+
+            <Separator/>
+
+            <VBox spacing="5">
+                <Label text="Clinical Info" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                <Label fx:id="lblDetailGeneric" text="Generic: -" wrapText="true"/>
+                <Label fx:id="lblDetailSideEffects" text="Notes: -" wrapText="true"/>
+            </VBox>
+
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label text="Pharmacist Note: Check physical expiry before dispensing." style="-fx-text-fill: #e67e22; -fx-font-size: 11px; -fx-font-style: italic;" wrapText="true"/>
+        </VBox>
+    </right>
+
+</BorderPane>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox spacing="20"
+    xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.ReportsController" style="-fx-padding: 20; -fx-background-color: #f4f6f8;">
+
+    <!-- Implementation Header -->
+    <HBox spacing="15" alignment="CENTER_LEFT" style="-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 5; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);">
+        <Label text="Sales Reports" style="-fx-font-size: 20px; -fx-font-weight: bold;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label text="From:"/>
+        <DatePicker fx:id="dateStart" prefWidth="120"/>
+        <Label text="To:"/>
+        <DatePicker fx:id="dateEnd" prefWidth="120"/>
+        <Button text="Generate Report" onAction="#handleGenerate" style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;"/>
+    </HBox>
+
+    <HBox spacing="20" VBox.vgrow="ALWAYS">
+        <!-- Summary Card -->
+        <VBox spacing="10" minWidth="250" style="-fx-background-color: white; -fx-padding: 20; -fx-background-radius: 5; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);">
+            <Label text="Total Revenue (Selected Period)" style="-fx-text-fill: #7f8c8d;"/>
+            <Label fx:id="lblTotalRevenue" text="₹ 0.00" style="-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: #27ae60;"/>
+            <Separator/>
+            <Label text="Top Categories (Coming Soon)" style="-fx-text-fill: #95a5a6; -fx-font-style: italic;"/>
+        </VBox>
+
+        <!-- Chart -->
+        <VBox style="-fx-background-color: white; -fx-padding: 10; -fx-background-radius: 5; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);" HBox.hgrow="ALWAYS">
+            <Label text="Sales Trend" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 10;"/>
+            <LineChart fx:id="salesChart" title="Daily Sales">
+                <xAxis>
+                    <CategoryAxis fx:id="xAxis" label="Date"/>
+                </xAxis>
+                <yAxis>
+                    <NumberAxis fx:id="yAxis" label="Revenue (₹)"/>
+                </yAxis>
+            </LineChart>
+        </VBox>
+    </HBox>
+</VBox>

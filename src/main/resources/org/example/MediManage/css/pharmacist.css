@@ -1,0 +1,13 @@
+/* Pharmacist Theme: Soft Blue/Green */
+.root {
+    -fx-base: #e0f7fa;
+    -fx-accent: #009688;
+}
+
+.sidebar-button {
+    -fx-text-fill: #00695c;
+}
+
+.label {
+    -fx-font-family: 'Segoe UI';
+}

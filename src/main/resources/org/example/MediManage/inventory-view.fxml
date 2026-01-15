@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<VBox spacing="10"
+    xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.InventoryController" style="-fx-padding: 20;">
+
+    <!-- Top Bar -->
+    <HBox spacing="10" alignment="CENTER_LEFT">
+        <Label text="Inventory Management" style="-fx-font-size: 20px; -fx-font-weight: bold;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <TextField fx:id="searchField" promptText="Search Name / Company" prefWidth="250"/>
+        <Button text="Export" onAction="#handleExportExcel">
+            <graphic>
+                <FontIcon iconLiteral="fas-file-excel"/>
+            </graphic>
+        </Button>
+    </HBox>
+
+    <SplitPane dividerPositions="0.7" VBox.vgrow="ALWAYS">
+        <!-- Center: Table -->
+        <items>
+            <TableView fx:id="inventoryTable">
+                <columns>
+                    <TableColumn fx:id="colId" text="ID" prefWidth="50"/>
+                    <TableColumn fx:id="colName" text="Medicine Name" prefWidth="150"/>
+                    <TableColumn fx:id="colCompany" text="Company" prefWidth="120"/>
+                    <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
+                    <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
+                    <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
+                </columns>
+                <columnResizePolicy>
+                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                </columnResizePolicy>
+            </TableView>
+
+            <!-- Right: Form -->
+            <VBox spacing="15" style="-fx-padding: 20; -fx-background-color: #f9f9f9;">
+                <Label text="Medicine Details" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+
+                <VBox spacing="5">
+                    <Label text="Medicine Name"/>
+                    <TextField fx:id="txtName" promptText="Name"/>
+                </VBox>
+                <VBox spacing="5">
+                    <Label text="Company"/>
+                    <TextField fx:id="txtCompany" promptText="Manufacturer"/>
+                </VBox>
+                <VBox spacing="5">
+                    <Label text="Expiry Date"/>
+                    <DatePicker fx:id="dateExpiry" maxWidth="Infinity"/>
+                </VBox>
+                <HBox spacing="10">
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="Price (₹)"/>
+                        <TextField fx:id="txtPrice" promptText="0.00"/>
+                    </VBox>
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="Stock"/>
+                        <TextField fx:id="txtStock" promptText="Qty"/>
+                    </VBox>
+                </HBox>
+
+                <Region VBox.vgrow="ALWAYS"/>
+
+                <Button fx:id="btnSave" text="Add New" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSave"/>
+                <HBox spacing="10">
+                    <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="btnDelete" text="Delete" disable="true" style="-fx-background-color: #e74c3c; -fx-text-fill: white;" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
+                </HBox>
+            </VBox>
+        </items>
+    </SplitPane>
+</VBox>

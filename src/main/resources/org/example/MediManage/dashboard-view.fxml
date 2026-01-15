@@ -9,44 +9,7 @@
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.DashboardController" stylesheets="@styles.css" prefWidth="1200" prefHeight="800">
 
     <!-- Sidebar -->
-    <left>
-        <VBox styleClass="sidebar" prefWidth="250">
-            <Label text="MediManage" styleClass="sidebar-title">
-                <graphic>
-                    <FontIcon iconLiteral="fas-clinic-medical" iconSize="24"/>
-                </graphic>
-            </Label>
 
-            <Button text="Dashboard" styleClass="sidebar-button" maxWidth="Infinity">
-                <graphic>
-                    <FontIcon iconLiteral="fas-chart-line"/>
-                </graphic>
-            </Button>
-            <Button text="Inventory" styleClass="sidebar-button" maxWidth="Infinity">
-                <graphic>
-                    <FontIcon iconLiteral="fas-box"/>
-                </graphic>
-            </Button>
-            <Button text="Billing" styleClass="sidebar-button" maxWidth="Infinity">
-                <graphic>
-                    <FontIcon iconLiteral="fas-file-invoice-dollar"/>
-                </graphic>
-            </Button>
-
-            <Region VBox.vgrow="ALWAYS"/>
-
-            <Button text="Settings" styleClass="sidebar-button" maxWidth="Infinity">
-                <graphic>
-                    <FontIcon iconLiteral="fas-cog"/>
-                </graphic>
-            </Button>
-            <Button text="Logout" styleClass="sidebar-button" maxWidth="Infinity">
-                <graphic>
-                    <FontIcon iconLiteral="fas-sign-out-alt"/>
-                </graphic>
-            </Button>
-        </VBox>
-    </left>
 
     <!-- Main Content -->
     <center>

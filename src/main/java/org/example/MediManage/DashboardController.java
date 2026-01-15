@@ -15,6 +15,8 @@ import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.CustomerDAO;
 import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.model.Customer;
+import org.example.MediManage.model.Medicine;
+import org.example.MediManage.model.BillItem;
 
 import java.io.File;
 import java.sql.SQLException;
@@ -171,6 +173,94 @@ public class DashboardController {
         histColPhone.setCellValueFactory(data -> data.getValue().phoneProperty());
         histColAmount.setCellValueFactory(data -> data.getValue().totalProperty().asObject());
         historyTable.setItems(historyList);
+
+        // History Details Popup
+        historyTable.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2 && !historyTable.getSelectionModel().isEmpty()) {
+                showBillDetails(historyTable.getSelectionModel().getSelectedItem());
+            }
+        });
+    }
+
+    private void showBillDetails(BillHistoryDTO bill) {
+        if (bill == null)
+            return;
+
+        List<BillItem> items = billDAO.getBillItemsExtended(bill.getBillId());
+
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Bill Details - #" + bill.getBillId());
+        dialog.setHeaderText("Customer: " + bill.customerNameProperty().get() + "\n" +
+                "Phone: " + bill.phoneProperty().get() + "\n" +
+                "Date: " + bill.dateProperty().get());
+
+        DialogPane pane = dialog.getDialogPane();
+        pane.getButtonTypes().add(ButtonType.CLOSE);
+        pane.setPrefWidth(600);
+
+        TableView<BillItem> table = new TableView<>();
+        table.setItems(FXCollections.observableArrayList(items));
+
+        TableColumn<BillItem, String> colName = new TableColumn<>("Medicine");
+        colName.setCellValueFactory(d -> d.getValue().nameProperty());
+        colName.setPrefWidth(150);
+
+        TableColumn<BillItem, String> colExpiry = new TableColumn<>("Expiry");
+        colExpiry.setCellValueFactory(d -> d.getValue().expiryProperty());
+
+        TableColumn<BillItem, Integer> colQty = new TableColumn<>("Qty");
+        colQty.setCellValueFactory(d -> d.getValue().qtyProperty().asObject());
+
+        TableColumn<BillItem, Double> colPrice = new TableColumn<>("Price");
+        colPrice.setCellValueFactory(d -> d.getValue().priceProperty().asObject());
+
+        TableColumn<BillItem, Double> colTotal = new TableColumn<>("Total");
+        colTotal.setCellValueFactory(d -> d.getValue().totalProperty().asObject());
+
+        table.getColumns().addAll(colName, colExpiry, colQty, colPrice, colTotal);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPrefHeight(300);
+
+        // Buttons
+        Button btnDownload = new Button("Download Invoice");
+        btnDownload.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;");
+        btnDownload.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Save Invoice PDF");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+            fileChooser.setInitialFileName("Invoice_" + bill.getBillId() + ".pdf");
+            File file = fileChooser.showSaveDialog(dialog.getOwner());
+
+            if (file != null) {
+                try {
+                    reportService.generateInvoicePDF(items, bill.totalProperty().get(),
+                            bill.customerNameProperty().get(), file.getAbsolutePath());
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved.");
+                } catch (Exception ex) {
+                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save PDF: " + ex.getMessage());
+                }
+            }
+        });
+
+        Button btnShare = new Button("Share");
+        btnShare.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold;");
+        btnShare.setOnAction(e -> {
+            TextInputDialog shareDialog = new TextInputDialog();
+            shareDialog.setTitle("Share Invoice");
+            shareDialog.setHeaderText("Share Invoice #" + bill.getBillId());
+            shareDialog.setContentText("Enter Email / WhatsApp:");
+            shareDialog.showAndWait().ifPresent(contact -> {
+                showAlert(Alert.AlertType.INFORMATION, "Shared", "Invoice link sent to " + contact + " (Simulated)");
+            });
+        });
+
+        javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10, btnDownload, btnShare);
+        buttonBox.setAlignment(Pos.CENTER_RIGHT);
+        buttonBox.setPadding(new javafx.geometry.Insets(10, 0, 0, 0));
+
+        javafx.scene.layout.VBox root = new javafx.scene.layout.VBox(10, table, buttonBox);
+        pane.setContent(root);
+        dialog.showAndWait();
     }
 
     private void loadHistory() {
@@ -290,7 +380,8 @@ public class DashboardController {
             updateTotal();
 
         } else {
-            BillItem item = new BillItem(selected.getId(), selected.getName(), 1, selected.getPrice(), gstAmount);
+            BillItem item = new BillItem(selected.getId(), selected.getName(), selected.getExpiry(), 1,
+                    selected.getPrice(), gstAmount);
             billList.add(item);
             updateTotal();
         }
@@ -505,7 +596,7 @@ public class DashboardController {
 
         if (file != null) {
             try {
-                reportService.generateInvoicePDF(new java.util.ArrayList<>(billList), total, customerName,
+                reportService.generateInvoicePDF(new java.util.ArrayList<BillItem>(billList), total, customerName,
                         file.getAbsolutePath());
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved to PDF!");
             } catch (JRException e) {
@@ -585,125 +676,6 @@ public class DashboardController {
     }
 
     // ---------------- Inner Classes (DTOs) ----------------
-    public static class Medicine {
-        private final int id;
-        private final StringProperty name;
-        private final StringProperty company; // New Field
-        private final StringProperty expiry;
-        private final IntegerProperty stock;
-        private final double price;
-
-        public Medicine(int id, String name, String company, String expiry, int stock, double price) {
-            this.id = id;
-            this.name = new SimpleStringProperty(name);
-            this.company = new SimpleStringProperty(company);
-            this.expiry = new SimpleStringProperty(expiry);
-            this.stock = new SimpleIntegerProperty(stock);
-            this.price = price;
-        }
-
-        public StringProperty nameProperty() {
-            return name;
-        }
-
-        public StringProperty companyProperty() {
-            return company;
-        }
-
-        public StringProperty expiryProperty() {
-            return expiry;
-        }
-
-        public IntegerProperty stockProperty() {
-            return stock;
-        }
-
-        public DoubleProperty priceProperty() {
-            return new SimpleDoubleProperty(price);
-        } // Wrap for TableColumn
-
-        public int getId() {
-            return id;
-        }
-
-        public String getName() {
-            return name.get();
-        }
-
-        public String getCompany() {
-            return company.get();
-        } // Getter for search
-
-        public int getStock() {
-            return stock.get();
-        }
-
-        public double getPrice() {
-            return price;
-        }
-
-        public String getExpiry() {
-            return expiry.get();
-        }
-    }
-
-    public static class BillItem {
-        private final int medicineId;
-        private final StringProperty name;
-        private final IntegerProperty qty;
-        private final DoubleProperty price;
-        private final DoubleProperty gst;
-        private final DoubleProperty total;
-
-        public BillItem(int medicineId, String name, int qty, double price, double gst) {
-            this.medicineId = medicineId;
-            this.name = new SimpleStringProperty(name);
-            this.qty = new SimpleIntegerProperty(qty);
-            this.price = new SimpleDoubleProperty(price);
-            this.gst = new SimpleDoubleProperty(gst);
-            this.total = new SimpleDoubleProperty((price * qty) + gst);
-        }
-
-        public StringProperty nameProperty() {
-            return name;
-        }
-
-        public IntegerProperty qtyProperty() {
-            return qty;
-        }
-
-        public DoubleProperty priceProperty() {
-            return price;
-        }
-
-        public DoubleProperty gstProperty() {
-            return gst;
-        }
-
-        public DoubleProperty totalProperty() {
-            return total;
-        }
-
-        public int getMedicineId() {
-            return medicineId;
-        }
-
-        public int getQty() {
-            return qty.get();
-        }
-
-        public double getPrice() {
-            return price.get();
-        }
-
-        public double getTotal() {
-            return total.get();
-        }
-
-        public String getName() {
-            return name.get();
-        }
-    }
 
     public static class BillHistoryDTO {
         private final int billId;

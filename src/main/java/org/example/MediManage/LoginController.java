@@ -4,14 +4,16 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
-import javafx.scene.control.Label;
 import javafx.stage.Stage;
+import org.example.MediManage.dao.UserDAO;
+import org.example.MediManage.model.User;
+import org.example.MediManage.model.UserRole;
+import org.example.MediManage.util.UserSession;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.Objects;
 
 public class LoginController {
@@ -25,28 +27,49 @@ public class LoginController {
     @FXML
     private Label message;
 
+    private UserDAO userDAO = new UserDAO();
+
+    @FXML
+    private ComboBox<UserRole> roleSelector;
+
     @FXML
     private void initialize() {
-        DBUtil.initDB();
+        roleSelector.getItems().setAll(UserRole.values());
     }
 
     @FXML
     private void handleLogin() {
         String user = username.getText();
         String pass = password.getText();
+        UserRole selectedRole = roleSelector.getValue();
 
-        if (authenticate(user, pass)) {
+        if (selectedRole == null) {
+            message.setText("Please select a Role ⚠️");
+            return;
+        }
+
+        User authenticatedUser = userDAO.authenticate(user, pass);
+
+        if (authenticatedUser != null) {
+            // Validate Role
+            if (authenticatedUser.getRole() != selectedRole) {
+                message.setText("Role Mismatch! You are " + authenticatedUser.getRole() + " ❌");
+                return;
+            }
+
+            UserSession.getInstance().login(authenticatedUser);
             message.setText("Login Successful ✅");
 
-            // Switch to dashboard
+            // Switch to Main Shell
             try {
-                FXMLLoader loader = new FXMLLoader(getClass().getResource("dashboard-view.fxml"));
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("main-shell-view.fxml"));
                 Stage stage = (Stage) username.getScene().getWindow(); // current stage
-                stage.setScene(new Scene(loader.load(), 900, 500));
-                stage.setTitle("Medical Store Dashboard");
+                stage.setScene(new Scene(loader.load(), 900, 600)); // Increased height specific for shell
+                stage.setTitle("MediManage - " + authenticatedUser.getRole());
                 stage.show();
             } catch (Exception e) {
                 e.printStackTrace();
+                message.setText("Error loading shell: " + e.getMessage());
             }
 
         } else {
@@ -54,32 +77,11 @@ public class LoginController {
         }
     }
 
-
-    private boolean authenticate(String user, String pass) {
-        String sql = "SELECT * FROM users WHERE username=? AND password=?";
-
-        try (Connection conn = DBUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-
-            ps.setString(1, user);
-            ps.setString(2, pass);
-
-            ResultSet rs = ps.executeQuery();
-            return rs.next();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
     private void openDashboard() {
         try {
             Parent root = FXMLLoader.load(
                     Objects.requireNonNull(getClass().getResource(
-                            "/org/example/MediManage/dashboard-view.fxml"
-                    ))
-            );
+                            "/org/example/MediManage/dashboard-view.fxml")));
 
             Stage stage = (Stage) username.getScene().getWindow();
             stage.setScene(new Scene(root));

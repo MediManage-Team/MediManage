@@ -1,0 +1,17 @@
+/* Cashier Theme: High Contrast */
+.root {
+    -fx-font-size: 14px;
+}
+
+.button {
+    -fx-font-weight: bold;
+}
+
+.label {
+    -fx-text-fill: #000000;
+}
+
+.sidebar-button {
+    -fx-font-size: 16px;
+    -fx-padding: 15;
+}

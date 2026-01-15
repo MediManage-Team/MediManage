@@ -16,6 +16,16 @@ public class Customer {
     public Customer() {
     }
 
+    public Customer(int customerId, String name, String phoneNumber) {
+        this.customerId = customerId;
+        this.name = name;
+        this.phoneNumber = phoneNumber;
+    }
+
+    public String getPhone() {
+        return phoneNumber;
+    }
+
     public Customer(String name, String email, String phoneNumber, String address, String nomineeName,
             String nomineeRelation,
             String insuranceProvider, String insurancePolicyNo, String diseases, String photoIdPath) {

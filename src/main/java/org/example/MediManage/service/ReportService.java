@@ -4,8 +4,8 @@ import net.sf.jasperreports.engine.*;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.example.MediManage.DashboardController.BillItem;
-import org.example.MediManage.DashboardController.Medicine;
+import org.example.MediManage.model.BillItem;
+import org.example.MediManage.model.Medicine;
 import org.example.MediManage.model.Customer;
 
 import java.io.FileOutputStream;
