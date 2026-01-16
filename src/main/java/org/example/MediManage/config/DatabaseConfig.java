@@ -51,37 +51,23 @@ public class DatabaseConfig {
     }
 
     private static java.io.File resolveDatabaseFile() {
-        // Safe Guard: If running in "Program Files", force AppData usage.
         String userDir = System.getProperty("user.dir");
-        boolean isInstalled = userDir.contains("Program Files") || userDir.contains("Program Files (x86)");
 
-        // Priority 1: Local file in execution directory (Dev Mode / Portable)
-        // Only if NOT installed in Program Files
-        if (!isInstalled) {
-            java.io.File localFile = new java.io.File("medimanage.db");
-            if (localFile.exists()) {
-                // System.out.println("📂 Dev Mode: Using local database file.");
-                return localFile;
+        // Logic: If installed in Program Files, use 'runtime/db' subfolder.
+        // Otherwise (Dev Mode), use project root.
+        if (userDir.contains("Program Files") || userDir.contains("Program Files (x86)")) {
+            java.io.File dbFolder = new java.io.File(userDir, "runtime/db");
+            if (!dbFolder.exists()) {
+                boolean created = dbFolder.mkdirs();
+                if (!created && !dbFolder.exists()) {
+                    System.err.println("❌ Failed to create DB dir: " + dbFolder.getAbsolutePath());
+                }
             }
+            return new java.io.File(dbFolder, "medimanage.db");
+        } else {
+            // Dev Mode
+            return new java.io.File(userDir, "medimanage.db");
         }
-
-        // Priority 2: Production Mode (AppData)
-        // Strict logic as requested: Use APPDATA/MediManage/medimanage.db
-        String appData = System.getenv("APPDATA");
-        if (appData == null) {
-            // Fallback for non-Windows or if env var is missing
-            appData = System.getProperty("user.home") + "/AppData/Roaming";
-        }
-
-        java.io.File dbFolder = new java.io.File(appData, "MediManage");
-        if (!dbFolder.exists()) {
-            boolean created = dbFolder.mkdirs();
-            if (!created && !dbFolder.exists()) {
-                System.err.println("❌ Failed to create database folder: " + dbFolder.getAbsolutePath());
-            }
-        }
-
-        return new java.io.File(dbFolder, "medimanage.db");
     }
 
 }

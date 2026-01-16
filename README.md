@@ -39,7 +39,7 @@ A robust, enterprise-grade Desktop application for managing pharmacy inventory, 
 - **Utilities**:
     - **Apache POI**: Excel Export
     - **ZXing**: Barcode Scanning
-    - **iText**: PDF Generation
+    - **OpenPDF**: Secure PDF Generation (Replaced vulnerable iText)
 
 ---
 
@@ -130,6 +130,11 @@ To create a distributable Windows installer with bundled JRE:
     1. Clean and Build the project with Maven.
     2. Use `jpackage` to create a bundled runtime image (JDK 21).
     3. Use `Inno Setup` to compile the final `MediManage_Setup_x.x.x.exe`.
+    
+    **Installer Features**:
+    - **Bundled JRE**: No Java installation required on client machine.
+    - **Pre-configured DB**: Includes `medimanage.db` with Admin user and default settings.
+    - **Permissions**: Automatically grants write access to `runtime/db` for seamless persistence.
     
     **Output Location**: `Output/MediManage_Setup_0.1.5.exe`
 
