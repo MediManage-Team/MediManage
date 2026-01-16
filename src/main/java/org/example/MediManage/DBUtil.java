@@ -45,11 +45,13 @@ public class DBUtil {
                         if (!sql.isEmpty()) {
                             try {
                                 stmt.execute(sql);
+                                System.out.println("✅ Executed schema statement: "
+                                        + sql.substring(0, Math.min(50, sql.length())) + "...");
                             } catch (SQLException e) {
-                                // Log error but continue? Or throw?
-                                // For IF NOT EXISTS, it shouldn't fail unless syntax error.
-                                System.err.println("⚠️ Error executing schema statement: " + sql);
-                                System.err.println("Reason: " + e.getMessage());
+                                // Log but don't fail, as some statements (like duplicate columns) are expected
+                                // on existing DBs
+                                System.err.println("Database Initialization Note: " + e.getMessage() + " [Statement: "
+                                        + sql.substring(0, Math.min(50, sql.length())) + "...]");
                             }
                         }
                     }

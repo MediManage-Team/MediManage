@@ -63,7 +63,7 @@ src/main/java/org/example/MediManage/
 
 #### 1. Configuration (`config/`)
 - **`DatabaseConfig.java`**: Manages SQLite connection reuse and file location.
-    - *Dev Mode Check*: Automatically detects if running in IDE (uses local `database.db`) vs. Installed (uses `%APPDATA%/MediManage/database.db`) to prevent permission errors in "Program Files".
+    - *Dev Mode Check*: Automatically detects if running in IDE (uses local `medimanage.db`) vs. Installed (uses `%APPDATA%/MediManage/medimanage.db`) to prevent permission errors in "Program Files".
 
 #### 2. Models (`model/`)
 - **`Medicine`**, **`Customer`**, **`Bill`**, **`User`**, **`Expense`**: represent DB entities with JavaFX Properties for UI binding.
@@ -117,50 +117,48 @@ The application uses a relational SQLite database initialized programmatically v
     ```bash
     mvn javafx:run
     ```
-    *Note*: In Dev mode, the app creates `database.db` in the project root.
+    *Note*: In Dev mode, the app creates/uses `medimanage.db` in the project root.
 
 ### Building the Installer (.exe)
 To create a distributable Windows installer with bundled JRE:
-```bash
-# 1. Package the JAR
-mvn clean package
-
-# 2. Run jpackage (via script)
-# 2. Run the Full Installer script (Bundles JRE + Creates EXE)
-    build_full_installer.bat
+1. Ensure **Inno Setup** is installed and allowed in your PATH or update the path in `build_full_installer.bat`.
+2. Run the build script:
+    ```powershell
+    ./build_full_installer.bat
     ```
     *This script will:*
     1. Clean and Build the project with Maven.
-    2. Use `jpackage` to create a bundled runtime image.
-    3. Use `Inno Setup` to compile the final `MediManage_Setup.exe`.
+    2. Use `jpackage` to create a bundled runtime image (JDK 21).
+    3. Use `Inno Setup` to compile the final `MediManage_Setup_x.x.x.exe`.
     
-    *Output will be in `Output/` folder.*
+    **Output Location**: `Output/MediManage_Setup_0.1.5.exe`
 
 ---
 
-## 🔄 Data Flow Example: Generating a Bill
+## 🔄 Data Flow Example: Generating a Bill (Transaction Logic)
 
-1.  **UI**: User scans a barcode in `BillingController`.
-2.  **Search**: `MedicineDAO.getAllMedicines()` is filtered for matches (Name/Generic).
-3.  **Add**: Item added to `TableView` (`ObservableList`).
-4.  **Checkout**: User clicks "Checkout", selects "Credit".
-5.  **Transaction**: `BillDAO.generateInvoice()` starts a DB Transaction:
+1.  **UI**: User scans a barcode in `BillingController` or searches by **Generic Name**.
+2.  **Add**: Item added to `TableView` (`ObservableList`).
+3.  **Checkout**: User clicks "Checkout", selects Payment Mode (Cash/Credit/UPI).
+4.  **Transaction**: `BillDAO.generateInvoice()` starts a Atomic DB Transaction:
+    - **Validates** User ID (Fallback to Admin if session stale).
     - Insert into `bills`.
-    - Insert into `bill_items` (Batch).
-    - Update `stock` (Decrement).
-    - Update `customers` (Increment Balance).
+    - Insert into `bill_items` (Batch Insert).
+    - Update `stock` (Decrement Quantity).
+    - **Credit Logic**: If Mode is 'Credit', executes SQL Update on `customers` balance within the **same connection** to prevent locking.
     - `commit()` transaction.
-6.  **Output**: PDF generated via `ReportService` and Receipt printed.
+5.  **Output**: PDF generated via `ReportService` and Thermal Receipt printed.
 
 ---
 
 ## 🧩 Layouts & UI
 
 - **`main-shell-view.fxml`**: The sidebar navigation container.
-- **`dashboard-view.fxml`**: High-level KPIs and Tabs.
+- **`dashboard-view.fxml`**: High-level KPIs and Tabs (Expenses, Expiry Alerts).
 - **`billing-view.fxml`**: Split-pane design (Search/Table on left, Totals/Actions on right).
+- **Login UI**: Role-based access (Admin, Manager, Pharmacist, Cashier). *Staff role hidden by default.*
 
 ---
 
 ## 📝 License
-Proprietary / Medical Use.
+MIT License. See `LICENSE.txt` for details.

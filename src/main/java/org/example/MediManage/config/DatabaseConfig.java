@@ -58,7 +58,7 @@ public class DatabaseConfig {
         // Priority 1: Local file in execution directory (Dev Mode / Portable)
         // Only if NOT installed in Program Files
         if (!isInstalled) {
-            java.io.File localFile = new java.io.File("database.db");
+            java.io.File localFile = new java.io.File("medimanage.db");
             if (localFile.exists()) {
                 // System.out.println("📂 Dev Mode: Using local database file.");
                 return localFile;
@@ -66,7 +66,7 @@ public class DatabaseConfig {
         }
 
         // Priority 2: Production Mode (AppData)
-        // Strict logic as requested: Use APPDATA/MediManage/database.db
+        // Strict logic as requested: Use APPDATA/MediManage/medimanage.db
         String appData = System.getenv("APPDATA");
         if (appData == null) {
             // Fallback for non-Windows or if env var is missing
@@ -81,7 +81,7 @@ public class DatabaseConfig {
             }
         }
 
-        return new java.io.File(dbFolder, "database.db");
+        return new java.io.File(dbFolder, "medimanage.db");
     }
 
 }

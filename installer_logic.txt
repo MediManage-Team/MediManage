@@ -18,7 +18,7 @@ var
 begin
   // Determine paths
   AppDataPath := ExpandConstant('{userappdata}\MediManage');
-  TargetDB := AppDataPath + '\database.db';
+  TargetDB := AppDataPath + '\medimanage.db';
   SourceDB := ExpandConstant('{app}\clean_database.db');
 
   // Create AppData folder if missing

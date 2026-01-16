@@ -812,6 +812,7 @@ public class DashboardController {
         // button and total
         content.getChildren().addAll(new Label("Expense Manager"), btnAdd, lblMonthly);
 
+        expenseTab.setContent(content);
         mainTabPane.getTabs().add(expenseTab);
     }
 

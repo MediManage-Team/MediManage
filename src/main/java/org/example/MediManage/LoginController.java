@@ -34,7 +34,14 @@ public class LoginController {
 
     @FXML
     private void initialize() {
-        roleSelector.getItems().setAll(UserRole.values());
+        // Filter out STAFF as per user request
+        java.util.List<UserRole> roles = new java.util.ArrayList<>();
+        for (UserRole r : UserRole.values()) {
+            if (r != UserRole.STAFF) {
+                roles.add(r);
+            }
+        }
+        roleSelector.getItems().setAll(roles);
     }
 
     @FXML

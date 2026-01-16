@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     password TEXT NOT NULL,
     role TEXT DEFAULT 'STAFF'
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
 -- 2. MEDICINES
 CREATE TABLE IF NOT EXISTS medicines (
     medicine_id INTEGER PRIMARY KEY AUTOINCREMENT,

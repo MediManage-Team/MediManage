@@ -20,6 +20,17 @@ public class BillDAO {
             conn = DBUtil.getConnection();
             conn.setAutoCommit(false);
 
+            String checkUser = "SELECT 1 FROM users WHERE user_id = ?";
+            try (PreparedStatement psCheck = conn.prepareStatement(checkUser)) {
+                psCheck.setInt(1, userId);
+                try (ResultSet rsCheck = psCheck.executeQuery()) {
+                    if (!rsCheck.next()) {
+                        System.err.println("⚠️ Warning: User ID " + userId + " not found. Fallback to Admin (1).");
+                        userId = 1;
+                    }
+                }
+            }
+
             String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id, user_id) VALUES (?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
@@ -59,19 +70,27 @@ public class BillDAO {
 
             if ("Credit".equalsIgnoreCase(paymentMode) && customerId != null) {
                 // Update Customer Balance
-                org.example.MediManage.dao.CustomerDAO customerDAO = new org.example.MediManage.dao.CustomerDAO(); // Create
-                                                                                                                   // instance
-                                                                                                                   // or
-                                                                                                                   // dependency
-                                                                                                                   // inject
-                customerDAO.updateBalance(customerId, totalAmount);
+                // Execute directly on 'conn' to avoid SQLITE_BUSY (Database Locked)
+                String updateBalanceSql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
+                try (PreparedStatement psUpdate = conn.prepareStatement(updateBalanceSql)) {
+                    psUpdate.setDouble(1, totalAmount);
+                    psUpdate.setInt(2, customerId);
+                    psUpdate.executeUpdate();
+                }
             }
 
             conn.commit();
         } catch (SQLException e) {
             if (conn != null)
                 conn.rollback();
-            throw e;
+            String debugMsg = "Invoice Generation Failed.\n" +
+                    "Debug Info:\n" +
+                    "Customer ID: " + customerId + "\n" +
+                    "User ID: " + userId + "\n" +
+                    "Items: " + items.size() + "\n" +
+                    "First Item Medicine ID: " + (items.isEmpty() ? "N/A" : items.get(0).getMedicineId());
+            System.err.println(debugMsg);
+            throw new SQLException(debugMsg + "\nOriginal Error: " + e.getMessage(), e);
         } finally {
             if (conn != null) {
                 conn.setAutoCommit(true);
