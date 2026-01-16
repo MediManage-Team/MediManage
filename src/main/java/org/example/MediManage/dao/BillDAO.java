@@ -11,7 +11,8 @@ import java.util.Map;
 
 public class BillDAO {
 
-    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId)
+    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
+            String paymentMode)
             throws SQLException {
         Connection conn = null;
         int billId = -1;
@@ -56,6 +57,16 @@ public class BillDAO {
                 psStock.executeBatch();
             }
 
+            if ("Credit".equalsIgnoreCase(paymentMode) && customerId != null) {
+                // Update Customer Balance
+                org.example.MediManage.dao.CustomerDAO customerDAO = new org.example.MediManage.dao.CustomerDAO(); // Create
+                                                                                                                   // instance
+                                                                                                                   // or
+                                                                                                                   // dependency
+                                                                                                                   // inject
+                customerDAO.updateBalance(customerId, totalAmount);
+            }
+
             conn.commit();
         } catch (SQLException e) {
             if (conn != null)
@@ -71,8 +82,10 @@ public class BillDAO {
     }
 
     public double getDailySales() {
-        // SQLite: compare local date of bill with local date of now
-        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date, 'localtime') = date('now', 'localtime')";
+        // SQLite: compare stored local date (string) with calculated local date of now
+        // stored: "2023-10-27 14:00:00" -> date() -> "2023-10-27"
+        // now: date('now', 'localtime') -> "2023-10-27" (if running locally)
+        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date) = date('now', 'localtime')";
         try (Connection conn = DBUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {

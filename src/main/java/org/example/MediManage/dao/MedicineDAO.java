@@ -21,7 +21,8 @@ public class MedicineDAO {
 
     public List<Medicine> getAllMedicines() {
         List<Medicine> list = new ArrayList<>();
-        String sql = "SELECT m.medicine_id, m.name, m.company, m.expiry_date, m.price, s.quantity " +
+        // Updated to select generic_name
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id";
 
@@ -33,6 +34,7 @@ public class MedicineDAO {
                 list.add(new Medicine(
                         rs.getInt("medicine_id"),
                         rs.getString("name"),
+                        rs.getString("generic_name"), // Added generic_name
                         rs.getString("company"),
                         rs.getString("expiry_date"),
                         rs.getInt("quantity"),
@@ -44,18 +46,20 @@ public class MedicineDAO {
         return list;
     }
 
-    public void addMedicine(String name, String company, String expiry, double price, int initialStock) {
+    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+            int initialStock) {
         checkManagerPermission();
-        String insertMed = "INSERT INTO medicines(name, company, expiry_date, price) VALUES(?, ?, ?, ?)";
+        String insertMed = "INSERT INTO medicines(name, generic_name, company, expiry_date, price) VALUES(?, ?, ?, ?, ?)";
         String insertStock = "INSERT INTO stock(medicine_id, quantity) VALUES(?, ?)";
 
         try (Connection conn = DBUtil.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement psMed = conn.prepareStatement(insertMed, Statement.RETURN_GENERATED_KEYS)) {
                 psMed.setString(1, name);
-                psMed.setString(2, company);
-                psMed.setString(3, expiry);
-                psMed.setDouble(4, price);
+                psMed.setString(2, genericName);
+                psMed.setString(3, company);
+                psMed.setString(4, expiry);
+                psMed.setDouble(5, price);
                 psMed.executeUpdate();
 
                 ResultSet rs = psMed.getGeneratedKeys();
@@ -81,26 +85,22 @@ public class MedicineDAO {
         }
     }
 
-    // Update Medicine (Name, Company, Price, Expiry)
+    // Update Medicine (Name, Generic, Company, Price, Expiry)
     public void updateMedicine(Medicine medicine) {
         checkManagerPermission();
-        String sql = "UPDATE medicines SET name=?, company=?, price=?, expiry_date=? WHERE medicine_id=?";
+        String sql = "UPDATE medicines SET name=?, generic_name=?, company=?, price=?, expiry_date=? WHERE medicine_id=?";
 
         try (Connection conn = DBUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, medicine.getName());
-            pstmt.setString(2, medicine.getCompany());
-            pstmt.setDouble(3, medicine.getPrice());
-            pstmt.setString(4, medicine.getExpiry());
-            pstmt.setInt(5, medicine.getId());
+            pstmt.setString(2, medicine.getGenericName());
+            pstmt.setString(3, medicine.getCompany());
+            pstmt.setDouble(4, medicine.getPrice());
+            pstmt.setString(5, medicine.getExpiry());
+            pstmt.setInt(6, medicine.getId());
 
             pstmt.executeUpdate();
-
-            // Also ensure stock is updated if changed via this object?
-            // The requirement says "updateStock" is separate, but if we pass a Medicine
-            // object that has stock,
-            // we might want to sync it. For now, strict separation as per requirement.
         } catch (SQLException e) {
             e.printStackTrace();
         }

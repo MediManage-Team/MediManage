@@ -19,7 +19,6 @@ import org.example.MediManage.model.Medicine;
 import java.sql.SQLException;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Optional;
 
 public class BillingController {
 
@@ -90,7 +89,8 @@ public class BillingController {
 
             String lower = newVal.toLowerCase();
             filteredDocs.setPredicate(m -> m.getName().toLowerCase().contains(lower) ||
-                    m.getCompany().toLowerCase().contains(lower));
+                    m.getCompany().toLowerCase().contains(lower) ||
+                    m.getGenericName().toLowerCase().contains(lower)); // Feature 2: Generic Name Search
 
             if (filteredDocs.isEmpty()) {
                 listMedicineSuggestions.setVisible(false);
@@ -161,7 +161,13 @@ public class BillingController {
         List<Customer> res = customerDAO.searchCustomer(q);
         if (!res.isEmpty()) {
             selectedCustomer = res.get(0);
-            lblCustomerName.setText(selectedCustomer.getName());
+            String labelText = selectedCustomer.getName();
+            // Show Balance if Credit
+            if (selectedCustomer.getCurrentBalance() > 0) {
+                labelText += String.format(" (Bal: ₹%.2f)", selectedCustomer.getCurrentBalance());
+            }
+            lblCustomerName.setText(labelText);
+
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText(selectedCustomer.getPhone());
             lblCustomerName.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
@@ -179,7 +185,7 @@ public class BillingController {
         TextInputDialog phoneDialog = new TextInputDialog(txtSearchCustomer.getText());
         phoneDialog.setTitle("New Customer");
         phoneDialog.setHeaderText("Enter Customer Phone");
-        Optional<String> phoneResult = phoneDialog.showAndWait();
+        java.util.Optional<String> phoneResult = phoneDialog.showAndWait();
 
         if (phoneResult.isPresent() && !phoneResult.get().trim().isEmpty()) {
             String phone = phoneResult.get().trim();
@@ -187,7 +193,7 @@ public class BillingController {
             TextInputDialog nameDialog = new TextInputDialog();
             nameDialog.setTitle("New Customer");
             nameDialog.setHeaderText("Enter Customer Name");
-            Optional<String> nameResult = nameDialog.showAndWait();
+            java.util.Optional<String> nameResult = nameDialog.showAndWait();
 
             if (nameResult.isPresent() && !nameResult.get().trim().isEmpty()) {
                 String name = nameResult.get().trim();
@@ -234,7 +240,8 @@ public class BillingController {
         }
 
         // Add to List
-        Optional<BillItem> existing = billList.stream().filter(b -> b.getMedicineId() == selectedMedicine.getId())
+        java.util.Optional<BillItem> existing = billList.stream()
+                .filter(b -> b.getMedicineId() == selectedMedicine.getId())
                 .findFirst();
         if (existing.isPresent()) {
             BillItem item = existing.get();
@@ -274,9 +281,29 @@ public class BillingController {
         Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
 
         try {
+            // Ask for Payment Mode
+            java.util.List<String> choices = new java.util.ArrayList<>();
+            choices.add("Cash");
+            choices.add("Credit");
+            choices.add("UPI");
+
+            ChoiceDialog<String> dialog = new ChoiceDialog<>("Cash", choices);
+            dialog.setTitle("Payment Mode");
+            dialog.setHeaderText("Select Payment Mode");
+            dialog.setContentText("Mode:");
+
+            java.util.Optional<String> result = dialog.showAndWait();
+            String paymentMode = result.orElse("Cash");
+
+            // Feature 4: Credit validation
+            if ("Credit".equals(paymentMode) && cid == null) {
+                showAlert(Alert.AlertType.WARNING, "Credit Error", "Credit requires a selected customer!");
+                return;
+            }
+
             int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
-            int billId = billDAO.generateInvoice(total, billList, cid, userId);
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Bill Generated: #" + billId);
+            int billId = billDAO.generateInvoice(total, billList, cid, userId, paymentMode);
+            showAlert(Alert.AlertType.INFORMATION, "Success", "Bill Generated: #" + billId + "\nMode: " + paymentMode);
             billList.clear();
             updateTotal();
             selectedCustomer = null;

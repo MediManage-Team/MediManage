@@ -155,7 +155,10 @@ public class InventoryController {
 
             if (selectedMedicine == null) {
                 // Add New
-                medicineDAO.addMedicine(name, company, expiry, price, stock);
+                // defaulting generic name to empty string as we don't have a field in UI yet
+                // for InventoryAdd (User requirement didn't specify updating Inventory UI, but
+                // "Substitute Search" implies it should be there. For now, empty to fix build).
+                medicineDAO.addMedicine(name, "", company, expiry, price, stock);
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine added.");
             } else {
                 // Update Existing

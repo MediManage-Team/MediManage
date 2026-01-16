@@ -51,12 +51,18 @@ public class DatabaseConfig {
     }
 
     private static java.io.File resolveDatabaseFile() {
-        // Priority 1: Local file in execution directory (Dev Mode)
-        // Checks if "database.db" exists in the current working directory.
-        java.io.File localFile = new java.io.File("database.db");
-        if (localFile.exists()) {
-            // System.out.println("📂 Dev Mode: Using local database file.");
-            return localFile;
+        // Safe Guard: If running in "Program Files", force AppData usage.
+        String userDir = System.getProperty("user.dir");
+        boolean isInstalled = userDir.contains("Program Files") || userDir.contains("Program Files (x86)");
+
+        // Priority 1: Local file in execution directory (Dev Mode / Portable)
+        // Only if NOT installed in Program Files
+        if (!isInstalled) {
+            java.io.File localFile = new java.io.File("database.db");
+            if (localFile.exists()) {
+                // System.out.println("📂 Dev Mode: Using local database file.");
+                return localFile;
+            }
         }
 
         // Priority 2: Production Mode (AppData)

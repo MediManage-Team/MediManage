@@ -61,6 +61,7 @@ public class CustomerDAO {
                 customer.setInsurancePolicyNo(rs.getString("insurance_policy_no"));
                 customer.setDiseases(rs.getString("diseases"));
                 customer.setPhotoIdPath(rs.getString("photo_id_path"));
+                customer.setCurrentBalance(rs.getDouble("current_balance")); // New Field
                 customers.add(customer);
             }
 
@@ -68,5 +69,20 @@ public class CustomerDAO {
             e.printStackTrace();
         }
         return customers;
+    }
+
+    public void updateBalance(int customerId, double amount) throws SQLException {
+        // SQLite: Update balance. If payment is credit, amount is positive (debt
+        // increases).
+        // If customer pays, amount is negative (debt decreases).
+        // Wait, user story says "payment mode 'Credit' -> add bill amount to balance".
+        // I'll assume 'amount' is added.
+        String sql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
+        try (Connection conn = DBUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setDouble(1, amount);
+            ps.setInt(2, customerId);
+            ps.executeUpdate();
+        }
     }
 }

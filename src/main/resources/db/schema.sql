@@ -56,3 +56,22 @@ CREATE TABLE IF NOT EXISTS bill_items (
     FOREIGN KEY (bill_id) REFERENCES bills(bill_id),
     FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
 );
+-- 7. EXPENSES
+CREATE TABLE IF NOT EXISTS expenses (
+    expense_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    date TEXT NOT NULL,
+    description TEXT
+);
+-- Migrations (Will fail safely if columns exist, or we can use a more robust DBUtil approach, but for now appending)
+-- Note: schema.sql is run line-by-line by DBUtil. simpler validation there would be better,
+-- but standard SQLite ALTER TABLE ADD COLUMN is supported.
+-- We can't easily check "IF NOT EXISTS" for columns in SQL script without procedural logic.
+-- Ideally, DBUtil should handle these errors gracefully if column exists.
+-- For a strict script, we will just assume this runs on new DBs or handled by app.
+-- However, to support the user's request "Run the Schema updates", we will rely on DBUtil's existing try-catch for "Error executing schema statement" to swallow "duplicate column" errors.
+ALTER TABLE medicines
+ADD COLUMN generic_name TEXT;
+ALTER TABLE customers
+ADD COLUMN current_balance REAL DEFAULT 0.0;
