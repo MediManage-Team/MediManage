@@ -11,17 +11,22 @@ import java.util.Map;
 
 public class BillDAO {
 
-    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId) throws SQLException {
+    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId)
+            throws SQLException {
         Connection conn = null;
         int billId = -1;
         try {
             conn = DBUtil.getConnection();
             conn.setAutoCommit(false);
 
-            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id) VALUES (?, CURRENT_TIMESTAMP, ?)";
+            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id, user_id) VALUES (?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
-                psBill.setObject(2, customerId);
+                String now = java.time.LocalDateTime.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                psBill.setString(2, now);
+                psBill.setObject(3, customerId); // setInt can't handle null, setObject can
+                psBill.setObject(4, userId);
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -66,7 +71,8 @@ public class BillDAO {
     }
 
     public double getDailySales() {
-        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date) = CURDATE()";
+        // SQLite: compare local date of bill with local date of now
+        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date, 'localtime') = date('now', 'localtime')";
         try (Connection conn = DBUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
@@ -81,9 +87,10 @@ public class BillDAO {
 
     public java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> getBillHistory() {
         java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> history = new java.util.ArrayList<>();
-        String sql = "SELECT b.bill_id, b.bill_date, b.total_amount, c.name, c.phone " +
+        String sql = "SELECT b.bill_id, b.bill_date, b.total_amount, c.name, c.phone, u.username " +
                 "FROM bills b " +
                 "LEFT JOIN customers c ON b.customer_id = c.customer_id " +
+                "LEFT JOIN users u ON b.user_id = u.user_id " +
                 "ORDER BY b.bill_date DESC";
 
         try (Connection conn = DBUtil.getConnection();
@@ -96,7 +103,8 @@ public class BillDAO {
                         rs.getString("bill_date"),
                         rs.getDouble("total_amount"),
                         rs.getString("name"),
-                        rs.getString("phone")));
+                        rs.getString("phone"),
+                        rs.getString("username")));
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -107,15 +115,17 @@ public class BillDAO {
     // New Method for Reports
     public Map<String, Double> getSalesBetweenDates(LocalDate start, LocalDate end) {
         Map<String, Double> sales = new LinkedHashMap<>();
-        String sql = "SELECT DATE(bill_date) as day, SUM(total_amount) as total " +
-                "FROM bills WHERE DATE(bill_date) BETWEEN ? AND ? " +
+        // SQLite: group by the date part of the timestamp string
+        // Assuming format yyyy-MM-dd HH:mm:ss, date() extracts yyyy-MM-dd
+        String sql = "SELECT date(bill_date) as day, SUM(total_amount) as total " +
+                "FROM bills WHERE date(bill_date) BETWEEN ? AND ? " +
                 "GROUP BY day ORDER BY day ASC";
 
         try (Connection conn = DBUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setDate(1, java.sql.Date.valueOf(start));
-            ps.setDate(2, java.sql.Date.valueOf(end));
+            ps.setString(1, start.toString());
+            ps.setString(2, end.toString());
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {

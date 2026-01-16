@@ -1,0 +1,49 @@
+Connecting to: jdbc:sqlite:C:/Users/ksvik/.medimanage/medimanage.db
+TABLE: bill_items
+ - item_id INTEGER
+ - bill_id INTEGER
+ - medicine_id INTEGER
+ - quantity INTEGER
+ - price REAL
+TABLE: bills
+ - bill_id INTEGER
+ - customer_id INTEGER
+ - bill_date TEXT
+ - total_amount REAL
+ - user_id INT
+TABLE: customers
+ - customer_id INTEGER
+ - name TEXT
+ - phone TEXT
+TABLE: medicines
+ - medicine_id INTEGER
+ - name TEXT
+ - company TEXT
+ - price REAL
+ - expiry_date TEXT
+ - discount REAL
+ - selling_price REAL
+ - pack_size TEXT
+ - composition TEXT
+ - substitute TEXT
+ - side_effects TEXT
+ - medicine_use TEXT
+ - chemical_class TEXT
+ - habit_forming TEXT
+ - therapeutic_class TEXT
+ - action_class TEXT
+TABLE: stock
+ - stock_id INTEGER
+ - medicine_id INTEGER
+ - quantity INTEGER
+TABLE: users
+ - user_id INTEGER
+ - username TEXT
+ - password TEXT
+ - role TEXT
+--- ROLES ---
+ROLE: ADMIN
+ROLE: CASHIER
+ROLE: MANAGER
+ROLE: PHARMACIST
+ROLE: STAFF

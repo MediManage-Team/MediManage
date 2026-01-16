@@ -107,30 +107,30 @@ public class MedicineDAO {
     }
 
     // Direct Stock Update
+    // Direct Stock Update
     public void updateStock(int medicineId, int newQuantity) {
         checkManagerPermission();
-        // Stock might not exist if medicine was added manually without stock entry
-        // (edge case),
-        // but assuming addMedicine always creates it.
-        // Use insert on duplicate key update or check existence.
-        // Safer: UPDATE stock SET quantity=? WHERE medicine_id=?
-        String sql = "UPDATE stock SET quantity=? WHERE medicine_id=?";
+        String updateSql = "UPDATE stock SET quantity=? WHERE medicine_id=?";
+        String insertSql = "INSERT INTO stock (medicine_id, quantity) VALUES (?, ?)";
 
-        try (Connection conn = DBUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (Connection conn = DBUtil.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement startStmt = conn.prepareStatement(updateSql)) {
+                startStmt.setInt(1, newQuantity);
+                startStmt.setInt(2, medicineId);
+                int rows = startStmt.executeUpdate();
 
-            pstmt.setInt(1, newQuantity);
-            pstmt.setInt(2, medicineId);
-            int rows = pstmt.executeUpdate();
-
-            if (rows == 0) {
-                // Insert if not exists
-                String insert = "INSERT INTO stock (medicine_id, quantity) VALUES (?, ?)";
-                try (PreparedStatement ps2 = conn.prepareStatement(insert)) {
-                    ps2.setInt(1, medicineId);
-                    ps2.setInt(2, newQuantity);
-                    ps2.executeUpdate();
+                if (rows == 0) {
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
+                        insertStmt.setInt(1, medicineId);
+                        insertStmt.setInt(2, newQuantity);
+                        insertStmt.executeUpdate();
+                    }
                 }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
             }
         } catch (SQLException e) {
             e.printStackTrace();

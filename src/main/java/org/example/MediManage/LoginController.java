@@ -48,32 +48,45 @@ public class LoginController {
             return;
         }
 
-        User authenticatedUser = userDAO.authenticate(user, pass);
+        try {
+            User authenticatedUser = userDAO.authenticate(user, pass);
 
-        if (authenticatedUser != null) {
-            // Validate Role
-            if (authenticatedUser.getRole() != selectedRole) {
-                message.setText("Role Mismatch! You are " + authenticatedUser.getRole() + " ❌");
-                return;
+            if (authenticatedUser != null) {
+                // Validate Role
+                if (authenticatedUser.getRole() != selectedRole) {
+                    message.setText("Role Mismatch! You are " + authenticatedUser.getRole() + " ❌");
+                    return;
+                }
+
+                UserSession.getInstance().login(authenticatedUser);
+                message.setText("Login Successful ✅");
+
+                // Switch to Main Shell
+                try {
+                    FXMLLoader loader = new FXMLLoader(getClass().getResource("main-shell-view.fxml"));
+                    Stage stage = (Stage) username.getScene().getWindow(); // current stage
+                    stage.setScene(new Scene(loader.load(), 900, 600)); // Increased height specific for shell
+                    stage.setTitle("MediManage - " + authenticatedUser.getRole());
+                    stage.show();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    message.setText("Error loading shell: " + e.getMessage());
+                }
+
+            } else {
+                message.setText("Invalid Username or Password ❌");
             }
+        } catch (java.sql.SQLException e) {
+            e.printStackTrace();
+            // Show Alert
+            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.ERROR);
+            alert.setTitle("Database Error");
+            alert.setHeaderText("Connection Error");
+            alert.setContentText("Details: " + e.getMessage());
+            alert.showAndWait();
 
-            UserSession.getInstance().login(authenticatedUser);
-            message.setText("Login Successful ✅");
-
-            // Switch to Main Shell
-            try {
-                FXMLLoader loader = new FXMLLoader(getClass().getResource("main-shell-view.fxml"));
-                Stage stage = (Stage) username.getScene().getWindow(); // current stage
-                stage.setScene(new Scene(loader.load(), 900, 600)); // Increased height specific for shell
-                stage.setTitle("MediManage - " + authenticatedUser.getRole());
-                stage.show();
-            } catch (Exception e) {
-                e.printStackTrace();
-                message.setText("Error loading shell: " + e.getMessage());
-            }
-
-        } else {
-            message.setText("Invalid Username or Password ❌");
+            message.setText("DB Conn Error: " + e.getMessage());
         }
     }
 

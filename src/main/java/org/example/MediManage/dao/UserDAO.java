@@ -12,7 +12,7 @@ import java.util.List;
 public class UserDAO {
 
     // Authenticate user
-    public User authenticate(String username, String password) {
+    public User authenticate(String username, String password) throws SQLException {
         // NOTE: Column is user_id, not id
         String sql = "SELECT user_id, username, password, role FROM users WHERE username = ? AND password = ?";
 
@@ -33,11 +33,7 @@ public class UserDAO {
                     return new User(id, user, pass, role);
                 }
             }
-        } catch (SQLException e) {
-            System.err.println("Authentication error: " + e.getMessage());
-            e.printStackTrace();
         }
-
         return null;
     }
 

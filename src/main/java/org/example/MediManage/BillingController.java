@@ -3,13 +3,12 @@ package org.example.MediManage;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
-import javafx.collections.transformation.SortedList;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
-import javafx.print.PrinterJob;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
-import javafx.scene.layout.VBox;
-import javafx.scene.text.Text;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.CustomerDAO;
 import org.example.MediManage.dao.MedicineDAO;
@@ -18,7 +17,7 @@ import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 
@@ -275,7 +274,8 @@ public class BillingController {
         Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
 
         try {
-            int billId = billDAO.generateInvoice(total, billList, cid);
+            int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+            int billId = billDAO.generateInvoice(total, billList, cid, userId);
             showAlert(Alert.AlertType.INFORMATION, "Success", "Bill Generated: #" + billId);
             billList.clear();
             updateTotal();

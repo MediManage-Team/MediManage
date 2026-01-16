@@ -1,0 +1,51 @@
+; Inno Setup Logic for MediManage SQLite Deployment
+; ---------------------------------------------------
+; Goal: Deploy a clean database ONLY if one does not exist, protecting user data during updates.
+
+[Files]
+; Deploy the Clean DB to the application install folder (e.g. Program Files/MediManage)
+; DO NOT deploy directly to {userappdata} as it might overwrite existing data on update.
+Source: "clean_database.db"; DestDir: "{app}"; Flags: ignoreversion
+
+[Code]
+var
+  AppDataPath: String;
+
+// Helper to check and move DB
+procedure CheckAndInstallDatabase;
+var
+  TargetDB, SourceDB: String;
+begin
+  // Determine paths
+  AppDataPath := ExpandConstant('{userappdata}\MediManage');
+  TargetDB := AppDataPath + '\database.db';
+  SourceDB := ExpandConstant('{app}\clean_database.db');
+
+  // Create AppData folder if missing
+  if not DirExists(AppDataPath) then
+    CreateDir(AppDataPath);
+
+  // Check if User DB exists
+  if not FileExists(TargetDB) then
+  begin
+    Log('Installing fresh database to: ' + TargetDB);
+    // Copy clean DB to AppData
+    if FileCopy(SourceDB, TargetDB, False) then
+      Log('Database initialized successfully.')
+    else
+      MsgBox('Failed to initialize database.', mbError, MB_OK);
+  end
+  else
+  begin
+    Log('Existing database found. Preserving user data.');
+  end;
+end;
+
+// Run this logic after install steps are done
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    CheckAndInstallDatabase();
+  end;
+end;

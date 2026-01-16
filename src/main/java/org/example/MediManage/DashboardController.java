@@ -27,11 +27,8 @@ import net.sf.jasperreports.engine.JRException;
 import java.io.IOException;
 import javafx.print.*;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextAlignment;
+import javafx.scene.layout.VBox;
 import javafx.geometry.Pos;
-import javafx.scene.transform.Scale;
 import javafx.scene.input.KeyCode;
 
 public class DashboardController {
@@ -138,7 +135,12 @@ public class DashboardController {
     @FXML
     private void initialize() {
         // Ensure DB is ready
-        DBUtil.initDB();
+        try {
+            DBUtil.initDB();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            showAlert(Alert.AlertType.ERROR, "Initialization Error", "Database check failed: " + e.getMessage());
+        }
 
         setupInventoryTable();
         setupBillingTable();
@@ -528,7 +530,8 @@ public class DashboardController {
         List<BillItem> billListCopy = new ArrayList<>(billList);
 
         try {
-            int billId = billDAO.generateInvoice(totalAmount, billList, customerId);
+            int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+            int billId = billDAO.generateInvoice(totalAmount, billList, customerId, userId);
             showAlert(Alert.AlertType.INFORMATION, "Success",
                     "Invoice Generated! ID: " + billId + "\nCustomer: " + customerName);
 
@@ -684,12 +687,16 @@ public class DashboardController {
         private final StringProperty customerName;
         private final StringProperty phone;
 
-        public BillHistoryDTO(int billId, String date, double total, String customerName, String phone) {
+        private final StringProperty username;
+
+        public BillHistoryDTO(int billId, String date, double total, String customerName, String phone,
+                String username) {
             this.billId = billId;
             this.date = new SimpleStringProperty(date);
             this.total = new SimpleDoubleProperty(total);
             this.customerName = new SimpleStringProperty(customerName != null ? customerName : "N/A");
             this.phone = new SimpleStringProperty(phone != null ? phone : "N/A");
+            this.username = new SimpleStringProperty(username != null ? username : "N/A");
         }
 
         public int getBillId() {
@@ -710,6 +717,10 @@ public class DashboardController {
 
         public StringProperty phoneProperty() {
             return phone;
+        }
+
+        public StringProperty usernameProperty() {
+            return username;
         }
     }
 }

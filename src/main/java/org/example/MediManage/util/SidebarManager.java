@@ -36,6 +36,10 @@ public class SidebarManager {
                     addButton(container, "Billing", "billing-view", switcher);
                     addButton(container, "Customers", "customers-view", switcher);
                     break;
+                case STAFF:
+                    addButton(container, "Billing", "billing-view", switcher);
+                    addButton(container, "Medicine Search", "medicine-search-view", switcher);
+                    break;
             }
         }
 

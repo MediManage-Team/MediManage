@@ -2,6 +2,7 @@ package org.example.MediManage.config;
 
 import java.io.IOException;
 import java.io.InputStream;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -9,13 +10,12 @@ import java.util.Properties;
 
 public class DatabaseConfig {
 
-    private static final Properties properties = new Properties();
+    private static Properties properties = new Properties();
 
-    // Load the settings when the class is first used
     static {
         try (InputStream input = DatabaseConfig.class.getClassLoader().getResourceAsStream("db_config.properties")) {
             if (input == null) {
-                System.out.println("⚠️ Warning: db_config.properties not found! Make sure you created it.");
+                System.out.println("⚠️ db_config.properties not found! Using defaults.");
             } else {
                 properties.load(input);
             }
@@ -25,17 +25,57 @@ public class DatabaseConfig {
     }
 
     public static Connection getConnection() throws SQLException {
-        // Read values from the hidden file
-        String url = properties.getProperty("db.url");
-        String user = properties.getProperty("db.user");
-        String password = properties.getProperty("db.password");
+        try {
+            java.io.File dbFile = resolveDatabaseFile();
 
-        // Safety check
-        if (url == null) {
-            throw new RuntimeException("❌ Database Config Missing! Check src/main/resources/db_config.properties");
+            // Initial Setup if needed
+            // if (!dbFile.exists() || dbFile.length() < 1024 * 1024) {
+            // initializeDatabaseFile(dbFile);
+            // }
+
+            String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
+            // System.out.println("🔌 Connecting to database at: " + url);
+            Connection conn = DriverManager.getConnection(url);
+
+            try (java.sql.Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA journal_mode = WAL;");
+                stmt.execute("PRAGMA synchronous = NORMAL;");
+                stmt.execute("PRAGMA foreign_keys = ON;");
+            }
+
+            return conn;
+
+        } catch (Exception e) {
+            throw new SQLException("Failed to configure database connection: " + e.getMessage(), e);
+        }
+    }
+
+    private static java.io.File resolveDatabaseFile() {
+        // Priority 1: Local file in execution directory (Dev Mode)
+        // Checks if "database.db" exists in the current working directory.
+        java.io.File localFile = new java.io.File("database.db");
+        if (localFile.exists()) {
+            // System.out.println("📂 Dev Mode: Using local database file.");
+            return localFile;
         }
 
-        // Connect to MySQL
-        return DriverManager.getConnection(url, user, password);
+        // Priority 2: Production Mode (AppData)
+        // Strict logic as requested: Use APPDATA/MediManage/database.db
+        String appData = System.getenv("APPDATA");
+        if (appData == null) {
+            // Fallback for non-Windows or if env var is missing
+            appData = System.getProperty("user.home") + "/AppData/Roaming";
+        }
+
+        java.io.File dbFolder = new java.io.File(appData, "MediManage");
+        if (!dbFolder.exists()) {
+            boolean created = dbFolder.mkdirs();
+            if (!created && !dbFolder.exists()) {
+                System.err.println("❌ Failed to create database folder: " + dbFolder.getAbsolutePath());
+            }
+        }
+
+        return new java.io.File(dbFolder, "database.db");
     }
+
 }
