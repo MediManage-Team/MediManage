@@ -9,7 +9,7 @@ import javafx.stage.Stage;
 import javafx.scene.control.Alert;
 import javafx.application.Platform;
 
-public class HelloApplication extends Application {
+public class MediManageApplication extends Application {
 
         @Override
         public void start(Stage stage) throws Exception {

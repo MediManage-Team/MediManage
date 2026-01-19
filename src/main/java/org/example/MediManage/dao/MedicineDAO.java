@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.model.UserRole;
 import org.example.MediManage.util.UserSession;
@@ -26,7 +26,7 @@ public class MedicineDAO {
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
@@ -52,7 +52,7 @@ public class MedicineDAO {
         String insertMed = "INSERT INTO medicines(name, generic_name, company, expiry_date, price) VALUES(?, ?, ?, ?, ?)";
         String insertStock = "INSERT INTO stock(medicine_id, quantity) VALUES(?, ?)";
 
-        try (Connection conn = DBUtil.getConnection()) {
+        try (Connection conn = DatabaseUtil.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement psMed = conn.prepareStatement(insertMed, Statement.RETURN_GENERATED_KEYS)) {
                 psMed.setString(1, name);
@@ -90,7 +90,7 @@ public class MedicineDAO {
         checkManagerPermission();
         String sql = "UPDATE medicines SET name=?, generic_name=?, company=?, price=?, expiry_date=? WHERE medicine_id=?";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, medicine.getName());
@@ -113,7 +113,7 @@ public class MedicineDAO {
         String updateSql = "UPDATE stock SET quantity=? WHERE medicine_id=?";
         String insertSql = "INSERT INTO stock (medicine_id, quantity) VALUES (?, ?)";
 
-        try (Connection conn = DBUtil.getConnection()) {
+        try (Connection conn = DatabaseUtil.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement startStmt = conn.prepareStatement(updateSql)) {
                 startStmt.setInt(1, newQuantity);
@@ -149,7 +149,7 @@ public class MedicineDAO {
         // I will try to delete stock first, then medicine. use try-catch to warn user
         // if FK constraint fails.
 
-        try (Connection conn = DBUtil.getConnection()) {
+        try (Connection conn = DatabaseUtil.getConnection()) {
             conn.setAutoCommit(false);
             try {
                 try (PreparedStatement psStock = conn.prepareStatement(deleteStock)) {

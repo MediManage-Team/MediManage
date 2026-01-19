@@ -55,8 +55,23 @@ public class LoginController {
             return;
         }
 
-        try {
-            User authenticatedUser = userDAO.authenticate(user, pass);
+        message.setText("Logging in...");
+        // Disable UI to prevent double submission
+        roleSelector.setDisable(true);
+        username.setDisable(true);
+        password.setDisable(true);
+
+        javafx.concurrent.Task<User> loginTask = new javafx.concurrent.Task<>() {
+            @Override
+            protected User call() throws Exception {
+                return userDAO.authenticate(user, pass);
+            }
+        };
+
+        loginTask.setOnSucceeded(e -> {
+            User authenticatedUser = loginTask.getValue(); // Safe to reuse var name here? No, let's use the return
+                                                           // value
+            reenableUI();
 
             if (authenticatedUser != null) {
                 // Validate Role
@@ -75,26 +90,38 @@ public class LoginController {
                     stage.setScene(new Scene(loader.load(), 900, 600)); // Increased height specific for shell
                     stage.setTitle("MediManage - " + authenticatedUser.getRole());
                     stage.show();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    message.setText("Error loading shell: " + e.getMessage());
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    message.setText("Error loading shell: " + ex.getMessage());
                 }
 
             } else {
                 message.setText("Invalid Username or Password ❌");
             }
-        } catch (java.sql.SQLException e) {
-            e.printStackTrace();
+        });
+
+        loginTask.setOnFailed(e -> {
+            reenableUI();
+            Throwable ex = loginTask.getException();
+            ex.printStackTrace();
             // Show Alert
             javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
                     javafx.scene.control.Alert.AlertType.ERROR);
             alert.setTitle("Database Error");
             alert.setHeaderText("Connection Error");
-            alert.setContentText("Details: " + e.getMessage());
+            alert.setContentText("Details: " + ex.getMessage());
             alert.showAndWait();
 
-            message.setText("DB Conn Error: " + e.getMessage());
-        }
+            message.setText("DB Conn Error: " + ex.getMessage());
+        });
+
+        new Thread(loginTask).start();
+    }
+
+    private void reenableUI() {
+        roleSelector.setDisable(false);
+        username.setDisable(false);
+        password.setDisable(false);
     }
 
     private void openDashboard() {

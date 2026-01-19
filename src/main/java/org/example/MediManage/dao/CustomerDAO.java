@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.Customer;
 
 import java.sql.Connection;
@@ -17,7 +17,7 @@ public class CustomerDAO {
                 +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, customer.getName());
@@ -39,7 +39,7 @@ public class CustomerDAO {
         List<Customer> customers = new ArrayList<>();
         String sql = "SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ?";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             String searchPattern = "%" + query + "%";
@@ -78,7 +78,7 @@ public class CustomerDAO {
         // Wait, user story says "payment mode 'Credit' -> add bill amount to balance".
         // I'll assume 'amount' is added.
         String sql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setDouble(1, amount);
             ps.setInt(2, customerId);

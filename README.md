@@ -78,12 +78,14 @@ src/main/java/org/example/MediManage/
 - **`DashboardController`**: Main Hub. Loads KPIs, Expiry Alerts, and navigation.
 - **`BillingController`**: Handles the POS flow, Scanner input payment dialogs.
 - **`InventoryController`**: CRUD operations for medicines.
+- **`CustomersController`**: Manages Customer profiles (Under Development).
+- **`SettingsController`**: System configuration (Under Development).
 
 ---
 
 ## 🗄️ Database Schema (SQLite)
 
-The application uses a relational SQLite database initialized programmatically via `DBUtil.java` and `schema.sql`.
+The application uses a relational SQLite database initialized programmatically via `DatabaseUtil.java` and `schema.sql`.
 
 ### Tables
 1.  **`users`**: Auth credentials (`username`, `password`, `role`).

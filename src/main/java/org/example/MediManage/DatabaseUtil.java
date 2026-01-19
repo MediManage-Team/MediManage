@@ -8,7 +8,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-public class DBUtil {
+public class DatabaseUtil {
 
     public static Connection getConnection() throws SQLException {
         return DatabaseConfig.getConnection();
@@ -31,7 +31,7 @@ public class DBUtil {
     private static void runSchema(Connection conn) throws SQLException {
         System.out.println("⚙️ Initializing Database Schema...");
 
-        try (InputStream is = DBUtil.class.getResourceAsStream("/db/schema.sql")) {
+        try (InputStream is = DatabaseUtil.class.getResourceAsStream("/db/schema.sql")) {
             if (is == null) {
                 System.err.println("❌ Critical: /db/schema.sql not found!");
                 return;

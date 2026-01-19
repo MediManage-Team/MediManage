@@ -1,6 +1,6 @@
 package org.example.MediManage.service;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import javafx.concurrent.Task;
 
 import java.sql.SQLException;
@@ -17,8 +17,8 @@ public class DatabaseService {
                         protected Void call() throws Exception {
                                 // Initialize DB structure and Seed Data
                                 // This might involve copying the DB file (handled in Config)
-                                // and ensuring tables exist (DBUtil)
-                                DBUtil.initDB();
+                                // and ensuring tables exist (DatabaseUtil)
+                                DatabaseUtil.initDB();
                                 return null;
                         }
                 };

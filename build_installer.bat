@@ -1,1 +1,0 @@
-"C:\Program Files\Java\jdk-25\bin\jpackage.exe" --name "MediManage" --input "dist\MediManage-0.1.5" --main-jar "MediManage.jar" --main-class "org.example.MediManage.Launcher" --type exe --win-menu --win-shortcut --dest "dist\installer"

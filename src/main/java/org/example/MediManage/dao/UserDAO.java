@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.User;
 import org.example.MediManage.model.UserRole;
 import org.example.MediManage.util.UserSession;
@@ -16,7 +16,7 @@ public class UserDAO {
         // NOTE: Column is user_id, not id
         String sql = "SELECT user_id, username, password, role FROM users WHERE username = ? AND password = ?";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, username);
@@ -42,7 +42,7 @@ public class UserDAO {
         List<User> users = new ArrayList<>();
         String sql = "SELECT user_id, username, password, role FROM users";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
@@ -66,7 +66,7 @@ public class UserDAO {
         checkAdmin(); // Only ADMIN can add users
         String sql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, user.getUsername());
@@ -88,7 +88,7 @@ public class UserDAO {
         // But let's verify if username allows change. Typically yes.
         String sql = "UPDATE users SET username=?, password=?, role=? WHERE user_id=?";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, user.getUsername());
@@ -107,7 +107,7 @@ public class UserDAO {
         checkAdmin(); // Only ADMIN can delete users
         String sql = "DELETE FROM users WHERE user_id=?";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setInt(1, userId);

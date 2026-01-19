@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.BillItem;
 
 import java.sql.*;
@@ -17,7 +17,7 @@ public class BillDAO {
         Connection conn = null;
         int billId = -1;
         try {
-            conn = DBUtil.getConnection();
+            conn = DatabaseUtil.getConnection();
             conn.setAutoCommit(false);
 
             String checkUser = "SELECT 1 FROM users WHERE user_id = ?";
@@ -105,7 +105,7 @@ public class BillDAO {
         // stored: "2023-10-27 14:00:00" -> date() -> "2023-10-27"
         // now: date('now', 'localtime') -> "2023-10-27" (if running locally)
         String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date) = date('now', 'localtime')";
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) {
@@ -125,7 +125,7 @@ public class BillDAO {
                 "LEFT JOIN users u ON b.user_id = u.user_id " +
                 "ORDER BY b.bill_date DESC";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
@@ -153,7 +153,7 @@ public class BillDAO {
                 "FROM bills WHERE date(bill_date) BETWEEN ? AND ? " +
                 "GROUP BY day ORDER BY day ASC";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
 
             ps.setString(1, start.toString());
@@ -173,7 +173,7 @@ public class BillDAO {
     public List<BillItem> getBillItemsExtended(int billId) {
         List<BillItem> items = new java.util.ArrayList<>();
         String sql = "SELECT bi.medicine_id, m.name, m.expiry_date, bi.quantity, bi.price, bi.total FROM bill_items bi LEFT JOIN medicines m ON bi.medicine_id = m.medicine_id WHERE bi.bill_id = ?";
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, billId);
             try (ResultSet rs = ps.executeQuery()) {

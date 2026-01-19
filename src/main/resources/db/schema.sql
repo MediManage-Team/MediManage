@@ -66,12 +66,12 @@ CREATE TABLE IF NOT EXISTS expenses (
     description TEXT
 );
 -- Migrations (Will fail safely if columns exist, or we can use a more robust DBUtil approach, but for now appending)
--- Note: schema.sql is run line-by-line by DBUtil. simpler validation there would be better,
+-- Note: schema.sql is run line-by-line by DatabaseUtil. simpler validation there would be better,
 -- but standard SQLite ALTER TABLE ADD COLUMN is supported.
 -- We can't easily check "IF NOT EXISTS" for columns in SQL script without procedural logic.
--- Ideally, DBUtil should handle these errors gracefully if column exists.
+-- Ideally, DatabaseUtil should handle these errors gracefully if column exists.
 -- For a strict script, we will just assume this runs on new DBs or handled by app.
--- However, to support the user's request "Run the Schema updates", we will rely on DBUtil's existing try-catch for "Error executing schema statement" to swallow "duplicate column" errors.
+-- However, to support the user's request "Run the Schema updates", we will rely on DatabaseUtil's existing try-catch for "Error executing schema statement" to swallow "duplicate column" errors.
 ALTER TABLE medicines
 ADD COLUMN generic_name TEXT;
 ALTER TABLE customers

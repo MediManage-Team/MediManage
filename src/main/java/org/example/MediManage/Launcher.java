@@ -4,7 +4,7 @@ public class Launcher {
     public static void main(String[] args) {
         setupLogging();
         // Launch the JavaFX application
-        HelloApplication.main(args);
+        MediManageApplication.main(args);
     }
 
     private static void setupLogging() {
