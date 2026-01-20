@@ -37,6 +37,10 @@ build/
 ### Mac OS ###
 .DS_Store
 
+# Always include these directories
+!docs/
+!lib/
+
 # Ignore Database Configuration (Security)
 ##src/main/resources/db_config.properties ## removed for development
 *.db
