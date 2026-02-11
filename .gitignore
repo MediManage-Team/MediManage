@@ -47,4 +47,5 @@ build/
 *.sqlite
 Output/
 *.exe
-*.msi
+*.bak
+*.log

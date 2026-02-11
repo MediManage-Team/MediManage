@@ -1,0 +1,133 @@
+2026-01-30 13:58:01 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 13:58:02 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@38234a38
+2026-01-30 13:58:02 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 13:58:02 [main] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 13:58:03 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Field is required
+2026-01-30 13:58:03 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Field is required
+2026-01-30 13:58:03 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (5.0) is out of range [10.0, 20.0]
+2026-01-30 13:58:03 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (25.0) is out of range [10.0, 20.0]
+2026-01-30 13:58:03 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (0) must be positive
+2026-01-30 13:58:03 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (-1) must be positive
+2026-01-30 14:06:44 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 14:06:44 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@38234a38
+2026-01-30 14:06:44 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 14:06:44 [main] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 14:06:46 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Field is required
+2026-01-30 14:06:46 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Field is required
+2026-01-30 14:06:46 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (5.0) is out of range [10.0, 20.0]
+2026-01-30 14:06:46 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (25.0) is out of range [10.0, 20.0]
+2026-01-30 14:06:46 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (0) must be positive
+2026-01-30 14:06:46 [main] WARN  o.e.MediManage.util.ValidationUtil - Validation failed: Value (-1) must be positive
+2026-01-30 14:15:07 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@7ea3783e
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 14:15:08 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 14:15:08 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 14:15:08 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 14:15:08 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@2f401ec0
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 18:43:42 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 18:43:42 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 18:43:42 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 18:43:42 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@19be301
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 18:48:05 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 18:48:05 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 18:48:05 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 18:48:05 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@7cf2a3f3
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 18:49:18 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 18:49:18 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 18:49:18 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 18:49:18 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:50:08 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@1b6f35af
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 18:50:09 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 18:50:09 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 18:50:09 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 18:50:09 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@2e78dd31
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 18:51:51 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 18:51:51 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 18:51:51 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 18:51:51 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:52:10 [Thread-4] WARN  o.e.MediManage.service.AuthService - User 'admin' has plain text password - please update
+2026-01-30 18:52:10 [Thread-4] INFO  o.e.MediManage.service.AuthService - Auto-migrating password for user 'admin'
+2026-01-30 18:52:10 [Thread-4] INFO  o.e.MediManage.service.AuthService - Password updated successfully for user 'admin'
+2026-01-30 18:52:10 [Thread-4] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-01-30 18:52:10 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-01-30 18:53:07 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@258ce017
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 18:55:09 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 18:55:09 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 18:55:09 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 18:55:09 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 18:55:24 [Thread-4] WARN  o.e.MediManage.service.AuthService - Failed login attempt for user 'admin'
+2026-01-30 18:55:24 [Thread-4] WARN  org.example.MediManage.dao.UserDAO - Failed authentication attempt for username: admin
+2026-01-30 18:55:24 [JavaFX Application Thread] WARN  o.example.MediManage.LoginController - Failed login attempt for user 'admin' - 4 attempts remaining
+2026-01-30 18:55:32 [Thread-5] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-01-30 18:55:32 [Thread-5] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-01-30 18:55:32 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-01-30 18:56:39 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@b213de9
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-01-30 19:01:06 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-01-30 19:01:06 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-01-30 19:01:06 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-01-30 19:01:06 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-01-30 19:01:20 [Thread-4] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-01-30 19:01:20 [Thread-4] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-01-30 19:01:20 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-01-30 19:01:34 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down

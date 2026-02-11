@@ -1,0 +1,152 @@
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@67270297
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 16:37:49 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 16:37:49 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 16:37:49 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 16:37:49 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 16:38:00 [Thread-3] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 16:38:00 [Thread-3] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 16:38:00 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 16:38:24 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@1d410ce4
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 16:41:26 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 16:41:26 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 16:41:26 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 16:41:26 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 16:41:36 [Thread-3] WARN  o.e.MediManage.service.AuthService - Failed login attempt for user 'admin'
+2026-02-11 16:41:36 [Thread-3] WARN  org.example.MediManage.dao.UserDAO - Failed authentication attempt for username: admin
+2026-02-11 16:41:36 [JavaFX Application Thread] WARN  o.example.MediManage.LoginController - Failed login attempt for user 'admin' - 4 attempts remaining
+2026-02-11 16:41:43 [Thread-4] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 16:41:43 [Thread-4] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 16:41:43 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 16:42:08 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@3149df65
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 16:43:57 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 16:43:57 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 16:43:57 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 16:43:57 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 16:44:10 [Thread-3] WARN  o.e.MediManage.service.AuthService - Failed login attempt for user 'admin'
+2026-02-11 16:44:10 [Thread-3] WARN  org.example.MediManage.dao.UserDAO - Failed authentication attempt for username: admin
+2026-02-11 16:44:10 [JavaFX Application Thread] WARN  o.example.MediManage.LoginController - Failed login attempt for user 'admin' - 4 attempts remaining
+2026-02-11 16:44:16 [Thread-4] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 16:44:16 [Thread-4] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 16:44:16 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 16:44:45 [Thread-10] INFO  org.example.MediManage.dao.BillDAO - Generated invoice #12 for amount 156.18480000000002 (Customer: Walk-in, Payment: Cash)
+2026-02-11 16:45:19 [Thread-15] WARN  o.e.MediManage.service.AuthService - User 'manager' has plain text password - please update
+2026-02-11 16:45:19 [Thread-15] INFO  o.e.MediManage.service.AuthService - Auto-migrating password for user 'manager'
+2026-02-11 16:45:19 [Thread-15] INFO  o.e.MediManage.service.AuthService - Password updated successfully for user 'manager'
+2026-02-11 16:45:19 [Thread-15] INFO  org.example.MediManage.dao.UserDAO - User 'manager' authenticated successfully with role MANAGER
+2026-02-11 16:45:19 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'manager' logged in successfully with role MANAGER
+2026-02-11 16:46:17 [Thread-24] WARN  o.e.MediManage.service.AuthService - User 'pharmacist' has plain text password - please update
+2026-02-11 16:46:17 [Thread-24] INFO  o.e.MediManage.service.AuthService - Auto-migrating password for user 'pharmacist'
+2026-02-11 16:46:17 [Thread-24] INFO  o.e.MediManage.service.AuthService - Password updated successfully for user 'pharmacist'
+2026-02-11 16:46:17 [Thread-24] INFO  org.example.MediManage.dao.UserDAO - User 'pharmacist' authenticated successfully with role PHARMACIST
+2026-02-11 16:46:17 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'pharmacist' logged in successfully with role PHARMACIST
+2026-02-11 16:46:53 [Thread-25] WARN  o.e.MediManage.service.AuthService - User 'cashier' has plain text password - please update
+2026-02-11 16:46:53 [Thread-25] INFO  o.e.MediManage.service.AuthService - Auto-migrating password for user 'cashier'
+2026-02-11 16:46:53 [Thread-25] INFO  o.e.MediManage.service.AuthService - Password updated successfully for user 'cashier'
+2026-02-11 16:46:53 [Thread-25] INFO  org.example.MediManage.dao.UserDAO - User 'cashier' authenticated successfully with role CASHIER
+2026-02-11 16:46:53 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'cashier' logged in successfully with role CASHIER
+2026-02-11 16:47:55 [JavaFX Application Thread] INFO  org.example.MediManage.dao.BillDAO - Generated invoice #13 for amount 46.7044 (Customer: 2, Payment: Cash)
+2026-02-11 16:47:58 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-02-11 16:53:36 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@396106fe
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 16:53:37 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 16:53:37 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 16:53:37 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 16:53:37 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 16:53:45 [Thread-3] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 16:53:45 [Thread-3] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 16:53:45 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 16:54:06 [Thread-9] INFO  o.e.MediManage.service.AuthService - User 'cashier' logged in successfully
+2026-02-11 16:54:06 [Thread-9] INFO  org.example.MediManage.dao.UserDAO - User 'cashier' authenticated successfully with role CASHIER
+2026-02-11 16:54:06 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'cashier' logged in successfully with role CASHIER
+2026-02-11 16:55:36 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-02-11 21:42:39 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@396106fe
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 21:42:40 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 21:42:40 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 21:42:40 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 21:42:40 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 21:42:54 [Thread-3] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 21:42:54 [Thread-3] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 21:42:54 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 21:43:22 [Thread-9] INFO  o.e.MediManage.service.AuthService - User 'cashier' logged in successfully
+2026-02-11 21:43:22 [Thread-9] INFO  org.example.MediManage.dao.UserDAO - User 'cashier' authenticated successfully with role CASHIER
+2026-02-11 21:43:22 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'cashier' logged in successfully with role CASHIER
+2026-02-11 21:45:28 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@396106fe
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 21:47:09 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 21:47:09 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 21:47:09 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 21:47:09 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 21:47:28 [Thread-3] INFO  o.e.MediManage.service.AuthService - User 'cashier' logged in successfully
+2026-02-11 21:47:28 [Thread-3] INFO  org.example.MediManage.dao.UserDAO - User 'cashier' authenticated successfully with role CASHIER
+2026-02-11 21:47:28 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'cashier' logged in successfully with role CASHIER
+2026-02-11 21:50:13 [JavaFX Application Thread] INFO  org.example.MediManage.dao.BillDAO - Generated invoice #14 for amount 855.5 (Customer: 2, Payment: Cash)
+2026-02-11 21:50:35 [Thread-4] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 21:50:35 [Thread-4] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 21:50:35 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 21:52:00 [Thread-10] WARN  o.e.MediManage.service.AuthService - Failed login attempt for user 'cashier'
+2026-02-11 21:52:00 [Thread-10] WARN  org.example.MediManage.dao.UserDAO - Failed authentication attempt for username: cashier
+2026-02-11 21:52:00 [JavaFX Application Thread] WARN  o.example.MediManage.LoginController - Failed login attempt for user 'cashier' - 4 attempts remaining
+2026-02-11 21:52:06 [Thread-11] INFO  o.e.MediManage.service.AuthService - User 'cashier' logged in successfully
+2026-02-11 21:52:06 [Thread-11] INFO  org.example.MediManage.dao.UserDAO - User 'cashier' authenticated successfully with role CASHIER
+2026-02-11 21:52:06 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'cashier' logged in successfully with role CASHIER
+2026-02-11 21:56:37 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@28ab81e7
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  o.e.MediManage.config.DatabaseConfig - HikariCP connection pool initialized successfully for: jdbc:sqlite:C:\Users\ksvik\IdeaProjects\MediManage\medimanage.db
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Connected to Database successfully
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Initializing Database Schema...
+2026-02-11 22:05:55 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: generic_name) [Statement: -- Migrations (Will fail safely if columns exist, ...]
+2026-02-11 22:05:55 [pool-2-thread-1] WARN  org.example.MediManage.DatabaseUtil - Database Initialization Note: [SQLITE_ERROR] SQL error or missing database (duplicate column name: current_balance) [Statement: ALTER TABLE customers
+ADD COLUMN current_balance ...]
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  org.example.MediManage.DatabaseUtil - Schema initialized successfully
+2026-02-11 22:05:55 [pool-2-thread-1] INFO  o.e.M.service.DatabaseService - Database initialized successfully
+2026-02-11 22:05:55 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - Database initialization task completed successfully
+2026-02-11 22:06:07 [Thread-3] INFO  o.e.MediManage.service.AuthService - User 'admin' logged in successfully
+2026-02-11 22:06:07 [Thread-3] INFO  org.example.MediManage.dao.UserDAO - User 'admin' authenticated successfully with role ADMIN
+2026-02-11 22:06:07 [JavaFX Application Thread] INFO  o.example.MediManage.LoginController - User 'admin' logged in successfully with role ADMIN
+2026-02-11 22:09:59 [Thread-9] INFO  org.example.MediManage.dao.BillDAO - Generated invoice #15 for amount 461.4036 (Customer: Walk-in, Payment: Cash)
+2026-02-11 22:15:11 [JavaFX Application Thread] INFO  o.e.M.service.DatabaseService - DatabaseService executor shut down

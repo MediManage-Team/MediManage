@@ -22,7 +22,6 @@ public class SidebarManager {
                     addButton(container, "Users", "users-view", switcher);
                     addButton(container, "Inventory", "inventory-view", switcher);
                     addButton(container, "Reports", "reports-view", switcher);
-                    addButton(container, "Settings", "settings-view", switcher);
                     break;
                 case MANAGER:
                     addButton(container, "Inventory", "inventory-view", switcher);
@@ -42,6 +41,9 @@ public class SidebarManager {
                     break;
             }
         }
+
+        // Add Settings for everyone (for now, to allow API Key config)
+        addButton(container, "Settings", "settings-view", switcher);
 
         // Add Spacer (using Region or just rely on VBox layout)
         // For simplicity, just adding Logout at the bottom effectively if container is

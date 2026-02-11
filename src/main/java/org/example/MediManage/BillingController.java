@@ -3,9 +3,6 @@ package org.example.MediManage;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
@@ -17,8 +14,11 @@ import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
 
 import java.sql.SQLException;
-import java.sql.SQLException;
 import java.util.List;
+import javafx.scene.layout.VBox;
+
+import javafx.geometry.Pos;
+import javafx.geometry.Insets;
 
 public class BillingController {
 
@@ -52,14 +52,126 @@ public class BillingController {
     @FXML
     private Button btnCheckout;
 
+    @FXML
+    private VBox aiContentBox;
+
     private MedicineDAO medicineDAO = new MedicineDAO();
     private CustomerDAO customerDAO = new CustomerDAO();
     private BillDAO billDAO = new BillDAO();
+    private org.example.MediManage.service.GeminiService geminiService = new org.example.MediManage.service.GeminiService();
 
     private ObservableList<BillItem> billList = FXCollections.observableArrayList();
     private ObservableList<Medicine> allMedicines = FXCollections.observableArrayList();
     private Customer selectedCustomer = null;
     private Medicine selectedMedicine = null;
+
+    @FXML
+    public void handleAiInsights() {
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Cart Empty", "Please add medicines to the cart first.");
+            return;
+        }
+
+        aiContentBox.getChildren().clear();
+        aiContentBox.getChildren().add(new Label("Generating insights..."));
+
+        List<BillItem> items = new java.util.ArrayList<>(billList);
+        geminiService.generateCareProtocol(items)
+                .thenAccept(jsonResponse -> {
+                    javafx.application.Platform.runLater(() -> {
+                        renderAiNodes(jsonResponse);
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        aiContentBox.getChildren().clear();
+                        Label err = new Label("Error: " + ex.getMessage());
+                        err.setWrapText(true);
+                        err.setStyle("-fx-text-fill: red;");
+                        aiContentBox.getChildren().add(err);
+                        ex.printStackTrace();
+                    });
+                    return null;
+                });
+    }
+
+    private void renderAiNodes(String jsonResponse) {
+        aiContentBox.getChildren().clear();
+        try {
+            // Clean markdown code blocks if present
+            String cleanJson = jsonResponse.replace("```json", "").replace("```", "").trim();
+            com.google.gson.JsonArray array = com.google.gson.JsonParser.parseString(cleanJson).getAsJsonArray();
+
+            for (com.google.gson.JsonElement elem : array) {
+                com.google.gson.JsonObject obj = elem.getAsJsonObject();
+                aiContentBox.getChildren().add(createMedicineNode(obj));
+            }
+        } catch (Exception e) {
+            Label err = new Label("Failed to parse AI response. Raw output:\n" + jsonResponse);
+            err.setWrapText(true);
+            aiContentBox.getChildren().add(err);
+            e.printStackTrace();
+        }
+    }
+
+    private VBox createMedicineNode(com.google.gson.JsonObject obj) {
+        VBox node = new VBox(10);
+        node.setStyle(
+                "-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2); -fx-background-radius: 8; -fx-padding: 15;");
+
+        String name = obj.has("medicineName") ? obj.get("medicineName").getAsString() : "Medicine";
+        Label title = new Label(name);
+        title.setStyle(
+                "-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #2c3e50; -fx-padding: 0 0 5 0; -fx-border-color: transparent transparent #eee transparent; -fx-border-width: 2;");
+        title.setMaxWidth(Double.MAX_VALUE);
+        node.getChildren().add(title);
+
+        if (obj.has("substitutes")) {
+            node.getChildren()
+                    .add(createDetailNode("Substitutes", obj.get("substitutes").getAsString(), "#e8f8f5", "#16a085"));
+        }
+
+        if (obj.has("mechanism"))
+            node.getChildren()
+                    .add(createDetailNode("Mechanism", obj.get("mechanism").getAsString(), "#f8f9fa", "#7f8c8d"));
+        if (obj.has("usage"))
+            node.getChildren()
+                    .add(createDetailNode("Usage Guide", obj.get("usage").getAsString(), "#eafaf1", "#27ae60"));
+        if (obj.has("dietary"))
+            node.getChildren()
+                    .add(createDetailNode("Dietary Advice", obj.get("dietary").getAsString(), "#fff8e1", "#f1c40f"));
+        if (obj.has("sideEffects"))
+            node.getChildren()
+                    .add(createDetailNode("Side Effects", obj.get("sideEffects").getAsString(), "#fce4ec", "#c2185b"));
+
+        if (obj.has("safety")) {
+            String safety = obj.get("safety").getAsString();
+            node.getChildren().add(createDetailNode("Safety Check", safety, "#fff3cd", "#856404"));
+        }
+
+        if (obj.has("stopProtocol"))
+            node.getChildren().add(
+                    createDetailNode("Stop Protocol", obj.get("stopProtocol").getAsString(), "#ffebee", "#c0392b"));
+
+        return node;
+    }
+
+    private VBox createDetailNode(String title, String content, String bgColor, String titleColor) {
+        VBox box = new VBox(3);
+        box.setStyle(
+                "-fx-background-color: " + bgColor + "; -fx-background-radius: 5; -fx-padding: 8; -fx-border-color: "
+                        + bgColor + "; -fx-border-radius: 5;");
+
+        Label lblTitle = new Label(title);
+        lblTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: " + titleColor + ";");
+
+        Label lblContent = new Label(content);
+        lblContent.setWrapText(true);
+        lblContent.setStyle("-fx-font-size: 13px; -fx-text-fill: #333;");
+
+        box.getChildren().addAll(lblTitle, lblContent);
+        return box;
+    }
 
     @FXML
     public void initialize() {

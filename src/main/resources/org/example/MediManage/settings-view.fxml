@@ -7,5 +7,15 @@
     xmlns="http://javafx.com/javafx/17"
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" spacing="20">
     <Label text="System Settings" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
-    <Label text="Settings configuration is under development." style="-fx-font-size: 16px;"/>
+
+    <VBox spacing="10" alignment="CENTER_LEFT" maxWidth="400" style="-fx-padding: 20; -fx-background-color: white; -fx-background-radius: 10; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 10, 0, 0, 0);">
+        <Label text="Gemini API Configuration" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+        <Label text="Enter your Google Gemini API Key below to enable AI features:" wrapText="true"/>
+
+        <PasswordField fx:id="txtApiKey" promptText="Paste AIza... key here"/>
+
+        <Button text="Save Configuration" onAction="#handleSave" style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;"/>
+
+        <Label fx:id="lblStatus" text=""/>
+    </VBox>
 </VBox>

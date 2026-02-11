@@ -52,7 +52,7 @@ public class MainShellController implements ViewSwitcher {
         String homeView = "dashboard-view";
         switch (currentUser.getRole()) {
             case CASHIER:
-                homeView = "billing-view";
+                homeView = "dashboard-view"; // Same as Admin per user request
                 break;
             case PHARMACIST:
                 homeView = "medicine-search-view";
@@ -101,7 +101,6 @@ public class MainShellController implements ViewSwitcher {
     }
 
     private void applyTheme(org.example.MediManage.model.UserRole role) {
-        String cssInfo = "";
         try {
             String cssPath = "";
             switch (role) {

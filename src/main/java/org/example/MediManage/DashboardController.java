@@ -22,21 +22,28 @@ import org.example.MediManage.model.BillItem;
 import java.io.File;
 import java.sql.SQLException;
 
-import java.sql.SQLException;
 import org.example.MediManage.service.ReportService;
 import net.sf.jasperreports.engine.JRException;
 import java.io.IOException;
 import javafx.print.*;
 import javafx.scene.layout.VBox;
-import javafx.scene.layout.VBox;
 import javafx.geometry.Pos;
 import javafx.scene.input.KeyCode;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.example.MediManage.model.Expense;
 import javafx.scene.layout.GridPane;
 
 public class DashboardController {
 
     private final ReportService reportService = new ReportService();
+    private final org.example.MediManage.service.GeminiService geminiService = new org.example.MediManage.service.GeminiService();
+
+    @FXML
+    private VBox aiContentBox;
+    private String currentAiResponse;
 
     // KPI Labels
     @FXML
@@ -235,7 +242,7 @@ public class DashboardController {
         TableColumn<BillItem, Double> colTotal = new TableColumn<>("Total");
         colTotal.setCellValueFactory(d -> d.getValue().totalProperty().asObject());
 
-        table.getColumns().addAll(colName, colExpiry, colQty, colPrice, colTotal);
+        table.getColumns().addAll(java.util.Arrays.asList(colName, colExpiry, colQty, colPrice, colTotal));
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPrefHeight(300);
 
@@ -252,7 +259,7 @@ public class DashboardController {
             if (file != null) {
                 try {
                     reportService.generateInvoicePDF(items, bill.totalProperty().get(),
-                            bill.customerNameProperty().get(), file.getAbsolutePath());
+                            bill.customerNameProperty().get(), null, file.getAbsolutePath());
                     showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved.");
                 } catch (Exception ex) {
                     showAlert(Alert.AlertType.ERROR, "Error", "Failed to save PDF: " + ex.getMessage());
@@ -368,7 +375,7 @@ public class DashboardController {
         TableColumn<Medicine, String> colExp = new TableColumn<>("Expiry Date");
         colExp.setCellValueFactory(data -> data.getValue().expiryProperty());
 
-        expiryTable.getColumns().addAll(colMed, colExp);
+        expiryTable.getColumns().addAll(java.util.Arrays.asList(colMed, colExp));
 
         // Fetch Data
         List<Medicine> expiring = new ArrayList<>();
@@ -801,7 +808,9 @@ public class DashboardController {
 
         if (file != null) {
             try {
+                String protocol = formatCareProtocolForPrint(currentAiResponse);
                 reportService.generateInvoicePDF(new java.util.ArrayList<BillItem>(billList), total, customerName,
+                        protocol,
                         file.getAbsolutePath());
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved to PDF!");
             } catch (JRException e) {
@@ -951,6 +960,165 @@ public class DashboardController {
                 showAlert(Alert.AlertType.ERROR, "Error", "Failed to save expense.");
             }
         });
+    }
+
+    // ---------------- AI Methods ----------------
+
+    @FXML
+    public void handleAiInsights() {
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Cart Empty", "Please add medicines to the cart first.");
+            return;
+        }
+
+        if (aiContentBox == null)
+            return;
+
+        aiContentBox.getChildren().clear();
+        aiContentBox.getChildren().add(new Label("Generating insights..."));
+
+        List<BillItem> items = new java.util.ArrayList<>(billList);
+        geminiService.generateCareProtocol(items)
+                .thenAccept(jsonResponse -> {
+                    javafx.application.Platform.runLater(() -> {
+                        currentAiResponse = jsonResponse;
+                        renderAiNodes(jsonResponse);
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        aiContentBox.getChildren().clear();
+                        Label err = new Label("Error: " + ex.getMessage());
+                        err.setWrapText(true);
+                        err.setStyle("-fx-text-fill: red;");
+                        aiContentBox.getChildren().add(err);
+                        ex.printStackTrace();
+                    });
+                    return null;
+                });
+    }
+
+    private void renderAiNodes(String jsonResponse) {
+        aiContentBox.getChildren().clear();
+        try {
+            String cleanJson = jsonResponse.replace("```json", "").replace("```", "").trim();
+            com.google.gson.JsonArray array = com.google.gson.JsonParser.parseString(cleanJson).getAsJsonArray();
+
+            for (com.google.gson.JsonElement elem : array) {
+                com.google.gson.JsonObject obj = elem.getAsJsonObject();
+                aiContentBox.getChildren().add(createMedicineNode(obj));
+            }
+        } catch (Exception e) {
+            Label err = new Label("Failed to parse AI response. Raw output:\n" + jsonResponse);
+            err.setWrapText(true);
+            aiContentBox.getChildren().add(err);
+            e.printStackTrace();
+        }
+    }
+
+    private javafx.scene.layout.VBox createMedicineNode(com.google.gson.JsonObject obj) {
+        javafx.scene.layout.VBox node = new javafx.scene.layout.VBox(10);
+        node.setStyle(
+                "-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2); -fx-background-radius: 8; -fx-padding: 15;");
+
+        String name = obj.has("medicineName") ? obj.get("medicineName").getAsString() : "Medicine";
+        Label title = new Label(name);
+        title.setStyle(
+                "-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #2c3e50; -fx-padding: 0 0 5 0; -fx-border-color: transparent transparent #eee transparent; -fx-border-width: 2;");
+        title.setMaxWidth(Double.MAX_VALUE);
+        node.getChildren().add(title);
+
+        if (obj.has("substitutes")) {
+            node.getChildren()
+                    .add(createDetailNode("Substitutes", obj.get("substitutes").getAsString(), "#e8f8f5", "#16a085"));
+        }
+
+        if (obj.has("combinationalEffects")) {
+            if (obj.get("combinationalEffects").isJsonPrimitive()) {
+                String effects = obj.get("combinationalEffects").getAsString();
+                if (!"None".equalsIgnoreCase(effects)) {
+                    node.getChildren().add(createDetailNode("Combinational Effects", effects, "#fff0f0", "#c0392b"));
+                }
+            }
+        }
+
+        if (obj.has("mechanism"))
+            node.getChildren()
+                    .add(createDetailNode("Mechanism", obj.get("mechanism").getAsString(), "#f8f9fa", "#7f8c8d"));
+        if (obj.has("usage"))
+            node.getChildren()
+                    .add(createDetailNode("Usage Guide", obj.get("usage").getAsString(), "#eafaf1", "#27ae60"));
+        if (obj.has("dietary"))
+            node.getChildren()
+                    .add(createDetailNode("Dietary Advice", obj.get("dietary").getAsString(), "#fff8e1", "#f1c40f"));
+        if (obj.has("sideEffects"))
+            node.getChildren()
+                    .add(createDetailNode("Side Effects", obj.get("sideEffects").getAsString(), "#fce4ec", "#c2185b"));
+
+        if (obj.has("safety")) {
+            String safety = obj.get("safety").getAsString();
+            node.getChildren().add(createDetailNode("Safety Check", safety, "#fff3cd", "#856404"));
+        }
+
+        if (obj.has("stopProtocol"))
+            node.getChildren().add(
+                    createDetailNode("Stop Protocol", obj.get("stopProtocol").getAsString(), "#ffebee", "#c0392b"));
+
+        return node;
+    }
+
+    private javafx.scene.layout.VBox createDetailNode(String title, String content, String bgColor, String titleColor) {
+        javafx.scene.layout.VBox box = new javafx.scene.layout.VBox(3);
+        box.setStyle(
+                "-fx-background-color: " + bgColor + "; -fx-background-radius: 5; -fx-padding: 8; -fx-border-color: "
+                        + bgColor + "; -fx-border-radius: 5;");
+
+        Label lblTitle = new Label(title);
+        lblTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: " + titleColor + ";");
+
+        Label lblContent = new Label(content);
+        lblContent.setWrapText(true);
+        lblContent.setStyle("-fx-font-size: 13px; -fx-text-fill: #333;");
+
+        box.getChildren().addAll(lblTitle, lblContent);
+        return box;
+    }
+
+    private String formatCareProtocolForPrint(String jsonResponse) {
+        if (jsonResponse == null || jsonResponse.isEmpty())
+            return "Care Protocol generated by Gemini AI (Check App for details).";
+
+        StringBuilder sb = new StringBuilder();
+        try {
+            String cleanJson = jsonResponse.replace("```json", "").replace("```", "").trim();
+            com.google.gson.JsonArray array = com.google.gson.JsonParser.parseString(cleanJson).getAsJsonArray();
+
+            for (com.google.gson.JsonElement elem : array) {
+                com.google.gson.JsonObject obj = elem.getAsJsonObject();
+                String name = obj.has("medicineName") ? obj.get("medicineName").getAsString() : "Medicine";
+                sb.append("MEDICINE: ").append(name).append("\n");
+
+                if (obj.has("combinationalEffects")) {
+                    if (obj.get("combinationalEffects").isJsonPrimitive()) {
+                        String ce = obj.get("combinationalEffects").getAsString();
+                        if (!"None".equalsIgnoreCase(ce))
+                            sb.append("  INTERACTION ALERT: ").append(ce).append("\n");
+                    }
+                }
+                if (obj.has("usage"))
+                    sb.append("  Usage: ").append(obj.get("usage").getAsString()).append("\n");
+                if (obj.has("dietary"))
+                    sb.append("  Diet: ").append(obj.get("dietary").getAsString()).append("\n");
+                if (obj.has("sideEffects"))
+                    sb.append("  Side Effects: ").append(obj.get("sideEffects").getAsString()).append("\n");
+                if (obj.has("safety"))
+                    sb.append("  Safety: ").append(obj.get("safety").getAsString()).append("\n");
+                sb.append("\n");
+            }
+        } catch (Exception e) {
+            return "Error parsing protocol.";
+        }
+        return sb.toString();
     }
 
     // ---------------- Inner Classes (DTOs) ----------------

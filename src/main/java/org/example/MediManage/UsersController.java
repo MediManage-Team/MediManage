@@ -99,14 +99,30 @@ public class UsersController {
 
         if (selectedUser == null) {
             // Create New
-            User newUser = new User(0, username, password, role); // ID 0 is ignored on insert
-            userDAO.addUser(newUser);
-            showAlert(Alert.AlertType.INFORMATION, "Success", "User added successfully.");
+            try {
+                User newUser = new User(0, username, password, role); // ID 0 is ignored on insert
+                userDAO.addUser(newUser);
+                showAlert(Alert.AlertType.INFORMATION, "Success", "User added successfully.");
+            } catch (java.sql.SQLException e) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Failed to add user: " + e.getMessage());
+                return;
+            } catch (SecurityException e) {
+                showAlert(Alert.AlertType.ERROR, "Security Error", e.getMessage());
+                return;
+            }
         } else {
             // Update Existing (Create new object with same ID)
-            User updatedUser = new User(selectedUser.getId(), username, password, role);
-            userDAO.updateUser(updatedUser);
-            showAlert(Alert.AlertType.INFORMATION, "Success", "User updated successfully.");
+            try {
+                User updatedUser = new User(selectedUser.getId(), username, password, role);
+                userDAO.updateUser(updatedUser);
+                showAlert(Alert.AlertType.INFORMATION, "Success", "User updated successfully.");
+            } catch (java.sql.SQLException e) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Failed to update user: " + e.getMessage());
+                return;
+            } catch (SecurityException e) {
+                showAlert(Alert.AlertType.ERROR, "Security Error", e.getMessage());
+                return;
+            }
         }
 
         handleClear();
@@ -124,9 +140,16 @@ public class UsersController {
 
         Optional<ButtonType> result = alert.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            userDAO.deleteUser(selectedUser.getId());
-            handleClear();
-            loadUsers();
+            try {
+                userDAO.deleteUser(selectedUser.getId());
+                handleClear();
+                loadUsers();
+                showAlert(Alert.AlertType.INFORMATION, "Success", "User deleted successfully.");
+            } catch (java.sql.SQLException e) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete user: " + e.getMessage());
+            } catch (SecurityException e) {
+                showAlert(Alert.AlertType.ERROR, "Security Error", e.getMessage());
+            }
         }
     }
 

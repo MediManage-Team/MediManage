@@ -2,13 +2,11 @@ package org.example.MediManage;
 
 import org.example.MediManage.model.*;
 import org.example.MediManage.util.UserSession;
-import org.example.MediManage.dao.*;
 import org.junit.jupiter.api.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class MediManageTest {

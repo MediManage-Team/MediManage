@@ -107,6 +107,20 @@
                                 <Label fx:id="lblTotal" text="₹0.00" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: -fx-primary;"/>
                             </HBox>
 
+                            <!-- AI Insights Section -->
+                            <TitledPane text="Patient Care Assistant (AI)" expanded="false">
+                                <VBox spacing="5">
+                                    <ScrollPane fitToWidth="true" prefHeight="150" style="-fx-background-color: transparent;">
+                                        <content>
+                                            <VBox fx:id="aiContentBox" spacing="10" style="-fx-padding: 10;">
+                                                <Label text="Click 'Generate' to see AI insights here..." textFill="gray"/>
+                                            </VBox>
+                                        </content>
+                                    </ScrollPane>
+                                    <Button text="Generate Care Protocol" onAction="#handleAiInsights" maxWidth="Infinity" style="-fx-background-color: #8e44ad; -fx-text-fill: white; -fx-font-weight: bold;"/>
+                                </VBox>
+                            </TitledPane>
+
                             <HBox spacing="10">
                                 <Button fx:id="btnAddBill" text="Add Item" styleClass="button-secondary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                                 <Button text="Print Last Invoice" onAction="#handlePrintInvoice" styleClass="button-outlined" maxWidth="Infinity" HBox.hgrow="ALWAYS">

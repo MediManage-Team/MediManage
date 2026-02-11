@@ -158,8 +158,12 @@ public class InventoryController {
                 // defaulting generic name to empty string as we don't have a field in UI yet
                 // for InventoryAdd (User requirement didn't specify updating Inventory UI, but
                 // "Substitute Search" implies it should be there. For now, empty to fix build).
-                medicineDAO.addMedicine(name, "", company, expiry, price, stock);
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine added.");
+                try {
+                    medicineDAO.addMedicine(name, "", company, expiry, price, stock);
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine added.");
+                } catch (java.sql.SQLException e) {
+                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to add medicine: " + e.getMessage());
+                }
             } else {
                 // Update Existing
                 selectedMedicine.setName(name);
@@ -170,10 +174,13 @@ public class InventoryController {
                 // call or assuming updateMedicine usually doesn't update stock count in generic
                 // CRUD but requirement said "updateStock" method exists.
                 // We should call both updateMedicine and updateStock to be safe.
-                medicineDAO.updateMedicine(selectedMedicine);
-                medicineDAO.updateStock(selectedMedicine.getId(), stock);
-
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine updated.");
+                try {
+                    medicineDAO.updateMedicine(selectedMedicine);
+                    medicineDAO.updateStock(selectedMedicine.getId(), stock);
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine updated.");
+                } catch (java.sql.SQLException e) {
+                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to update medicine: " + e.getMessage());
+                }
             }
             handleClear();
             loadData();
@@ -194,9 +201,14 @@ public class InventoryController {
 
         Optional<ButtonType> result = alert.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            medicineDAO.deleteMedicine(selectedMedicine.getId());
-            handleClear();
-            loadData();
+            try {
+                medicineDAO.deleteMedicine(selectedMedicine.getId());
+                handleClear();
+                loadData();
+                showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine deleted.");
+            } catch (java.sql.SQLException e) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Failed to delete medicine: " + e.getMessage());
+            }
         }
     }
 

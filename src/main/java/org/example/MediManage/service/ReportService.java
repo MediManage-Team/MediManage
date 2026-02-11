@@ -6,7 +6,6 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Medicine;
-import org.example.MediManage.model.Customer;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -17,7 +16,8 @@ import java.util.Map;
 
 public class ReportService {
 
-    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
+    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String careProtocol,
+            String filePath)
             throws JRException {
         // Load Template
         InputStream reportStream = getClass().getResourceAsStream("/reports/invoice.jrxml");
@@ -32,6 +32,7 @@ public class ReportService {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("CustomerName", customerName);
         parameters.put("TotalAmount", totalAmount);
+        parameters.put("CareProtocol", careProtocol != null ? careProtocol : "No specific protocol generated.");
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);

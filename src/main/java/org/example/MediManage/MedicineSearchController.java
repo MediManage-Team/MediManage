@@ -11,7 +11,6 @@ import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.model.Medicine;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 
@@ -48,12 +47,54 @@ public class MedicineSearchController {
 
     private MedicineDAO medicineDAO = new MedicineDAO();
     private ObservableList<Medicine> masterData = FXCollections.observableArrayList();
+    private org.example.MediManage.service.GeminiService geminiService = new org.example.MediManage.service.GeminiService();
 
     @FXML
     public void initialize() {
         setupTable();
         loadData();
         setupSearch();
+    }
+
+    @FXML
+    private void handleConvertBrandToGeneric() {
+        String query = txtSearch.getText();
+        if (query == null || query.trim().isEmpty()) {
+            showAlert("Search Empty", "Please enter a brand name to find substitutes for.");
+            return;
+        }
+
+        lblDetailGeneric.setText("AI: Identifying generic for '" + query + "'...");
+
+        geminiService.findGenericName(query)
+                .thenAccept(generic -> {
+                    javafx.application.Platform.runLater(() -> {
+                        if ("UNKNOWN".equalsIgnoreCase(generic)) {
+                            showAlert("Not Found", "AI could not identify the generic name.");
+                            lblDetailGeneric.setText("Generic: Unknown");
+                        } else {
+                            lblDetailGeneric.setText("Generic: " + generic);
+                            txtSearch.setText(generic); // Trigger filter
+                            showAlert("Substitute Found",
+                                    "Identified Generic: " + generic + "\nShowing available stock.");
+                        }
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        lblDetailGeneric.setText("AI Error: " + ex.getMessage());
+                        ex.printStackTrace();
+                    });
+                    return null;
+                });
+    }
+
+    private void showAlert(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.show();
     }
 
     private void setupTable() {

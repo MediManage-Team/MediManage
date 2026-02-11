@@ -12,7 +12,10 @@
     <top>
         <VBox spacing="10" style="-fx-padding: 20; -fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);">
             <Label text="Medicine Search" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"/>
-            <TextField fx:id="txtSearch" promptText="Search by Name, Company, or Brand..." style="-fx-font-size: 14px; -fx-padding: 10;"/>
+            <HBox spacing="10">
+                <TextField fx:id="txtSearch" promptText="Search by Name, Company, or Brand..." style="-fx-font-size: 14px; -fx-padding: 10;" HBox.hgrow="ALWAYS"/>
+                <Button text="Find Substitute (AI)" onAction="#handleConvertBrandToGeneric" style="-fx-background-color: #e67e22; -fx-text-fill: white; -fx-font-weight: bold;"/>
+            </HBox>
         </VBox>
     </top>
 
