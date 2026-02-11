@@ -175,4 +175,70 @@ public class MedicineDAO {
             System.err.println("Delete failed: " + e.getMessage());
         }
     }
+    // --- Business Intelligence Methods ---
+
+    public List<Medicine> searchByGeneric(String keyword) {
+        List<Medicine> list = new ArrayList<>();
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.generic_name LIKE ? OR m.name LIKE ?"; // Search both for better results
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public List<Medicine> getExpiringMedicines(int days) {
+        List<Medicine> list = new ArrayList<>();
+        // SQLite: date('now', '+30 days')
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.expiry_date <= date('now', '+' || ? || ' days') " +
+                "AND m.expiry_date >= date('now') " + // Not already expired (optional, but good for "expiring soon")
+                "ORDER BY m.expiry_date ASC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, days);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
 }

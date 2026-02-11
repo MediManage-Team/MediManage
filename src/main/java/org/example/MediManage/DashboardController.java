@@ -33,10 +33,13 @@ import javafx.geometry.Pos;
 import javafx.scene.input.KeyCode;
 import org.example.MediManage.model.Expense;
 import javafx.scene.layout.GridPane;
+import javafx.application.Platform;
+import org.example.MediManage.util.UserSession;
 
 public class DashboardController {
 
     private final ReportService reportService = new ReportService();
+    private UserSession userSession;
 
     // KPI Labels
     @FXML
@@ -89,6 +92,8 @@ public class DashboardController {
     private TabPane mainTabPane;
     @FXML
     private Tab tabAddCustomer;
+    @FXML
+    private Tab aiTab;
 
     @FXML
     private TextField txtDoctorName;
@@ -136,8 +141,66 @@ public class DashboardController {
     private final CustomerDAO customerDAO = new CustomerDAO();
     private final org.example.MediManage.dao.ExpenseDAO expenseDAO = new org.example.MediManage.dao.ExpenseDAO();
 
+    // --- Business Intelligence (AI) ---
+    @FXML
+    private TextField substituteInput;
+    @FXML
+    private TextArea substituteResult;
+    @FXML
+    private TextArea forecastResult;
+    @FXML
+    private TextArea expiryResult;
+
+    private org.example.MediManage.service.ai.InventoryAIService inventoryAIService;
+
+    private void initInventoryAI() {
+        this.inventoryAIService = new org.example.MediManage.service.ai.InventoryAIService();
+    }
+
+    // --- Business Intelligence Handlers ---
+    @FXML
+    private void handleFindSubstitutes() {
+        String brand = substituteInput.getText().trim();
+        if (brand.isEmpty()) {
+            substituteResult.setText("Please enter a brand name.");
+            return;
+        }
+        substituteResult.setText("Analyzing '" + brand + "' with AI and checking inventory...");
+        inventoryAIService.findSubstitutes(brand)
+                .thenAccept(result -> Platform.runLater(() -> substituteResult.setText(result)))
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> substituteResult.setText("Error: " + ex.getMessage()));
+                    return null;
+                });
+    }
+
+    @FXML
+    private void handleRestockReport() {
+        forecastResult.setText("Analyzing sales history (last 30 days) for trends...");
+        inventoryAIService.generateRestockReport()
+                .thenAccept(result -> Platform.runLater(() -> forecastResult.setText(result)))
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> forecastResult.setText("Error: " + ex.getMessage()));
+                    return null;
+                });
+    }
+
+    @FXML
+    private void handleExpiryReport() {
+        expiryResult.setText("Scanning inventory for expiring items and generating strategy...");
+        inventoryAIService.generateExpiryReport()
+                .thenAccept(result -> Platform.runLater(() -> expiryResult.setText(result)))
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> expiryResult.setText("Error: " + ex.getMessage()));
+                    return null;
+                });
+    }
+
     @FXML
     private void initialize() {
+        userSession = UserSession.getInstance();
+        initInventoryAI(); // Initialize AI Service
+
         // Ensure DB is ready
         // DB setup is handled in MediManageApplication / Launcher now.
         // We can skip redundant init here to save time.

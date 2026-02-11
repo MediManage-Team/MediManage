@@ -195,4 +195,32 @@ public class BillDAO {
         }
         return items;
     }
+
+    // For Business Intelligence: Sales by Item (Medicine)
+    public Map<String, Integer> getItemizedSales(LocalDate start, LocalDate end) {
+        Map<String, Integer> sales = new LinkedHashMap<>();
+        String sql = "SELECT m.name, SUM(bi.quantity) as total_qty " +
+                "FROM bill_items bi " +
+                "JOIN bills b ON bi.bill_id = b.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE date(b.bill_date) BETWEEN ? AND ? " +
+                "GROUP BY m.name " +
+                "ORDER BY total_qty DESC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, start.toString());
+            ps.setString(2, end.toString());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    sales.put(rs.getString("name"), rs.getInt("total_qty"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return sales;
+    }
 }

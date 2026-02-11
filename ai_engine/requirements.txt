@@ -1,0 +1,11 @@
+flask
+onnxruntime-gpu
+openvino
+numpy
+requests
+duckduckgo-search
+transformers
+# Note: onnxruntime-genai
+huggingface_hub might need manual install depending on platform, but listing here for reference
+# pip install onnxruntime-genai-directml (for Windows DirectML)
+onnxruntime-genai

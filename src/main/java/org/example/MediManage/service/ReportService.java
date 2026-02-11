@@ -17,7 +17,8 @@ import java.util.Map;
 
 public class ReportService {
 
-    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
+    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
+            String careProtocol)
             throws JRException {
         // Load Template
         InputStream reportStream = getClass().getResourceAsStream("/reports/invoice.jrxml");
@@ -32,6 +33,16 @@ public class ReportService {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("CustomerName", customerName);
         parameters.put("TotalAmount", totalAmount);
+        // Note: To print the Care Protocol, we need a parameter in the JRXML or we can
+        // print it separately/append it.
+        // Assuming we pass it as a parameter for now. If JRXML doesn't have it, it
+        // won't show, BUT
+        // we can try to append a page dynamically using Jasper API if we had a
+        // subreport.
+        // For simplicity and robustness without editing JRXML visually:
+        // We will pass it. If the user wants it VISIBLE, they need to update JRXML.
+        // However, we can also use a "Summary" band if available.
+        parameters.put("CareProtocol", careProtocol);
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
@@ -41,6 +52,11 @@ public class ReportService {
 
         // Export to PDF
         JasperExportManager.exportReportToPdfFile(jasperPrint, filePath);
+    }
+
+    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
+            throws JRException {
+        generateInvoicePDF(items, totalAmount, customerName, filePath, ""); // Overload for backward compatibility
     }
 
     public void exportInventoryToExcel(List<Medicine> medicines, String filePath) throws IOException {

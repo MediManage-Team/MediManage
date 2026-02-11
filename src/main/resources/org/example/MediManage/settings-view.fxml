@@ -3,9 +3,31 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox alignment="CENTER"
-    xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" spacing="20">
+<VBox xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" spacing="20" style="-fx-padding: 20;">
     <Label text="System Settings" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
-    <Label text="Settings configuration is under development." style="-fx-font-size: 16px;"/>
+
+    <TitledPane text="AI Configuration" collapsible="false">
+        <VBox spacing="10">
+            <Button text="Download New Models (Model Store)" onAction="#handleOpenModelStore" style="-fx-background-color: #9c27b0; -fx-text-fill: white;"/>
+            <Label text="Current Model Path: (.onnx or .xml)" style="-fx-font-weight: bold;"/>
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <TextField fx:id="modelPathField" promptText="Select local model file..." HBox.hgrow="ALWAYS"/>
+                <Button text="Browse" onAction="#handleBrowseModel"/>
+            </HBox>
+
+            <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
+            <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
+            <Label text="Select 'Auto' to let the system decide, or force a specific provider." style="-fx-text-fill: gray; -fx-font-size: 10px;"/>
+
+            <Separator/>
+
+            <Label text="Cloud AI API Key" style="-fx-font-weight: bold;"/>
+            <PasswordField fx:id="apiKeyField" promptText="Enter Cloud API Key"/>
+
+            <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
+                <Button text="Save Settings" onAction="#handleSaveSettings" style="-fx-background-color: #4CAF50; -fx-text-fill: white;"/>
+            </HBox>
+        </VBox>
+    </TitledPane>
 </VBox>

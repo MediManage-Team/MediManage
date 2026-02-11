@@ -4,6 +4,8 @@ A robust, enterprise-grade Desktop application for managing pharmacy inventory, 
 
 ![MediManage](https://via.placeholder.com/800x400?text=MediManage+Dashboard) *Note: Add actual screenshot here*
 
+> **For AI Agents & Contributors**: Please read [AGENT_README.md](./AGENT_README.md) for architectural context and quirks.
+
 ## 🚀 Key Features
 
 ### 🛒 Point of Sale (POS) & Billing
@@ -26,6 +28,12 @@ A robust, enterprise-grade Desktop application for managing pharmacy inventory, 
 ### 📅 Reporting & Invoices
 - **PDF Invoices**: Generate A4 invoices with **JasperReports**.
 - **Bill History**: View, reprint, or share past invoices.
+
+### 🧠 AI Features (New!)
+- **Local AI Engine**: Built-in Python microservice for offline inference.
+- **Model Store**: Download optimized LLMs (Phi-3, TinyLlama, Qwen) directly from Hugging Face.
+- **Privacy First**: All AI processing happens locally on your machine (CPU/GPU).
+- **Smart Assist**: (Coming Soon) Chat with your inventory data.
 
 ---
 
@@ -120,6 +128,13 @@ The application uses a relational SQLite database initialized programmatically v
     mvn javafx:run
     ```
     *Note*: In Dev mode, the app creates/uses `medimanage.db` in the project root.
+
+4.  **AI Engine Setup**:
+    The application automatically launches the Python AI Engine. Ensure Python 3.8+ is installed.
+    ```bash
+    pip install -r ai_engine/requirements.txt
+    ```
+    See [ai_engine/README.md](ai_engine/README.md) for full details.
 
 ### Building the Installer (.exe)
 To create a distributable Windows installer with bundled JRE:

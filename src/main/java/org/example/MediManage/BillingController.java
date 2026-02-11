@@ -279,45 +279,105 @@ public class BillingController {
 
         double total = billList.stream().mapToDouble(BillItem::getTotal).sum();
         Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
+        String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
 
-        try {
-            // Ask for Payment Mode
-            java.util.List<String> choices = new java.util.ArrayList<>();
-            choices.add("Cash");
-            choices.add("Credit");
-            choices.add("UPI");
+        // Payment Mode Dialog
+        java.util.List<String> choices = new java.util.ArrayList<>();
+        choices.add("Cash");
+        choices.add("Credit");
+        choices.add("UPI");
 
-            ChoiceDialog<String> dialog = new ChoiceDialog<>("Cash", choices);
-            dialog.setTitle("Payment Mode");
-            dialog.setHeaderText("Select Payment Mode");
-            dialog.setContentText("Mode:");
+        ChoiceDialog<String> dialog = new ChoiceDialog<>("Cash", choices);
+        dialog.setTitle("Payment Mode");
+        dialog.setHeaderText("Select Payment Mode");
+        dialog.setContentText("Mode:");
 
-            java.util.Optional<String> result = dialog.showAndWait();
-            String paymentMode = result.orElse("Cash");
+        java.util.Optional<String> result = dialog.showAndWait();
+        if (result.isEmpty())
+            return; // Cancelled
+        String paymentMode = result.get();
 
-            // Feature 4: Credit validation
-            if ("Credit".equals(paymentMode) && cid == null) {
-                showAlert(Alert.AlertType.WARNING, "Credit Error", "Credit requires a selected customer!");
-                return;
-            }
-
-            int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
-            int billId = billDAO.generateInvoice(total, billList, cid, userId, paymentMode);
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Bill Generated: #" + billId + "\nMode: " + paymentMode);
-            billList.clear();
-            updateTotal();
-            selectedCustomer = null;
-            lblCustomerName.setText("Walk-in Customer");
-            txtSearchCustomer.clear();
-
-            // Refresh Inventory Data just in case
-            allMedicines.clear();
-            allMedicines.addAll(medicineDAO.getAllMedicines());
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Error", "Checkout Failed");
+        if ("Credit".equals(paymentMode) && cid == null) {
+            showAlert(Alert.AlertType.WARNING, "Credit Error", "Credit requires a selected customer!");
+            return;
         }
+
+        // --- AI Patient Care Assistant ---
+        btnCheckout.setDisable(true);
+        btnCheckout.setText("Generating Care Protocol...");
+
+        // Construct Prompt
+        StringBuilder medicineList = new StringBuilder();
+        billList.forEach(item -> medicineList.append("- ").append(item.getName()).append("\n"));
+
+        String prompt = "I am a Pharmacist. Create a 'Patient Care Protocol' for the following medicines:\n" +
+                medicineList.toString() + "\n" +
+                "For EACH medicine, provide a 7-point guide:\n" +
+                "1. Mechanism (Simplified)\n" +
+                "2. Usage Guide (When/How)\n" +
+                "3. Dietary Advice\n" +
+                "4. Side Effects\n" +
+                "5. Stop Protocol\n" +
+                "Also check for Combinational Safety (Drug-Drug Interactions) between these items.\n" +
+                "Format as a clean, printable guide.";
+
+        // We use the AIOrchestrator to fetch this.
+        // Note: AIOrchestrator is not injected yet, I will use a local instance or
+        // inject via constructor.
+        // For existing code consistency (like Dashboard), I'll instantiate it here or
+        // add field.
+        // Let's add the field using separate Edit, but here I'll assume it exists or
+        // use direct instantiation for now to keep this block self-contained if
+        // possible,
+        // but cleaner to use the field. I'll add the field in the same file using
+        // `initAI` pattern if needed.
+        // Actually, for this specific block replacement, I will assume `aiOrchestrator`
+        // is available or instantiate it.
+        org.example.MediManage.service.ai.AIOrchestrator aiOrchestrator = new org.example.MediManage.service.ai.AIOrchestrator();
+
+        aiOrchestrator.processQuery(prompt, true, false) // High precision (Cloud) preferred for medical advice
+                .thenAccept(careProtocol -> {
+                    // Return to FX Thread for UI & PDF generation
+                    javafx.application.Platform.runLater(() -> {
+                        try {
+                            int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+                            int billId = billDAO.generateInvoice(total, billList, cid, userId, paymentMode);
+
+                            // Generate PDF with AI Protocol
+                            String pdfPath = "Invoice_" + billId + ".pdf";
+                            new org.example.MediManage.service.ReportService().generateInvoicePDF(billList, total,
+                                    customerName, pdfPath, careProtocol);
+
+                            showAlert(Alert.AlertType.INFORMATION, "Success",
+                                    "Bill #" + billId + " & Care Protocol Generated!\nSaved to: " + pdfPath);
+
+                            // Cleanup
+                            billList.clear();
+                            updateTotal();
+                            selectedCustomer = null;
+                            lblCustomerName.setText("Walk-in Customer");
+                            txtSearchCustomer.clear();
+                            allMedicines.clear();
+                            allMedicines.addAll(medicineDAO.getAllMedicines());
+
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            showAlert(Alert.AlertType.ERROR, "Error", "Checkout/Printing Failed: " + e.getMessage());
+                        } finally {
+                            btnCheckout.setDisable(false);
+                            btnCheckout.setText("CHECKOUT (PRINT)");
+                        }
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.ERROR, "AI Error",
+                                "Failed to generate Care Protocol: " + ex.getMessage());
+                        btnCheckout.setDisable(false);
+                        btnCheckout.setText("CHECKOUT (PRINT)");
+                    });
+                    return null;
+                });
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

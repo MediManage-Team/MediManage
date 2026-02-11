@@ -5,6 +5,8 @@
     <parameter name="CustomerName" class="java.lang.String"/>
     <parameter name="TotalAmount" class="java.lang.Double"/>
 
+    <parameter name="CareProtocol" class="java.lang.String"/>
+
     <field name="name" class="java.lang.String"/>
     <field name="qty" class="java.lang.Integer"/>
     <field name="price" class="java.lang.Double"/>
@@ -81,13 +83,33 @@
     </detail>
 
     <summary>
-        <band height="50">
+        <band height="400">
             <textField>
-                <reportElement x="400" y="10" width="155" height="30"/>
+                <reportElement x="350" y="10" width="205" height="30"/>
                 <textElement textAlignment="Right">
                     <font size="14" isBold="true"/>
                 </textElement>
                 <textFieldExpression><![CDATA["Total: " + String.format("%.2f", $P{TotalAmount})]]></textFieldExpression>
+            </textField>
+
+            <line>
+                <reportElement x="0" y="50" width="555" height="1"/>
+            </line>
+
+            <staticText>
+                <reportElement x="0" y="60" width="555" height="20"/>
+                <textElement>
+                    <font size="12" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Patient Care Protocol (AI Generated):]]></text>
+            </staticText>
+
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="85" width="555" height="300"/>
+                <textElement>
+                    <font size="10"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{CareProtocol}]]></textFieldExpression>
             </textField>
         </band>
     </summary>

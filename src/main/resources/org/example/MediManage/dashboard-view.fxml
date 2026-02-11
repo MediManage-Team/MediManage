@@ -215,6 +215,41 @@
                     </TableView>
                 </VBox>
             </Tab>
+
+            <Tab text="Business Intelligence">
+                <VBox spacing="20" style="-fx-padding: 30;">
+                    <Label text="Inventory Intelligence (AI)" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
+
+                    <HBox spacing="20">
+                        <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card">
+                            <Label text="Substitute Finder" styleClass="card-title"/>
+                            <HBox spacing="10">
+                                <TextField fx:id="substituteInput" promptText="Enter brand name..." HBox.hgrow="ALWAYS"/>
+                                <Button text="Find" onAction="#handleFindSubstitutes" styleClass="button-primary"/>
+                            </HBox>
+                            <TextArea fx:id="substituteResult" editable="false" wrapText="true" prefHeight="100"/>
+                        </VBox>
+
+                        <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card">
+                            <Label text="Restock Forecasting" styleClass="card-title"/>
+                            <Button text="Generate Forecast" onAction="#handleRestockReport" styleClass="button-secondary"/>
+                            <TextArea fx:id="forecastResult" editable="false" wrapText="true" prefHeight="100"/>
+                        </VBox>
+                    </HBox>
+
+                    <VBox spacing="10" styleClass="card">
+                        <Label text="Expiry Strategy" styleClass="card-title"/>
+                        <Button text="Analyze Expiry Risks" onAction="#handleExpiryReport" styleClass="button-outlined"/>
+                        <TextArea fx:id="expiryResult" editable="false" wrapText="true" prefHeight="100"/>
+                    </VBox>
+                </VBox>
+            </Tab>
+
+            <Tab fx:id="aiTab" text="AI Assistant">
+                <content>
+                    <fx:include source="ai-view.fxml"/>
+                </content>
+            </Tab>
         </TabPane>
     </center>
 </BorderPane>

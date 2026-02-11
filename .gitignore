@@ -42,9 +42,21 @@ build/
 !lib/
 
 # Ignore Database Configuration (Security)
-##src/main/resources/db_config.properties ## removed for development
+##src/main/resources/db_config.properties ## removed for development### DB
 *.db
+*.db.bak
 *.sqlite
+/medimanage.db
+/medimanage.db.bak
+
+### Python
+__pycache__/
+*.py[cod]
+*$py.class
+ai_engine/venv/
+.venv/
+env/
+models/
 Output/
 *.exe
 *.msi
