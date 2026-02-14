@@ -54,6 +54,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 ai_engine/venv/
+ai_engine/.venv/
 .venv/
 env/
 models/

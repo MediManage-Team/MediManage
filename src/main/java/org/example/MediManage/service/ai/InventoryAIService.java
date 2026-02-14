@@ -19,7 +19,7 @@ public class InventoryAIService {
     public InventoryAIService() {
         this.medicineDAO = new MedicineDAO();
         this.billDAO = new BillDAO();
-        this.aiOrchestrator = new AIOrchestrator();
+        this.aiOrchestrator = AIServiceProvider.get().getOrchestrator();
     }
 
     /**
@@ -68,8 +68,7 @@ public class InventoryAIService {
 
     /**
      * B. Strategic Forecasting & Seasonal Buying
-     * 1. Get last 30 days sales.
-     * 2. Feed to AI for analysis.
+     * Uses LOCAL AI with RAG — injects real DB sales data as context.
      */
     public CompletableFuture<String> generateRestockReport() {
         LocalDate end = LocalDate.now();
@@ -82,25 +81,26 @@ public class InventoryAIService {
                     .completedFuture("No sales data available for the last 30 days to generate a forecast.");
         }
 
-        // Format data for AI
-        StringBuilder dataSummary = new StringBuilder();
-        sales.entrySet().stream().limit(50).forEach(entry -> dataSummary.append("- ").append(entry.getKey())
+        // Build business context from real DB data
+        StringBuilder context = new StringBuilder();
+        context.append("## Sales Data (Last 30 Days: ").append(start).append(" to ").append(end).append(")\n");
+        sales.entrySet().stream().limit(50).forEach(entry -> context.append("- ").append(entry.getKey())
                 .append(": ").append(entry.getValue()).append(" units\n"));
 
-        String prompt = "Analyze the following sales data (Top 50 items sold in last 30 days) and current date (" + end
-                + "). " +
-                "1. Identify sales trends.\n" +
-                "2. Suggest seasonal stock adjustments (e.g. for upcoming winter/summer).\n" +
-                "3. Generate a 'To-Buy List' for the distributor.\n\n" +
-                "Sales Data:\n" + dataSummary.toString();
+        String prompt = "Analyze the sales trends. " +
+                "1. Identify top-selling and slow-moving items.\n" +
+                "2. Suggest seasonal stock adjustments.\n" +
+                "3. Generate a 'To-Buy List' for the distributor with recommended quantities.";
 
-        return aiOrchestrator.processQuery(prompt, false, false); // Local AI is fine for logic/trends
+        // Explicit: Local AI with RAG context (falls back to Cloud if local
+        // unavailable)
+        return aiOrchestrator.localQueryWithContext(prompt, context.toString());
     }
 
     /**
      * C. Expiry & Disposal Management
-     * 1. Get expiring items.
-     * 2. Feed to AI for advice.
+     * Uses COMBINED query: Local AI analyzes stock → Cloud AI adds medical disposal
+     * advice.
      */
     public CompletableFuture<String> generateExpiryReport() {
         List<Medicine> expiring = medicineDAO.getExpiringMedicines(60); // Check next 2 months
@@ -109,17 +109,66 @@ public class InventoryAIService {
             return CompletableFuture.completedFuture("✅ No medicines are expiring in the next 60 days.");
         }
 
-        StringBuilder dataSummary = new StringBuilder();
-        expiring.forEach(m -> dataSummary.append("- ").append(m.getName())
+        // Build business context from real DB data
+        StringBuilder context = new StringBuilder();
+        context.append("## Expiring Medicines (Next 60 Days)\n");
+        expiring.forEach(m -> context.append("- ").append(m.getName())
                 .append(" (Generic: ").append(m.getGenericName()).append(")")
-                .append(" Expiry: ").append(m.getExpiry()).append("\n"));
+                .append(" | Expiry: ").append(m.getExpiry())
+                .append(" | Stock: ").append(m.getStock())
+                .append(" | Price: ₹").append(m.getPrice()).append("\n"));
 
-        String prompt = "The following medicines are expiring within 60 days. \n" +
-                "1. Suggest a strategy to clear stock (e.g. discount percentages).\n" +
-                "2. Provide chemical-specific disposal instructions for safety if they expire.\n\n" +
-                "Expiring List:\n" + dataSummary.toString();
+        String prompt = "For these expiring medicines:\n" +
+                "1. Suggest discount strategies to clear stock before expiry.\n" +
+                "2. Provide chemical-specific disposal instructions for safety.\n" +
+                "3. Flag any controlled or hazardous substances requiring special handling.";
 
-        return aiOrchestrator.processQuery(prompt, true, true); // Precision for disposal (chemical safety), enabled
-                                                                // search for disposal methods
+        // Combined: Local analyzes stock data → Cloud adds medical disposal precision
+        return aiOrchestrator.combinedQuery(prompt, context.toString());
+    }
+
+    /**
+     * D. Free-form Business Question with RAG
+     * Ask any business question — local AI reasons over full inventory snapshot.
+     */
+    public CompletableFuture<String> askBusinessQuestion(String question) {
+        // Build comprehensive business context
+        StringBuilder context = new StringBuilder();
+
+        // Current inventory snapshot
+        List<Medicine> allMeds = medicineDAO.getAllMedicines();
+        context.append("## Current Inventory (").append(allMeds.size()).append(" items)\n");
+        int lowStock = 0, outOfStock = 0;
+        double totalValue = 0;
+        for (Medicine m : allMeds) {
+            if (m.getStock() == 0)
+                outOfStock++;
+            else if (m.getStock() < 10)
+                lowStock++;
+            totalValue += m.getPrice() * m.getStock();
+        }
+        context.append("Total items: ").append(allMeds.size()).append("\n");
+        context.append("Out of stock: ").append(outOfStock).append("\n");
+        context.append("Low stock (<10): ").append(lowStock).append("\n");
+        context.append("Total inventory value: ₹").append(String.format("%.2f", totalValue)).append("\n\n");
+
+        // Recent sales
+        LocalDate end = LocalDate.now();
+        LocalDate start = end.minusDays(30);
+        Map<String, Integer> sales = billDAO.getItemizedSales(start, end);
+        context.append("## Recent Sales (Last 30 Days)\n");
+        sales.entrySet().stream().limit(30).forEach(entry -> context.append("- ").append(entry.getKey()).append(": ")
+                .append(entry.getValue()).append(" units\n"));
+
+        // Expiring items
+        List<Medicine> expiring = medicineDAO.getExpiringMedicines(60);
+        if (!expiring.isEmpty()) {
+            context.append("\n## Expiring Soon (60 Days)\n");
+            expiring.stream().limit(20)
+                    .forEach(m -> context.append("- ").append(m.getName()).append(" (Expiry: ").append(m.getExpiry())
+                            .append(", Stock: ").append(m.getStock()).append(")\n"));
+        }
+
+        return aiOrchestrator.localQueryWithContext(question, context.toString());
     }
 }

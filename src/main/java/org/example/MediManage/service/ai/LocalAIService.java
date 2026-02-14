@@ -7,18 +7,37 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
+/**
+ * HTTP client for the Python AI Engine (localhost:5000).
+ * Handles chat, model loading, downloading, and model management.
+ */
 public class LocalAIService implements AIService {
-    private static final String API_URL = "http://127.0.0.1:5000/chat";
-    private static final String HEALTH_URL = "http://127.0.0.1:5000/health";
+    private static final String BASE_URL = "http://127.0.0.1:5000";
+    private static final String API_URL = BASE_URL + "/chat";
+    private static final String RAG_URL = BASE_URL + "/chat/rag";
+    private static final String HEALTH_URL = BASE_URL + "/health";
     private final HttpClient client;
 
     public LocalAIService() {
         this.client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10)) // Increased timeout for loading
+                .connectTimeout(Duration.ofSeconds(10))
                 .build();
         loadModel(); // Trigger load on startup
     }
+
+    /** Constructor without auto-loading (for use as utility client). */
+    public LocalAIService(boolean autoLoad) {
+        this.client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
+        if (autoLoad) {
+            loadModel();
+        }
+    }
+
+    // ======================== MODEL LOADING ========================
 
     public void loadModel() {
         try {
@@ -48,7 +67,7 @@ public class LocalAIService implements AIService {
             json.put("hardware_config", config);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:5000/load_model"))
+                    .uri(URI.create(BASE_URL + "/load_model"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
                     .build();
@@ -66,6 +85,34 @@ public class LocalAIService implements AIService {
             e.printStackTrace();
         }
     }
+
+    /** Load a specific model by path and hardware config. */
+    public void loadModel(String modelPath, String hardwareConfig) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("model_path", modelPath);
+            json.put("hardware_config", hardwareConfig);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/load_model"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+                    .build();
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        if (response.statusCode() == 200) {
+                            System.out.println("Model loaded: " + response.body());
+                        } else {
+                            System.err.println("Failed to load model: " + response.body());
+                        }
+                    });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ======================== CHAT ========================
 
     @Override
     public CompletableFuture<String> chat(String prompt) {
@@ -93,19 +140,50 @@ public class LocalAIService implements AIService {
                 });
     }
 
-    public void startDownload(String repoId, String filename) {
+    /**
+     * Chat with business context (RAG). Java injects DB data as context
+     * so the local model can reason over real inventory/sales/expiry data.
+     */
+    public CompletableFuture<String> chatWithContext(String prompt, String businessContext) {
+        JSONObject json = new JSONObject();
+        json.put("prompt", prompt);
+        json.put("context", businessContext);
+        json.put("use_search", false);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(RAG_URL))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+                .build();
+
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() == 200) {
+                        return new JSONObject(response.body()).getString("response");
+                    } else {
+                        throw new RuntimeException("AI Engine RAG Error: " + response.statusCode());
+                    }
+                });
+    }
+
+    // ======================== DOWNLOAD MANAGEMENT ========================
+
+    public void startDownload(String repoId, String filename, String source) {
         try {
             JSONObject json = new JSONObject();
             json.put("repo_id", repoId);
             if (filename != null && !filename.isEmpty()) {
                 json.put("filename", filename);
             }
-            // Use a specific models directory in project or user home
+            if (source != null && !source.isEmpty()) {
+                json.put("source", source);
+            }
+            // Use a specific models directory in user home
             String localDir = System.getProperty("user.home") + "/MediManage/models";
             json.put("local_dir", localDir);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:5000/download_model"))
+                    .uri(URI.create(BASE_URL + "/download_model"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
                     .build();
@@ -122,7 +200,7 @@ public class LocalAIService implements AIService {
     public JSONObject getDownloadStatus() {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:5000/download_status"))
+                    .uri(URI.create(BASE_URL + "/download_status"))
                     .GET()
                     .build();
 
@@ -131,10 +209,102 @@ public class LocalAIService implements AIService {
                 return new JSONObject(response.body());
             }
         } catch (Exception e) {
+            // Server might not be running
+        }
+        return new JSONObject().put("status", "error").put("message", "AI Engine not reachable");
+    }
+
+    /**
+     * Cancel an ongoing download.
+     */
+    public void stopDownload() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/stop_download"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        System.out.println("Download stop requested: " + response.body());
+                    });
+        } catch (Exception e) {
             e.printStackTrace();
         }
-        return new JSONObject().put("status", "error");
     }
+
+    // ======================== MODEL MANAGEMENT (ComfyUI-Style)
+    // ========================
+
+    /**
+     * List all downloaded models from the models directory.
+     * Returns a JSONArray of model objects with name, path, format, size_mb.
+     */
+    public JSONArray listModels() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/list_models"))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return new JSONObject(response.body()).getJSONArray("models");
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to list models: " + e.getMessage());
+        }
+        return new JSONArray();
+    }
+
+    /**
+     * Get detailed info about a specific model.
+     */
+    public JSONObject getModelInfo(String modelPath) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("model_path", modelPath);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/model_info"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return new JSONObject(response.body());
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to get model info: " + e.getMessage());
+        }
+        return new JSONObject();
+    }
+
+    /**
+     * Delete a model from the local filesystem.
+     */
+    public boolean deleteModel(String modelPath) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("model_path", modelPath);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/delete_model"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            System.err.println("Failed to delete model: " + e.getMessage());
+        }
+        return false;
+    }
+
+    // ======================== HEALTH CHECK ========================
 
     @Override
     public boolean isAvailable() {

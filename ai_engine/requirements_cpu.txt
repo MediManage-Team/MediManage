@@ -1,0 +1,14 @@
+# MediManage AI — CPU Environment
+# For BitNet.cpp / llama.cpp inference (any CPU, no GPU required)
+
+# Core
+flask
+numpy
+requests
+tqdm
+huggingface_hub
+transformers
+duckduckgo-search
+
+# CPU inference — llama.cpp Python bindings
+llama-cpp-python

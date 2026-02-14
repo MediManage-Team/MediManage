@@ -11,6 +11,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import org.example.MediManage.service.ai.AIOrchestrator;
+import org.example.MediManage.service.ai.AIServiceProvider;
 
 public class AIController {
 
@@ -28,7 +29,7 @@ public class AIController {
     private final AIOrchestrator aiOrchestrator;
 
     public AIController() {
-        this.aiOrchestrator = new AIOrchestrator();
+        this.aiOrchestrator = AIServiceProvider.get().getOrchestrator();
     }
 
     @FXML

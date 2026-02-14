@@ -102,6 +102,16 @@
                                 </columnResizePolicy>
                             </TableView>
 
+                            <!-- Patient Care Assistant (Cloud AI) -->
+                            <TitledPane text="🤖 Patient Care Assistant (AI)" expanded="false" animated="true" style="-fx-font-weight: bold;">
+                                <VBox spacing="10" style="-fx-padding: 10;">
+                                    <ScrollPane fitToWidth="true" prefHeight="350" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent; -fx-background: #F8F9FA;">
+                                        <VBox fx:id="careProtocolContainer" spacing="8" style="-fx-padding: 10;"/>
+                                    </ScrollPane>
+                                    <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="38" style="-fx-background-color: linear-gradient(to right, #9c27b0, #6a1b9a); -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 13px; -fx-cursor: hand;"/>
+                                </VBox>
+                            </TitledPane>
+
                             <HBox alignment="CENTER_RIGHT" spacing="20">
                                 <Label text="Total:" style="-fx-font-size: 16px;"/>
                                 <Label fx:id="lblTotal" text="₹0.00" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: -fx-primary;"/>

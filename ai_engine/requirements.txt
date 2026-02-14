@@ -1,11 +1,24 @@
+# Core dependencies
 flask
-onnxruntime-gpu
-openvino
 numpy
 requests
-duckduckgo-search
+tqdm
+huggingface_hub
 transformers
-# Note: onnxruntime-genai
-huggingface_hub might need manual install depending on platform, but listing here for reference
-# pip install onnxruntime-genai-directml (for Windows DirectML)
-onnxruntime-genai
+duckduckgo-search
+
+# Agent optimization (Microsoft Agent Lightning — Linux only)
+# pip install agentlightning
+
+# GGUF / BitNet CPU inference (llama.cpp Python bindings)
+llama-cpp-python
+
+# Hardware acceleration (install the one matching your hardware)
+# For NVIDIA GPU:
+# pip install onnxruntime-gpu
+# For AMD NPU / DirectML:
+# pip install onnxruntime-genai-directml
+# For Intel NPU:
+# pip install openvino
+# For ONNX Runtime GenAI (generic):
+# pip install onnxruntime-genai

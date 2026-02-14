@@ -3,27 +3,50 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>
-<?import javafx.scene.text.Font?>
 
 <BorderPane xmlns="http://javafx.com/javafx"
-    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.ModelStoreController" prefHeight="600.0" prefWidth="800.0" style="-fx-background-color: #f4f6f8;">
+    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.ModelStoreController" prefHeight="650.0" prefWidth="900.0" style="-fx-background-color: #f4f6f8;">
 
     <top>
-        <VBox spacing="15" alignment="CENTER_LEFT" style="-fx-background-color: white; -fx-padding: 20; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 0, 5, 10, 0);">
+        <VBox spacing="10" alignment="CENTER_LEFT" style="-fx-background-color: white; -fx-padding: 20; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 0, 5, 10, 0);">
             <Label text="AI Model Store" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
-            <Label text="Download high-performance local models optimized for your hardware." style="-fx-text-fill: #666;"/>
-
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <TextField fx:id="searchField" promptText="Search Hugging Face Models..." HBox.hgrow="ALWAYS" style="-fx-padding: 10;"/>
-                <Button text="Search" onAction="#handleSearch" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-padding: 10 20;"/>
-            </HBox>
+            <Label text="Download, manage, and load local AI models for hardware-accelerated inference." style="-fx-text-fill: #666;"/>
         </VBox>
     </top>
 
     <center>
-        <ScrollPane fitToWidth="true" style="-fx-background-color: transparent; -fx-padding: 20;">
-            <TilePane fx:id="modelsContainer" hgap="20" vgap="20" style="-fx-background-color: transparent;"/>
-        </ScrollPane>
+        <TabPane fx:id="mainTabPane" tabClosingPolicy="UNAVAILABLE" style="-fx-padding: 10;">
+
+            <!-- Tab 1: Download Models -->
+            <Tab text="📥 Download Models">
+                <VBox spacing="15" style="-fx-padding: 15;">
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <TextField fx:id="searchField" promptText="Search Hugging Face Models..." HBox.hgrow="ALWAYS" style="-fx-padding: 10;"/>
+                        <Button text="Search" onAction="#handleSearch" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-padding: 10 20;"/>
+                    </HBox>
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
+                        <VBox fx:id="modelsContainer" spacing="20" style="-fx-background-color: transparent; -fx-padding: 5;"/>
+                    </ScrollPane>
+                </VBox>
+            </Tab>
+
+            <!-- Tab 2: Installed Models -->
+            <Tab text="💾 Installed Models">
+                <VBox spacing="15" style="-fx-padding: 15;">
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Label text="Models Directory:" style="-fx-font-weight: bold;"/>
+                        <Label fx:id="modelsDirLabel" text="~" style="-fx-text-fill: #666;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button text="Refresh" onAction="#handleRefreshInstalled" style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-padding: 8 16;"/>
+                        <Button text="Open Folder" onAction="#handleOpenModelsFolder" style="-fx-background-color: #757575; -fx-text-fill: white; -fx-padding: 8 16;"/>
+                    </HBox>
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
+                        <VBox fx:id="installedModelsContainer" spacing="10" style="-fx-padding: 5;"/>
+                    </ScrollPane>
+                </VBox>
+            </Tab>
+
+        </TabPane>
     </center>
 
     <bottom>

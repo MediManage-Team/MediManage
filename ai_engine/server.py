@@ -1,7 +1,12 @@
 import logging
 import threading
+import hashlib
+import os
+import signal
 from flask import Flask, request, jsonify
 from inference import engine
+import download_manager
+import hardware_detect
 
 app = Flask(__name__)
 
@@ -9,16 +14,92 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Thread-safe download progress state
+_progress_lock = threading.Lock()
+_download_progress = {"status": "idle", "percent": 0, "message": "", "speed": ""}
+_download_cancel = threading.Event()  # Set this to cancel a running download
+
+
+def _set_progress(data):
+    """Thread-safe update to download progress."""
+    global _download_progress
+    with _progress_lock:
+        _download_progress = data
+
+
+def _get_progress():
+    """Thread-safe read of download progress."""
+    with _progress_lock:
+        return dict(_download_progress)
+
+
+def _verify_checksums(model_path):
+    """Compute SHA-256 checksums for downloaded model files."""
+    checksums = {}
+    verify_extensions = {'.onnx', '.bin', '.safetensors', '.gguf', '.json', '.model', '.vocab'}
+
+    if os.path.isfile(model_path):
+        sha = _sha256_file(model_path)
+        checksums[os.path.basename(model_path)] = sha
+        logger.info(f"  ✓ {os.path.basename(model_path)}: {sha[:16]}...")
+    elif os.path.isdir(model_path):
+        for root, dirs, files in os.walk(model_path):
+            for f in sorted(files):
+                ext = os.path.splitext(f)[1].lower()
+                if ext in verify_extensions:
+                    fpath = os.path.join(root, f)
+                    sha = _sha256_file(fpath)
+                    rel = os.path.relpath(fpath, model_path)
+                    checksums[rel] = sha
+                    logger.info(f"  ✓ {rel}: {sha[:16]}...")
+
+    return checksums
+
+
+def _sha256_file(filepath, chunk_size=8192):
+    """Compute SHA-256 hash of a file."""
+    h = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# Default models directory
+MODELS_DIR = os.path.join(os.path.expanduser("~"), "MediManage", "models")
+
+
+# ======================== HEALTH ========================
+
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "running", "provider": engine.provider})
+    hw = hardware_detect.detect_hardware()
+    return jsonify({
+        "status": "running",
+        "provider": engine.provider,
+        "model_loaded": engine.provider is not None,
+        "backend": hw["backend"],
+        "device": hw["device_name"]
+    })
+
+
+@app.route('/hardware', methods=['GET'])
+def hardware():
+    """Return detected hardware and recommended inference backend."""
+    return jsonify(hardware_detect.get_hardware_info())
+
+
+# ======================== MODEL LOADING ========================
 
 @app.route('/load_model', methods=['POST'])
 def load_model():
     data = request.json
     model_path = data.get("model_path")
     hardware_config = data.get("hardware_config", "auto")
-    
+
     try:
         engine.load_model(model_path, hardware_config)
         return jsonify({"status": "success", "provider": engine.provider})
@@ -26,15 +107,18 @@ def load_model():
         logger.error(f"Error loading model: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+# ======================== CHAT / INFERENCE ========================
+
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.json
     prompt = data.get("prompt")
     use_search = data.get("use_search", False)
-    
+
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
-        
+
     try:
         response_text = engine.generate(prompt, use_search=use_search)
         return jsonify({"response": response_text})
@@ -42,113 +126,284 @@ def chat():
         logger.error(f"Inference error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/chat/rag', methods=['POST'])
+def chat_rag():
+    """Context-aware business query.
+    Java sends real DB data (inventory, sales, expiry) as 'context'
+    alongside the user prompt, giving the local model business awareness.
+    """
+    data = request.json
+    prompt = data.get("prompt", "")
+    context = data.get("context", "")
+    use_search = data.get("use_search", False)
+
+    if not prompt:
+        return jsonify({"error": "No prompt provided"}), 400
+
+    # Build augmented prompt with business context
+    augmented_prompt = prompt
+    if context:
+        augmented_prompt = (
+            "### Business Context (Real-time Data from Database)\n"
+            f"{context}\n\n"
+            "### User Query\n"
+            f"{prompt}\n\n"
+            "Analyze the business data above and answer the query. "
+            "Be specific with numbers, trends, and actionable recommendations."
+        )
+
+    try:
+        response_text = engine.generate(augmented_prompt, use_search=use_search)
+        return jsonify({"response": response_text, "context_used": bool(context)})
+    except Exception as e:
+        logger.error(f"RAG inference error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ======================== MODEL DOWNLOAD ========================
+
 @app.route('/download_model', methods=['POST'])
 def download_model():
     data = request.json
-    repo_id = data.get("repo_id")
-    filename = data.get("filename", "") 
-    local_dir = data.get("local_dir", "models")
-    
+    repo_id = data.get("repo_id", "")
+    filename = data.get("filename", "")
+    local_dir = data.get("local_dir", MODELS_DIR)
+    source = data.get("source", "")  # "huggingface", "ollama", "url", or auto-detect
+
     if not repo_id:
         return jsonify({"error": "No repo_id provided"}), 400
 
+    # Auto-detect source
+    if not source:
+        if repo_id.startswith("http://") or repo_id.startswith("https://"):
+            source = "url"
+        elif "/" in repo_id and "." not in repo_id.split("/")[0]:
+            source = "huggingface"
+        else:
+            source = "ollama"
+
     def download_task():
-        global download_progress
-        download_progress = {"status": "downloading", "percent": 0, "message": "Starting...", "speed": ""}
+        _download_cancel.clear()
+        download_manager.set_cancel_event(_download_cancel)
 
-        # Custom Tqdm to capture progress
-        import tqdm
-        # Patch both common locations
-        
-        class ProgressTqdm(tqdm.tqdm):
-            def update(self, n=1):
-                super().update(n)
-                if self.total and self.total > 0:
-                    pct = (self.n / self.total) * 100
-                    # Message format: "Downloading... 45% (100 MB / 200 MB)"
-                    download_progress["percent"] = round(pct, 1)
-                    download_progress["message"] = f"Downloading... {round(pct, 1)}% ({self.n / 1024 / 1024:.1f} MB / {self.total / 1024 / 1024:.1f} MB)"
-                else:
-                    download_progress["message"] = f"Downloading... {self.n / 1024 / 1024:.1f} MB"
-        
-        # Monkey patch broadly
-        tqdm.tqdm = ProgressTqdm
         try:
-            import tqdm.auto
-            tqdm.auto.tqdm = ProgressTqdm
-        except:
-            pass
-            
-        try:
-             import huggingface_hub.utils.tqdm as hf_tqdm
-             hf_tqdm.tqdm = ProgressTqdm
-        except:
-             pass
-        
-        try:
-            from huggingface_hub import snapshot_download, hf_hub_download
-            import os
-            
-            # Create dir
-            os.makedirs(local_dir, exist_ok=True)
-            model_name = repo_id.split("/")[-1]
-            
-            # Simplified logic:
-            if filename == "*":
-                target_path = os.path.join(local_dir, model_name)
-                download_progress["message"] = f"Starting full download for {model_name}..."
-                # local_dir_use_symlinks=False ensuring it acts like a normal download manager (files in folder)
-                snapshot_download(repo_id=repo_id, local_dir=target_path, local_dir_use_symlinks=False, resume_download=True)
-                
-            elif "*" in filename:
-                target_path = os.path.join(local_dir, model_name)
-                download_progress["message"] = f"Starting subset download for {model_name}..."
-                snapshot_download(repo_id=repo_id, local_dir=target_path, allow_patterns=filename, local_dir_use_symlinks=False, resume_download=True)
-            elif filename:
-                 target_path = os.path.join(local_dir, model_name) 
-                 download_progress["message"] = f"Downloading {filename}..."
-                 hf_hub_download(repo_id=repo_id, filename=filename, local_dir=target_path, local_dir_use_symlinks=False, resume_download=True)
+            if source == "huggingface":
+                target_path = download_manager.download_hf_model(
+                    repo_id, filename, local_dir, _set_progress
+                )
+            elif source == "ollama":
+                target_path = download_manager.download_ollama_model(
+                    repo_id, local_dir, _set_progress
+                )
+            elif source == "url":
+                target_path = download_manager.download_direct_url(
+                    repo_id, local_dir, _set_progress
+                )
             else:
-                 target_path = os.path.join(local_dir, model_name)
-                 download_progress["message"] = f"Starting full download for {model_name}..."
-                 snapshot_download(repo_id=repo_id, local_dir=target_path, local_dir_use_symlinks=False, resume_download=True)
-                 
-            download_progress = {"status": "completed", "percent": 100, "message": "Download Complete!", "path": target_path}
-            logger.info(f"Download complete: {target_path}")
-            
-        except Exception as e:
-            download_progress = {"status": "error", "percent": 0, "message": str(e)}
-            logger.error(f"Download failed: {e}")
-        finally:
-            # Restore original tqdm just in case
-            hf_tqdm.tqdm = original_tqdm
+                raise ValueError(f"Unknown source: {source}")
 
-    thread = threading.Thread(target=download_task)
+            # Checksum verification
+            _set_progress({
+                "status": "verifying",
+                "percent": 100,
+                "message": "Verifying checksums...",
+                "path": target_path
+            })
+
+            checksums = _verify_checksums(target_path)
+            checksum_summary = f"{len(checksums)} file(s) verified"
+
+            _set_progress({
+                "status": "completed",
+                "percent": 100,
+                "message": f"Download Complete! {checksum_summary}",
+                "path": target_path,
+                "checksums": checksums
+            })
+            logger.info(f"Download complete: {target_path} ({checksum_summary})")
+
+        except InterruptedError:
+            _set_progress({"status": "cancelled", "percent": 0, "message": "Download cancelled."})
+            logger.info("Download cancelled by user.")
+        except Exception as e:
+            _set_progress({"status": "error", "percent": 0, "message": str(e)})
+            logger.error(f"Download failed: {e}")
+
+    thread = threading.Thread(target=download_task, daemon=True)
     thread.start()
-    
-    return jsonify({"status": "started"})
+
+    return jsonify({"status": "started", "source": source})
+
 
 @app.route('/download_status', methods=['GET'])
 def download_status():
-    global download_progress
-    return jsonify(download_progress)
+    return jsonify(_get_progress())
+
+
+@app.route('/stop_download', methods=['POST'])
+def stop_download():
+    """Cancel an ongoing download."""
+    _download_cancel.set()
+    logger.info("Download cancellation requested.")
+    return jsonify({"status": "cancelling"})
+
+
+# ======================== MODEL MANAGEMENT (ComfyUI-Style) ========================
+
+@app.route('/list_models', methods=['GET'])
+def list_models():
+    """Scan models directory and return list of available models with metadata."""
+    models_dir = request.args.get("models_dir", MODELS_DIR)
+
+    if not os.path.exists(models_dir):
+        return jsonify({"models": [], "models_dir": models_dir})
+
+    models = []
+    try:
+        for entry in os.listdir(models_dir):
+            entry_path = os.path.join(models_dir, entry)
+            model_info = _scan_model(entry_path, entry)
+            if model_info:
+                models.append(model_info)
+    except Exception as e:
+        logger.error(f"Error listing models: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"models": models, "models_dir": models_dir})
+
+
+@app.route('/model_info', methods=['POST'])
+def model_info():
+    """Get detailed info about a specific model."""
+    data = request.json
+    model_path = data.get("model_path", "")
+
+    if not model_path or not os.path.exists(model_path):
+        return jsonify({"error": "Model path not found"}), 404
+
+    name = os.path.basename(model_path)
+    info = _scan_model(model_path, name)
+    if info:
+        # Add detailed file list
+        if os.path.isdir(model_path):
+            files = []
+            for root, dirs, filenames in os.walk(model_path):
+                for f in filenames:
+                    fp = os.path.join(root, f)
+                    files.append({
+                        "name": os.path.relpath(fp, model_path),
+                        "size_mb": round(os.path.getsize(fp) / 1024 / 1024, 2)
+                    })
+            info["files"] = files
+
+        # Check if currently loaded
+        info["is_loaded"] = (engine.provider is not None and
+                             hasattr(engine, '_current_model_path') and
+                             engine._current_model_path == model_path)
+
+        return jsonify(info)
+    return jsonify({"error": "Could not read model info"}), 500
+
+
+@app.route('/delete_model', methods=['POST'])
+def delete_model():
+    """Delete a model from the local filesystem."""
+    data = request.json
+    model_path = data.get("model_path", "")
+
+    if not model_path or not os.path.exists(model_path):
+        return jsonify({"error": "Model path not found"}), 404
+
+    # Safety: only allow deletion within the models directory
+    abs_model = os.path.abspath(model_path)
+    abs_models_dir = os.path.abspath(MODELS_DIR)
+    if not abs_model.startswith(abs_models_dir):
+        return jsonify({"error": "Cannot delete files outside models directory"}), 403
+
+    try:
+        import shutil
+        if os.path.isdir(model_path):
+            shutil.rmtree(model_path)
+        else:
+            os.remove(model_path)
+        logger.info(f"Deleted model: {model_path}")
+        return jsonify({"status": "deleted", "path": model_path})
+    except Exception as e:
+        logger.error(f"Delete failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _scan_model(path, name):
+    """Scan a model path and return metadata."""
+    if not os.path.exists(path):
+        return None
+
+    info = {
+        "name": name,
+        "path": path,
+        "format": "unknown",
+        "size_mb": 0
+    }
+
+    if os.path.isdir(path):
+        # Calculate total size
+        total_size = 0
+        for root, dirs, files in os.walk(path):
+            for f in files:
+                total_size += os.path.getsize(os.path.join(root, f))
+        info["size_mb"] = round(total_size / 1024 / 1024, 2)
+
+        # Detect format
+        dir_files = []
+        for root, dirs, files in os.walk(path):
+            dir_files.extend(files)
+
+        if "genai_config.json" in dir_files:
+            info["format"] = "ONNX GenAI"
+        elif any(f.endswith(".xml") for f in dir_files):
+            info["format"] = "OpenVINO"
+        elif any(f.endswith(".onnx") for f in dir_files):
+            info["format"] = "ONNX"
+        elif any(f.endswith(".gguf") for f in dir_files):
+            info["format"] = "GGUF"
+        else:
+            info["format"] = "HuggingFace"
+
+    elif os.path.isfile(path):
+        info["size_mb"] = round(os.path.getsize(path) / 1024 / 1024, 2)
+        if path.endswith(".xml"):
+            info["format"] = "OpenVINO"
+        elif path.endswith(".onnx"):
+            info["format"] = "ONNX"
+        elif path.endswith(".gguf"):
+            info["format"] = "GGUF"
+
+    return info
+
+
+# ======================== SHUTDOWN ========================
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
-    shutdown_func = request.environ.get('werkzeug.server.shutdown')
-    if shutdown_func is None:
-        # Fallback for other environments if needed, but we are using standard Flask dev server
-        import os, signal
+    """Gracefully shutdown the Flask server."""
+    logger.info("Shutdown requested...")
+
+    def _kill():
         os.kill(os.getpid(), signal.SIGINT)
-        return jsonify({"status": "shutting_down_fallback"})
-    
-    shutdown_func()
+
+    # Schedule kill after response is sent
+    timer = threading.Timer(0.5, _kill)
+    timer.daemon = True
+    timer.start()
+
     return jsonify({"status": "shutting_down"})
 
-# Global progress state
-download_progress = {"status": "idle", "percent": 0, "message": ""}
+
+# ======================== MAIN ========================
 
 if __name__ == '__main__':
     logger.info("Starting AI Engine Server on port 5000...")
-    # debug=False is important for signal handling in some contexts, but standard run is fine
+    logger.info(f"Models directory: {MODELS_DIR}")
+    os.makedirs(MODELS_DIR, exist_ok=True)
     app.run(host='127.0.0.1', port=5000)

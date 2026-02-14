@@ -1,0 +1,17 @@
+# MediManage AI — AMD NPU Environment (Ryzen AI / DirectML)
+# For AMD Ryzen AI NPU and Radeon GPU acceleration
+
+# Core
+flask
+numpy
+requests
+tqdm
+huggingface_hub
+transformers
+duckduckgo-search
+
+# AMD NPU / DirectML inference
+onnxruntime-genai-directml
+
+# CPU fallback for GGUF models
+llama-cpp-python

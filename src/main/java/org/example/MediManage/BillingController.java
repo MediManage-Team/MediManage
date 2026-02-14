@@ -51,6 +51,10 @@ public class BillingController {
 
     @FXML
     private Button btnCheckout;
+    @FXML
+    private javafx.scene.layout.VBox careProtocolContainer;
+    @FXML
+    private Button btnGenerateCareProtocol;
 
     private MedicineDAO medicineDAO = new MedicineDAO();
     private CustomerDAO customerDAO = new CustomerDAO();
@@ -378,6 +382,160 @@ public class BillingController {
                     });
                     return null;
                 });
+    }
+
+    @FXML
+    private void handleGenerateCareProtocol() {
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add items to the bill first.");
+            return;
+        }
+
+        btnGenerateCareProtocol.setDisable(true);
+        btnGenerateCareProtocol.setText("⏳ Generating...");
+        careProtocolContainer.getChildren().clear();
+        javafx.scene.control.Label loadingLabel = new javafx.scene.control.Label(
+                "🔄 Generating AI Care Protocol...\nThis may take a few seconds.");
+        loadingLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #666; -fx-padding: 20;");
+        careProtocolContainer.getChildren().add(loadingLabel);
+
+        StringBuilder medicineList = new StringBuilder();
+        billList.forEach(item -> medicineList.append("- ").append(item.getName()).append("\n"));
+
+        String prompt = "I am a Pharmacist. Create a 'Patient Care Protocol' for the following medicines:\n" +
+                medicineList.toString() + "\n" +
+                "For EACH medicine, provide these sections with EXACT section names as headers:\n" +
+                "Substitutes\nMechanism\nUsage Guide\nDietary Advice\nSide Effects\nSafety Check\nStop Protocol\n\n" +
+                "Also include a 'Combinational Safety' section for Drug-Drug Interactions.\n" +
+                "Format each section as: 'SectionName: content on same line'. " +
+                "Start each medicine with its full name on its own line. " +
+                "Do NOT use markdown formatting like ** or #.";
+
+        org.example.MediManage.service.ai.AIOrchestrator aiOrchestrator = org.example.MediManage.service.ai.AIServiceProvider
+                .get().getOrchestrator();
+
+        org.example.MediManage.service.ai.CloudAIService cloud = org.example.MediManage.service.ai.AIServiceProvider
+                .get().getCloudService();
+        String providerInfo = cloud.getProviderName() + " — " + cloud.getActiveModel();
+
+        aiOrchestrator.cloudQuery(prompt)
+                .thenAccept(protocol -> {
+                    javafx.application.Platform.runLater(() -> {
+                        buildCareProtocolCards(protocol, providerInfo);
+                        btnGenerateCareProtocol.setDisable(false);
+                        btnGenerateCareProtocol.setText("✨ Generate Care Protocol");
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        careProtocolContainer.getChildren().clear();
+                        javafx.scene.control.Label errLabel = new javafx.scene.control.Label(
+                                "❌ Error: " + ex.getMessage()
+                                        + "\n\n💡 Tip: Configure your Cloud AI API key in Settings.");
+                        errLabel.setWrapText(true);
+                        errLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #D32F2F; -fx-padding: 15;");
+                        careProtocolContainer.getChildren().add(errLabel);
+                        btnGenerateCareProtocol.setDisable(false);
+                        btnGenerateCareProtocol.setText("✨ Generate Care Protocol");
+                    });
+                    return null;
+                });
+    }
+
+    private void buildCareProtocolCards(String raw, String providerInfo) {
+        careProtocolContainer.getChildren().clear();
+        String text = raw.replaceAll("\\*\\*(.+?)\\*\\*", "$1").replaceAll("(?m)^#{1,3}\\s*", "").trim();
+
+        // Provider header
+        javafx.scene.layout.VBox headerCard = new javafx.scene.layout.VBox(3);
+        headerCard.setStyle(
+                "-fx-background-color: #EDE7F6; -fx-padding: 12; -fx-background-radius: 6; -fx-border-color: #9c27b0; -fx-border-radius: 6; -fx-border-width: 0 0 0 4;");
+        javafx.scene.control.Label headerTitle = new javafx.scene.control.Label("🏥 Patient Care Protocol");
+        headerTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #4A148C;");
+        javafx.scene.control.Label headerProv = new javafx.scene.control.Label("☁️ " + providerInfo);
+        headerProv.setStyle("-fx-font-size: 11px; -fx-text-fill: #7B1FA2;");
+        headerCard.getChildren().addAll(headerTitle, headerProv);
+        careProtocolContainer.getChildren().add(headerCard);
+
+        java.util.Map<String, String[]> sc = new java.util.LinkedHashMap<>();
+        sc.put("substitutes", new String[] { "#2E7D32", "#E8F5E9", "#4CAF50" });
+        sc.put("mechanism", new String[] { "#00695C", "#E0F2F1", "#009688" });
+        sc.put("usage guide", new String[] { "#BF360C", "#E8F5E9", "#4CAF50" });
+        sc.put("dietary advice", new String[] { "#E65100", "#FFF3E0", "#FF9800" });
+        sc.put("side effects", new String[] { "#B71C1C", "#FFFDE7", "#FFC107" });
+        sc.put("safety check", new String[] { "#1B5E20", "#FCE4EC", "#E91E63" });
+        sc.put("stop protocol", new String[] { "#C62828", "#FFEBEE", "#F44336" });
+        sc.put("special precautions", new String[] { "#4A148C", "#F3E5F5", "#9C27B0" });
+        sc.put("monitoring", new String[] { "#1A237E", "#E8EAF6", "#3F51B5" });
+        sc.put("combinational safety", new String[] { "#B71C1C", "#FBE9E7", "#FF5722" });
+        sc.put("drug-drug interaction", new String[] { "#B71C1C", "#FBE9E7", "#FF5722" });
+
+        String[] lines = text.split("\\n");
+        String currentSection = null;
+        StringBuilder currentContent = new StringBuilder();
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty())
+                continue;
+            String lowerLine = trimmed.toLowerCase().replaceFirst("^\\d+\\.?\\s*", "");
+            String matchedSection = null;
+            for (String key : sc.keySet()) {
+                if (lowerLine.startsWith(key)) {
+                    matchedSection = key;
+                    break;
+                }
+            }
+            if (matchedSection != null) {
+                if (currentSection != null && currentContent.length() > 0) {
+                    careProtocolContainer.getChildren()
+                            .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
+                }
+                currentSection = matchedSection;
+                int colonIdx = trimmed.indexOf(':');
+                currentContent = new StringBuilder(
+                        colonIdx >= 0 && colonIdx < trimmed.length() - 1 ? trimmed.substring(colonIdx + 1).trim() : "");
+            } else if (trimmed.matches("^[A-Z].*(?:Tablet|Capsule|Syrup|Injection|Cream|Drops|Gel|mg|ml|Sugar Free).*$")
+                    && !trimmed.contains(":")) {
+                if (currentSection != null && currentContent.length() > 0) {
+                    careProtocolContainer.getChildren()
+                            .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
+                    currentSection = null;
+                    currentContent = new StringBuilder();
+                }
+                javafx.scene.control.Label medLabel = new javafx.scene.control.Label("💊 " + trimmed);
+                medLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 10 0 2 0;");
+                careProtocolContainer.getChildren().add(medLabel);
+            } else {
+                if (currentContent.length() > 0)
+                    currentContent.append("\n");
+                currentContent.append(trimmed);
+            }
+        }
+        if (currentSection != null && currentContent.length() > 0) {
+            careProtocolContainer.getChildren()
+                    .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
+        }
+        javafx.scene.control.Label footer = new javafx.scene.control.Label("⚕️ Generated by MediManage AI");
+        footer.setStyle("-fx-font-size: 10px; -fx-text-fill: #999; -fx-padding: 8 0 0 0;");
+        careProtocolContainer.getChildren().add(footer);
+    }
+
+    private javafx.scene.layout.VBox createSectionCard(String sectionKey, String content,
+            java.util.Map<String, String[]> colorMap) {
+        String[] colors = colorMap.getOrDefault(sectionKey, new String[] { "#333", "#F5F5F5", "#9E9E9E" });
+        javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(4);
+        card.setStyle("-fx-background-color: " + colors[1]
+                + "; -fx-padding: 10 12; -fx-background-radius: 5; -fx-border-color: " + colors[2]
+                + "; -fx-border-radius: 5; -fx-border-width: 0 0 0 4;");
+        String displayName = sectionKey.substring(0, 1).toUpperCase() + sectionKey.substring(1);
+        javafx.scene.control.Label titleLabel = new javafx.scene.control.Label(displayName);
+        titleLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + colors[0] + ";");
+        javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(content);
+        bodyLabel.setWrapText(true);
+        bodyLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #333;");
+        card.getChildren().addAll(titleLabel, bodyLabel);
+        return card;
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {
