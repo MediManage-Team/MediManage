@@ -5,7 +5,7 @@
 
 <VBox alignment="CENTER"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.PrescriptionsController" spacing="20">
-    <Label text="Prescription Queue" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
-    <Label fx:id="lblMessage" style="-fx-font-size: 16px;"/>
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.PrescriptionsController" spacing="20" styleClass="dark-panel">
+    <Label text="Prescription Queue" styleClass="page-title"/>
+    <Label fx:id="lblMessage" styleClass="text-muted" style="-fx-font-size: 16px;"/>
 </VBox>

@@ -3,93 +3,95 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" spacing="20" style="-fx-padding: 20;">
-    <Label text="System Settings" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
+<ScrollPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
+    <VBox spacing="20" styleClass="dark-panel">
+        <Label text="System Settings" styleClass="page-title"/>
 
-    <!-- Local AI Configuration -->
-    <TitledPane text="Local AI Configuration" collapsible="false">
-        <VBox spacing="10">
-            <Button text="Download New Models (Model Store)" onAction="#handleOpenModelStore" style="-fx-background-color: #9c27b0; -fx-text-fill: white;"/>
-            <Label text="Current Model Path: (.onnx or .xml)" style="-fx-font-weight: bold;"/>
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <TextField fx:id="modelPathField" promptText="Select local model file..." HBox.hgrow="ALWAYS"/>
-                <Button text="Browse" onAction="#handleBrowseModel"/>
-            </HBox>
+        <!-- Local AI Configuration -->
+        <TitledPane text="Local AI Configuration" collapsible="false">
+            <VBox spacing="10">
+                <Button text="Download New Models (Model Store)" onAction="#handleOpenModelStore" styleClass="button-purple"/>
+                <Label text="Current Model Path: (.onnx or .xml)" style="-fx-font-weight: bold;"/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <TextField fx:id="modelPathField" promptText="Select local model file..." HBox.hgrow="ALWAYS"/>
+                    <Button text="Browse" onAction="#handleBrowseModel"/>
+                </HBox>
 
-            <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
-            <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
-            <Label text="Select 'Auto' to let the system decide, or force a specific provider." style="-fx-text-fill: gray; -fx-font-size: 10px;"/>
-        </VBox>
-    </TitledPane>
+                <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
+                <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
+                <Label text="Select 'Auto' to let the system decide, or force a specific provider." styleClass="text-muted"/>
+            </VBox>
+        </TitledPane>
 
-    <!-- Cloud AI Configuration -->
-    <TitledPane text="Cloud AI Configuration" collapsible="false">
-        <VBox spacing="12">
-            <Label text="Select your Cloud AI provider and model for Care Protocols and medical tasks." style="-fx-text-fill: #666; -fx-font-size: 11px;"/>
+        <!-- Cloud AI Configuration -->
+        <TitledPane text="Cloud AI Configuration" collapsible="false">
+            <VBox spacing="12">
+                <Label text="Select your Cloud AI provider and model for Care Protocols and medical tasks." styleClass="text-muted"/>
 
-            <!-- Provider + Model Selection -->
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <VBox spacing="3" HBox.hgrow="ALWAYS">
-                    <Label text="Provider" style="-fx-font-weight: bold;"/>
-                    <ComboBox fx:id="providerCombo" promptText="Select Provider" maxWidth="Infinity"/>
-                </VBox>
-                <VBox spacing="3" HBox.hgrow="ALWAYS">
-                    <Label text="Model" style="-fx-font-weight: bold;"/>
-                    <ComboBox fx:id="modelCombo" promptText="Select Model" maxWidth="Infinity"/>
-                </VBox>
-            </HBox>
+                <!-- Provider + Model Selection -->
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <VBox spacing="3" HBox.hgrow="ALWAYS">
+                        <Label text="Provider" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="providerCombo" promptText="Select Provider" maxWidth="Infinity"/>
+                    </VBox>
+                    <VBox spacing="3" HBox.hgrow="ALWAYS">
+                        <Label text="Model" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="modelCombo" promptText="Select Model" maxWidth="Infinity"/>
+                    </VBox>
+                </HBox>
 
-            <Separator/>
+                <Separator/>
 
-            <!-- API Keys per Provider -->
-            <Label text="API Keys" style="-fx-font-weight: bold; -fx-font-size: 13px;"/>
-            <Label text="Enter API keys for each provider you want to use. Keys are stored locally." style="-fx-text-fill: #888; -fx-font-size: 10px;"/>
+                <!-- API Keys per Provider -->
+                <Label text="API Keys" style="-fx-font-weight: bold; -fx-font-size: 13px;"/>
+                <Label text="Enter API keys for each provider you want to use. Keys are stored locally." styleClass="text-muted"/>
 
-            <GridPane hgap="10" vgap="8">
-                <Label text="Gemini" style="-fx-font-weight: bold; -fx-text-fill: #4285F4;" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                <PasswordField fx:id="geminiKeyField" promptText="AIzaSy..." GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                <Label text="FREE" style="-fx-text-fill: #4CAF50; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+                <GridPane hgap="10" vgap="8">
+                    <Label text="Gemini" style="-fx-font-weight: bold; -fx-text-fill: #4285F4;" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                    <PasswordField fx:id="geminiKeyField" promptText="AIzaSy..." GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                    <Label text="FREE" style="-fx-text-fill: #5fe6b3; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
 
-                <Label text="Groq" style="-fx-font-weight: bold; -fx-text-fill: #F55036;" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                <PasswordField fx:id="groqKeyField" promptText="gsk_..." GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                <Label text="FREE" style="-fx-text-fill: #4CAF50; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+                    <Label text="Groq" style="-fx-font-weight: bold; -fx-text-fill: #F55036;" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                    <PasswordField fx:id="groqKeyField" promptText="gsk_..." GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                    <Label text="FREE" style="-fx-text-fill: #5fe6b3; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
 
-                <Label text="OpenRouter" style="-fx-font-weight: bold; -fx-text-fill: #6366F1;" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                <PasswordField fx:id="openrouterKeyField" promptText="sk-or-..." GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                <Label text="FREE" style="-fx-text-fill: #4CAF50; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+                    <Label text="OpenRouter" style="-fx-font-weight: bold; -fx-text-fill: #6366F1;" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                    <PasswordField fx:id="openrouterKeyField" promptText="sk-or-..." GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                    <Label text="FREE" style="-fx-text-fill: #5fe6b3; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
 
-                <Label text="OpenAI" style="-fx-font-weight: bold; -fx-text-fill: #10A37F;" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
-                <PasswordField fx:id="openaiKeyField" promptText="sk-..." GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                <Label text="PAID" style="-fx-text-fill: #FF9800; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="3" GridPane.columnIndex="2"/>
+                    <Label text="OpenAI" style="-fx-font-weight: bold; -fx-text-fill: #10A37F;" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                    <PasswordField fx:id="openaiKeyField" promptText="sk-..." GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                    <Label text="PAID" style="-fx-text-fill: #e8c66a; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="3" GridPane.columnIndex="2"/>
 
-                <Label text="Claude" style="-fx-font-weight: bold; -fx-text-fill: #D97706;" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
-                <PasswordField fx:id="claudeKeyField" promptText="sk-ant-..." GridPane.rowIndex="4" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                <Label text="PAID" style="-fx-text-fill: #FF9800; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="4" GridPane.columnIndex="2"/>
+                    <Label text="Claude" style="-fx-font-weight: bold; -fx-text-fill: #D97706;" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                    <PasswordField fx:id="claudeKeyField" promptText="sk-ant-..." GridPane.rowIndex="4" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                    <Label text="PAID" style="-fx-text-fill: #e8c66a; -fx-font-size: 10px; -fx-font-weight: bold;" GridPane.rowIndex="4" GridPane.columnIndex="2"/>
 
-                <columnConstraints>
-                    <ColumnConstraints minWidth="80" prefWidth="85"/>
-                    <ColumnConstraints hgrow="ALWAYS"/>
-                    <ColumnConstraints minWidth="35" prefWidth="40"/>
-                </columnConstraints>
-            </GridPane>
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="80" prefWidth="85"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                        <ColumnConstraints minWidth="35" prefWidth="40"/>
+                    </columnConstraints>
+                </GridPane>
 
-            <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
-                <Button text="Save Settings" onAction="#handleSaveSettings" style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;"/>
-            </HBox>
-        </VBox>
-    </TitledPane>
+                <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
+                    <Button text="Save Settings" onAction="#handleSaveSettings" styleClass="button-success"/>
+                </HBox>
+            </VBox>
+        </TitledPane>
 
-    <TitledPane text="Python Environments" collapsible="false">
-        <VBox spacing="10">
-            <Label text="Manage separate environments for each hardware backend." style="-fx-text-fill: #666;"/>
-            <ScrollPane fitToWidth="true" style="-fx-background-color: transparent; -fx-max-height: 250px;">
-                <VBox fx:id="envContainer" spacing="10" style="-fx-padding: 5;"/>
-            </ScrollPane>
-        </VBox>
-    </TitledPane>
+        <TitledPane text="Python Environments" collapsible="false">
+            <VBox spacing="10">
+                <Label text="Manage separate environments for each hardware backend." styleClass="text-muted"/>
+                <ScrollPane fitToWidth="true" style="-fx-max-height: 250px;">
+                    <VBox fx:id="envContainer" spacing="10" style="-fx-padding: 5;"/>
+                </ScrollPane>
+            </VBox>
+        </TitledPane>
 
-    <TitledPane text="Installation Logs" expanded="false">
-        <TextArea fx:id="logConsole" editable="false" wrapText="true" prefHeight="150" style="-fx-font-family: 'Consolas', monospace; -fx-font-size: 11px;"/>
-    </TitledPane>
-</VBox>
+        <TitledPane text="Installation Logs" expanded="false">
+            <TextArea fx:id="logConsole" editable="false" wrapText="true" prefHeight="150" styleClass="console-text"/>
+        </TitledPane>
+    </VBox>
+</ScrollPane>

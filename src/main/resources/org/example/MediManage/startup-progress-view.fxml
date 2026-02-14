@@ -5,14 +5,14 @@
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.StartupProgressController" spacing="10" style="-fx-padding: 15; -fx-background-color: #1a1a2e;">
+<VBox xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.StartupProgressController" spacing="10" style="-fx-padding: 15; -fx-background-color: #1e1a38;">
 
-    <Label fx:id="statusLabel" text="⚙️ Setting up AI Environment..." style="-fx-text-fill: #e0e0e0; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+    <Label fx:id="statusLabel" text="⚙️ Setting up AI Environment..." style="-fx-text-fill: #e6f0ff; -fx-font-size: 14px; -fx-font-weight: bold;"/>
 
-    <ProgressBar fx:id="progressBar" prefWidth="460" progress="-1" style="-fx-accent: #4CAF50;"/>
+    <ProgressBar fx:id="progressBar" prefWidth="460" progress="-1" style="-fx-accent: #5fe6b3;"/>
 
-    <Label text="⏳ First-time setup — sorry for the inconvenience! This window will close automatically." style="-fx-text-fill: #888; -fx-font-size: 10px; -fx-wrap-text: true;" wrapText="true"/>
+    <Label text="⏳ First-time setup — sorry for the inconvenience! This window will close automatically." style="-fx-text-fill: #4e4b6c; -fx-font-size: 10px; -fx-wrap-text: true;" wrapText="true"/>
 
-    <TextArea fx:id="logArea" editable="false" wrapText="true" prefHeight="240" prefWidth="460" style="-fx-control-inner-background: #0d1117; -fx-text-fill: #c9d1d9; -fx-font-family: 'Consolas', 'Courier New', monospace; -fx-font-size: 11px;"/>
+    <TextArea fx:id="logArea" editable="false" wrapText="true" prefHeight="240" prefWidth="460" styleClass="console-text"/>
 
 </VBox>

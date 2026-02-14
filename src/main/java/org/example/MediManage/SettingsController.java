@@ -168,7 +168,7 @@ public class SettingsController {
 
         javafx.scene.layout.HBox card = new javafx.scene.layout.HBox(10);
         card.setStyle(
-                "-fx-background-color: white; -fx-padding: 10; -fx-background-radius: 5; -fx-border-color: #e0e0e0; -fx-border-radius: 5;");
+                "-fx-background-color: #0f1724; -fx-padding: 10; -fx-background-radius: 8; -fx-border-color: #2d3555; -fx-border-radius: 8;");
         card.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
         javafx.scene.layout.VBox infoBox = new javafx.scene.layout.VBox(3);
@@ -177,7 +177,7 @@ public class SettingsController {
 
         javafx.scene.control.Label statusLabel = new javafx.scene.control.Label(
                 installed ? "Installed" : "Not Installed");
-        statusLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: " + (installed ? "#4CAF50" : "#999"));
+        statusLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: " + (installed ? "#5fe6b3" : "#4e4b6c"));
 
         infoBox.getChildren().addAll(nameLabel, statusLabel);
 
@@ -189,28 +189,28 @@ public class SettingsController {
         if (installed) {
             if (!isActive) {
                 javafx.scene.control.Button activateBtn = new javafx.scene.control.Button("Set Active");
-                activateBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-size: 10px;");
+                activateBtn.setStyle("-fx-background-color: #00d4ff; -fx-text-fill: #061427; -fx-font-size: 10px;");
                 activateBtn.setOnAction(e -> handleActivateEnv(name));
                 card.getChildren().add(activateBtn);
             } else {
                 javafx.scene.control.Label activeLabel = new javafx.scene.control.Label("ACTIVE");
                 activeLabel.setStyle(
-                        "-fx-background-color: #E8F5E9; -fx-text-fill: #2E7D32; -fx-padding: 3 8; -fx-background-radius: 3; -fx-font-weight: bold; -fx-font-size: 10px;");
+                        "-fx-background-color: #0f2920; -fx-text-fill: #5fe6b3; -fx-padding: 3 8; -fx-background-radius: 5; -fx-font-weight: bold; -fx-font-size: 10px;");
                 card.getChildren().add(activeLabel);
             }
 
             javafx.scene.control.Button updateBtn = new javafx.scene.control.Button("Update");
-            updateBtn.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 10px;");
+            updateBtn.setStyle("-fx-background-color: #e8c66a; -fx-text-fill: #061427; -fx-font-size: 10px;");
             updateBtn.setOnAction(e -> handleInstallEnv(name));
             card.getChildren().add(updateBtn);
 
             javafx.scene.control.Button deleteBtn = new javafx.scene.control.Button("🗑");
-            deleteBtn.setStyle("-fx-background-color: #FFEBEE; -fx-text-fill: #D32F2F; -fx-font-size: 10px;");
+            deleteBtn.setStyle("-fx-background-color: #ff6b6b30; -fx-text-fill: #ff6b6b; -fx-font-size: 10px;");
             deleteBtn.setOnAction(e -> handleDeleteEnv(name));
             card.getChildren().add(deleteBtn);
         } else {
             javafx.scene.control.Button installBtn = new javafx.scene.control.Button("Install");
-            installBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 10px;");
+            installBtn.setStyle("-fx-background-color: #5fe6b3; -fx-text-fill: #061427; -fx-font-size: 10px;");
             installBtn.setOnAction(e -> handleInstallEnv(name));
             card.getChildren().add(installBtn);
         }

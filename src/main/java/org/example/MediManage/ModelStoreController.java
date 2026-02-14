@@ -53,8 +53,8 @@ public class ModelStoreController {
         // Create Stop button programmatically and add to bottom bar
         if (statusLabel != null && statusLabel.getParent() instanceof VBox bottomBar) {
             stopButton = new Button("⏹ Stop Download");
-            stopButton.setStyle(
-                    "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 6 16;");
+            stopButton.getStyleClass().add("button-danger");
+            stopButton.setStyle("-fx-font-weight: bold;");
             stopButton.setVisible(false);
             stopButton.setManaged(false);
             stopButton.setOnAction(e -> handleStopDownload());
@@ -182,19 +182,19 @@ public class ModelStoreController {
 
         addSection("\uD83D\uDFE2  NVIDIA GPU (CUDA)",
                 "onnxruntime-gpu  \u2022  Requires NVIDIA GPU with 4GB+ VRAM",
-                "#1b5e20", "#e8f5e9", gpu);
+                "#5fe6b3", "#0f2920", gpu);
 
         addSection("\uD83D\uDD35  AMD NPU (Ryzen AI / DirectML)",
                 "onnxruntime-genai-directml  \u2022  AMD Ryzen AI, Radeon RX",
-                "#0d47a1", "#e3f2fd", amd);
+                "#7aa2f7", "#0f1530", amd);
 
         addSection("\uD83D\uDFE3  Intel NPU (OpenVINO / Intel AI)",
                 "openvino  \u2022  Intel Core Ultra NPU, Arc GPU",
-                "#4a148c", "#f3e5f5", intel);
+                "#bb9af7", "#1a0f30", intel);
 
         addSection("\uD83D\uDFE0  CPU (BitNet.cpp / llama.cpp)",
                 "llama-cpp-python  \u2022  Any CPU, no GPU required",
-                "#e65100", "#fff3e0", cpu);
+                "#e8c66a", "#1a1a0f", cpu);
     }
 
     private void addSection(String title, String subtitle, String textColor, String bgColor,
@@ -240,8 +240,8 @@ public class ModelStoreController {
     private VBox createDownloadCard(ModelCard model) {
         VBox card = new VBox(8);
         card.setStyle(
-                "-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 10; " +
-                        "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.08), 8, 0, 0, 2);");
+                "-fx-background-color: #0f1724; -fx-padding: 15; -fx-background-radius: 10; " +
+                        "-fx-border-color: #2d3555; -fx-border-radius: 10; -fx-border-width: 1;");
         card.setPrefWidth(210);
         card.setMinWidth(210);
 
@@ -251,16 +251,16 @@ public class ModelStoreController {
         String badgeColor;
         switch (model.hardware) {
             case "gpu":
-                badgeColor = "#e8f5e9; -fx-text-fill: #1b5e20";
+                badgeColor = "#0f2920; -fx-text-fill: #5fe6b3";
                 break;
             case "npu_amd":
-                badgeColor = "#e3f2fd; -fx-text-fill: #0d47a1";
+                badgeColor = "#0f1530; -fx-text-fill: #7aa2f7";
                 break;
             case "npu_intel":
-                badgeColor = "#f3e5f5; -fx-text-fill: #4a148c";
+                badgeColor = "#1a0f30; -fx-text-fill: #bb9af7";
                 break;
             default:
-                badgeColor = "#fff3e0; -fx-text-fill: #e65100";
+                badgeColor = "#1a1a0f; -fx-text-fill: #e8c66a";
                 break;
         }
         badge.setStyle(
@@ -268,30 +268,30 @@ public class ModelStoreController {
                         "-fx-padding: 3 8; -fx-background-radius: 5; -fx-font-size: 10px; -fx-font-weight: bold;");
         Label formatBadge = new Label(model.format);
         formatBadge.setStyle(
-                "-fx-background-color: #fce4ec; -fx-text-fill: #c62828; " +
+                "-fx-background-color: #200f20; -fx-text-fill: #ff6b6b; " +
                         "-fx-padding: 3 8; -fx-background-radius: 5; -fx-font-size: 10px; -fx-font-weight: bold;");
         badgeRow.getChildren().addAll(badge, formatBadge);
 
         Label title = new Label(model.name);
-        title.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #333;");
+        title.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #e6f0ff;");
 
         Label desc = new Label(model.description);
         desc.setWrapText(true);
-        desc.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+        desc.setStyle("-fx-text-fill: #bfc9e6; -fx-font-size: 11px;");
         desc.setMaxHeight(40);
 
         // Size + repo row
         HBox infoRow = new HBox(8);
         infoRow.setAlignment(Pos.CENTER_LEFT);
         Label sizeLabel = new Label("\uD83D\uDCBE " + model.sizeInfo);
-        sizeLabel.setStyle("-fx-text-fill: #1976d2; -fx-font-size: 11px; -fx-font-weight: bold;");
+        sizeLabel.setStyle("-fx-text-fill: #00d4ff; -fx-font-size: 11px; -fx-font-weight: bold;");
         Label repoLabel = new Label(model.repoId);
-        repoLabel.setStyle("-fx-text-fill: #999; -fx-font-size: 9px;");
+        repoLabel.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 9px;");
         infoRow.getChildren().addAll(sizeLabel, repoLabel);
 
         Button downloadBtn = new Button("\u2B07 Download");
         downloadBtn.setStyle(
-                "-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 12px;");
+                "-fx-background-color: #5fe6b3; -fx-text-fill: #061427; -fx-cursor: hand; -fx-font-weight: bold; -fx-font-size: 12px;");
         downloadBtn.setMaxWidth(Double.MAX_VALUE);
         downloadBtn.setOnAction(e -> startDownload(model));
 
@@ -384,7 +384,7 @@ public class ModelStoreController {
             Platform.runLater(() -> {
                 if (models.length() == 0) {
                     Label empty = new Label("No models installed yet. Download one from the 'Download Models' tab.");
-                    empty.setStyle("-fx-text-fill: #999; -fx-font-size: 14px; -fx-padding: 40;");
+                    empty.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 14px; -fx-padding: 40;");
                     installedModelsContainer.getChildren().add(empty);
                     return;
                 }
@@ -400,8 +400,8 @@ public class ModelStoreController {
     private HBox createInstalledModelCard(JSONObject model) {
         HBox card = new HBox(15);
         card.setStyle(
-                "-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 8; " +
-                        "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.08), 5, 0, 0, 1);");
+                "-fx-background-color: #0f1724; -fx-padding: 15; -fx-background-radius: 8; " +
+                        "-fx-border-color: #2d3555; -fx-border-radius: 8; -fx-border-width: 1;");
         card.setAlignment(Pos.CENTER_LEFT);
 
         // Model info
@@ -409,7 +409,7 @@ public class ModelStoreController {
         HBox.setHgrow(info, Priority.ALWAYS);
 
         Label name = new Label(model.optString("name", "Unknown"));
-        name.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #333;");
+        name.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #e6f0ff;");
 
         HBox metaRow = new HBox(10);
         metaRow.setAlignment(Pos.CENTER_LEFT);
@@ -424,10 +424,10 @@ public class ModelStoreController {
         double sizeMb = model.optDouble("size_mb", 0);
         String sizeStr = sizeMb > 1024 ? String.format("%.1f GB", sizeMb / 1024) : String.format("%.0f MB", sizeMb);
         Label sizeLabel = new Label(sizeStr);
-        sizeLabel.setStyle("-fx-text-fill: #888; -fx-font-size: 11px;");
+        sizeLabel.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 11px;");
 
         Label pathLabel = new Label(model.optString("path", ""));
-        pathLabel.setStyle("-fx-text-fill: #aaa; -fx-font-size: 10px;");
+        pathLabel.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 10px;");
         pathLabel.setMaxWidth(400);
 
         metaRow.getChildren().addAll(formatBadge, sizeLabel);
@@ -438,13 +438,14 @@ public class ModelStoreController {
         actions.setAlignment(Pos.CENTER);
 
         Button loadBtn = new Button("▶ Load");
-        loadBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-cursor: hand; -fx-font-size: 11px;");
+        loadBtn.setStyle(
+                "-fx-background-color: #00d4ff; -fx-text-fill: #061427; -fx-cursor: hand; -fx-font-size: 11px;");
         loadBtn.setPrefWidth(80);
         loadBtn.setOnAction(e -> handleLoadModel(model));
 
         Button deleteBtn = new Button("✕ Delete");
         deleteBtn.setStyle(
-                "-fx-background-color: #f44336; -fx-text-fill: white; -fx-cursor: hand; -fx-font-size: 11px;");
+                "-fx-background-color: #ff6b6b30; -fx-text-fill: #ff6b6b; -fx-cursor: hand; -fx-font-size: 11px;");
         deleteBtn.setPrefWidth(80);
         deleteBtn.setOnAction(e -> handleDeleteModel(model));
 

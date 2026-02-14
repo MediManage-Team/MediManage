@@ -214,7 +214,7 @@ public class DashboardController {
         careProtocolContainer.getChildren().clear();
         javafx.scene.control.Label loadingLabel = new javafx.scene.control.Label(
                 "🔄 Generating AI Care Protocol...\nThis may take a few seconds.");
-        loadingLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #666; -fx-padding: 20;");
+        loadingLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #4e4b6c; -fx-padding: 20;");
         careProtocolContainer.getChildren().add(loadingLabel);
 
         StringBuilder medicineList = new StringBuilder();
@@ -251,7 +251,7 @@ public class DashboardController {
                                 "❌ Error: " + ex.getMessage()
                                         + "\n\n💡 Tip: Configure your Cloud AI API key in Settings.");
                         errLabel.setWrapText(true);
-                        errLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #D32F2F; -fx-padding: 15;");
+                        errLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #ff6b6b; -fx-padding: 15;");
                         careProtocolContainer.getChildren().add(errLabel);
                         btnGenerateCareProtocol.setDisable(false);
                         btnGenerateCareProtocol.setText("✨ Generate Care Protocol");
@@ -269,27 +269,27 @@ public class DashboardController {
         // Provider header card
         javafx.scene.layout.VBox headerCard = new javafx.scene.layout.VBox(3);
         headerCard.setStyle(
-                "-fx-background-color: #EDE7F6; -fx-padding: 12; -fx-background-radius: 6; -fx-border-color: #9c27b0; -fx-border-radius: 6; -fx-border-width: 0 0 0 4;");
+                "-fx-background-color: #1a0f30; -fx-padding: 12; -fx-background-radius: 8; -fx-border-color: #bb9af7; -fx-border-radius: 8; -fx-border-width: 0 0 0 4;");
         javafx.scene.control.Label headerTitle = new javafx.scene.control.Label("🏥 Patient Care Protocol");
-        headerTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #4A148C;");
+        headerTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #bb9af7;");
         javafx.scene.control.Label headerProv = new javafx.scene.control.Label("☁️ " + providerInfo);
-        headerProv.setStyle("-fx-font-size: 11px; -fx-text-fill: #7B1FA2;");
+        headerProv.setStyle("-fx-font-size: 11px; -fx-text-fill: #9d7cd8;");
         headerCard.getChildren().addAll(headerTitle, headerProv);
         careProtocolContainer.getChildren().add(headerCard);
 
         // Section color map: key -> [headerColor, bgColor, borderColor]
         java.util.Map<String, String[]> sc = new java.util.LinkedHashMap<>();
-        sc.put("substitutes", new String[] { "#2E7D32", "#E8F5E9", "#4CAF50" });
-        sc.put("mechanism", new String[] { "#00695C", "#E0F2F1", "#009688" });
-        sc.put("usage guide", new String[] { "#BF360C", "#E8F5E9", "#4CAF50" });
-        sc.put("dietary advice", new String[] { "#E65100", "#FFF3E0", "#FF9800" });
-        sc.put("side effects", new String[] { "#B71C1C", "#FFFDE7", "#FFC107" });
-        sc.put("safety check", new String[] { "#1B5E20", "#FCE4EC", "#E91E63" });
-        sc.put("stop protocol", new String[] { "#C62828", "#FFEBEE", "#F44336" });
-        sc.put("special precautions", new String[] { "#4A148C", "#F3E5F5", "#9C27B0" });
-        sc.put("monitoring", new String[] { "#1A237E", "#E8EAF6", "#3F51B5" });
-        sc.put("combinational safety", new String[] { "#B71C1C", "#FBE9E7", "#FF5722" });
-        sc.put("drug-drug interaction", new String[] { "#B71C1C", "#FBE9E7", "#FF5722" });
+        sc.put("substitutes", new String[] { "#5fe6b3", "#0f2920", "#5fe6b380" });
+        sc.put("mechanism", new String[] { "#00d4ff", "#0f1724", "#00d4ff80" });
+        sc.put("usage guide", new String[] { "#7aa2f7", "#0f1530", "#7aa2f780" });
+        sc.put("dietary advice", new String[] { "#e8c66a", "#1a1a0f", "#e8c66a80" });
+        sc.put("side effects", new String[] { "#ff6b6b", "#1a0f0f", "#ff6b6b80" });
+        sc.put("safety check", new String[] { "#5fe6b3", "#0f2018", "#5fe6b380" });
+        sc.put("stop protocol", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+        sc.put("special precautions", new String[] { "#bb9af7", "#1a0f30", "#bb9af780" });
+        sc.put("monitoring", new String[] { "#7aa2f7", "#0f1530", "#7aa2f780" });
+        sc.put("combinational safety", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+        sc.put("drug-drug interaction", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
 
         String[] lines = text.split("\\n");
         String currentSection = null;
@@ -330,7 +330,8 @@ public class DashboardController {
                     currentContent = new StringBuilder();
                 }
                 javafx.scene.control.Label medLabel = new javafx.scene.control.Label("💊 " + trimmed);
-                medLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 10 0 2 0;");
+                medLabel.setStyle(
+                        "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #e6f0ff; -fx-padding: 10 0 2 0;");
                 careProtocolContainer.getChildren().add(medLabel);
             } else {
                 if (currentContent.length() > 0)
@@ -345,7 +346,7 @@ public class DashboardController {
         }
 
         javafx.scene.control.Label footer = new javafx.scene.control.Label("⚕️ Generated by MediManage AI");
-        footer.setStyle("-fx-font-size: 10px; -fx-text-fill: #999; -fx-padding: 8 0 0 0;");
+        footer.setStyle("-fx-font-size: 10px; -fx-text-fill: #4e4b6c; -fx-padding: 8 0 0 0;");
         careProtocolContainer.getChildren().add(footer);
     }
 
@@ -354,14 +355,14 @@ public class DashboardController {
         String[] colors = colorMap.getOrDefault(sectionKey, new String[] { "#333", "#F5F5F5", "#9E9E9E" });
         javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(4);
         card.setStyle("-fx-background-color: " + colors[1]
-                + "; -fx-padding: 10 12; -fx-background-radius: 5; -fx-border-color: " + colors[2]
-                + "; -fx-border-radius: 5; -fx-border-width: 0 0 0 4;");
+                + "; -fx-padding: 10 12; -fx-background-radius: 8; -fx-border-color: " + colors[2]
+                + "; -fx-border-radius: 8; -fx-border-width: 0 0 0 4;");
         String displayName = sectionKey.substring(0, 1).toUpperCase() + sectionKey.substring(1);
         javafx.scene.control.Label titleLabel = new javafx.scene.control.Label(displayName);
         titleLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + colors[0] + ";");
         javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(content);
         bodyLabel.setWrapText(true);
-        bodyLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #333;");
+        bodyLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #bfc9e6;");
         card.getChildren().addAll(titleLabel, bodyLabel);
         return card;
     }
@@ -389,7 +390,7 @@ public class DashboardController {
 
         // Feature 1: Add Expense Button (Programmatic addition)
         Button btnAddExpense = new Button("Add Expense");
-        btnAddExpense.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;");
+        btnAddExpense.getStyleClass().add("button-danger");
         btnAddExpense.setOnAction(e -> handleAddExpense());
         // Where to add? Maybe near other buttons. existing logic has a button box?
         // We can't see the layout easily.
@@ -474,7 +475,7 @@ public class DashboardController {
 
         // Buttons
         Button btnDownload = new Button("Download Invoice");
-        btnDownload.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;");
+        btnDownload.getStyleClass().add("button-primary");
         btnDownload.setOnAction(e -> {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Save Invoice PDF");
@@ -494,7 +495,7 @@ public class DashboardController {
         });
 
         Button btnShare = new Button("Share");
-        btnShare.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold;");
+        btnShare.getStyleClass().add("button-success");
         btnShare.setOnAction(e -> {
             TextInputDialog shareDialog = new TextInputDialog();
             shareDialog.setTitle("Share Invoice");
@@ -654,7 +655,7 @@ public class DashboardController {
         if (!expiring.isEmpty()) {
             expiryTable.setItems(FXCollections.observableArrayList(expiring));
             // Add style to alert
-            expiryTab.setStyle("-fx-background-color: #ffcccc;");
+            expiryTab.setStyle("-fx-background-color: #ff6b6b30;");
             expiryTab.setContent(expiryTable);
             mainTabPane.getTabs().add(expiryTab);
         }
@@ -765,7 +766,7 @@ public class DashboardController {
                 selectedCustomer = results.get(0);
                 lblCustomerStatus.setText(
                         "Selected: " + selectedCustomer.getName() + " (" + selectedCustomer.getPhoneNumber() + ")");
-                lblCustomerStatus.setStyle("-fx-text-fill: green;");
+                lblCustomerStatus.setStyle("-fx-text-fill: #5fe6b3;");
                 btnNewCustomer.setVisible(false);
                 btnNewCustomer.setManaged(false);
             }
@@ -795,7 +796,7 @@ public class DashboardController {
         btnNewCustomer.setVisible(false);
         btnNewCustomer.setManaged(false);
         lblCustomerStatus.setText("No customer selected");
-        lblCustomerStatus.setStyle("-fx-text-fill: #666;");
+        lblCustomerStatus.setStyle("-fx-text-fill: #4e4b6c;");
     }
 
     @FXML
@@ -875,7 +876,7 @@ public class DashboardController {
                     if (selectedCustomer != null) {
                         txtSearchCustomer.setText(selectedCustomer.getPhoneNumber());
                         lblCustomerStatus.setText("Selected: " + selectedCustomer.getName());
-                        lblCustomerStatus.setStyle("-fx-text-fill: green;");
+                        lblCustomerStatus.setStyle("-fx-text-fill: #5fe6b3;");
                     }
                 });
                 new Thread(reSearchTask).start();
@@ -966,7 +967,7 @@ public class DashboardController {
                 // Reset customer selection
                 selectedCustomer = null;
                 lblCustomerStatus.setText("No customer selected");
-                lblCustomerStatus.setStyle("-fx-text-fill: #666;");
+                lblCustomerStatus.setStyle("-fx-text-fill: #4e4b6c;");
                 txtSearchCustomer.clear();
 
                 // Auto-print receipt (Thermal) - Printer might be blocking too so keep it out

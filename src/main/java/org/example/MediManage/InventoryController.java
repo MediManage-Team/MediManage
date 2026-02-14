@@ -74,7 +74,7 @@ public class InventoryController {
                 if (item == null || empty) {
                     setStyle("");
                 } else if (item.getStock() < 10) {
-                    setStyle("-fx-background-color: #ffcccc;"); // Light red for low stock
+                    setStyle("-fx-background-color: #ff6b6b20;"); // Low stock (dark red tint)
                 } else {
                     setStyle("");
                 }

@@ -9,16 +9,16 @@
 <?import javafx.scene.layout.VBox?>
 
 <VBox xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.AIController" spacing="10" style="-fx-padding: 10;">
-    <Label text="AI Assistant" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.AIController" spacing="10" styleClass="dark-panel">
+    <Label text="AI Assistant" styleClass="section-title"/>
 
-    <ScrollPane fx:id="scrollPane" fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: transparent; -fx-background-color: transparent;">
+    <ScrollPane fx:id="scrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
         <VBox fx:id="chatBox" spacing="10" style="-fx-padding: 10;"/>
     </ScrollPane>
 
     <HBox spacing="10" alignment="CENTER">
         <TextField fx:id="inputField" promptText="Type your medical query or stock check..." HBox.hgrow="ALWAYS" onAction="#handleSendMessage"/>
         <javafx.scene.control.CheckBox fx:id="webSearchCheck" text="Web Search"/>
-        <Button fx:id="sendButton" text="Send" onAction="#handleSendMessage" style="-fx-background-color: #007bff; -fx-text-fill: white;"/>
+        <Button fx:id="sendButton" text="Send" onAction="#handleSendMessage" styleClass="button-primary"/>
     </HBox>
 </VBox>

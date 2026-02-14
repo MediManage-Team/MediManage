@@ -1,18 +1,23 @@
+# ════════════════════════════════════════════════════════════
+#  MediManage .gitignore
+# ════════════════════════════════════════════════════════════
+
+# ── Build Output ──────────────────────────────────────────
 target/
-!.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+dist/
 
-### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
+# ── IDE: IntelliJ IDEA ───────────────────────────────────
+.idea/
 *.iws
 *.iml
 *.ipr
 
-### Eclipse ###
+# ── IDE: Eclipse ──────────────────────────────────────────
 .apt_generated
 .classpath
 .factorypath
@@ -21,43 +26,58 @@ target/
 .springBeans
 .sts4-cache
 
-### NetBeans ###
+# ── IDE: NetBeans ─────────────────────────────────────────
 /nbproject/private/
 /nbbuild/
-/dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
+# ── IDE: VS Code ─────────────────────────────────────────
 .vscode/
 
-### Mac OS ###
+# ── AI Agents ─────────────────────────────────────────────
+.gemini/
+.agent/
+
+# ── OS Files ──────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+Desktop.ini
 
-# Always include these directories
-!docs/
-!lib/
-
-# Ignore Database Configuration (Security)
-##src/main/resources/db_config.properties ## removed for development### DB
+# ── Database ──────────────────────────────────────────────
 *.db
 *.db.bak
+*.db.backup_*
 *.sqlite
-/medimanage.db
-/medimanage.db.bak
+*.sqlite3
+# Allow the bundled resource database to be tracked
+!src/main/resources/db/medimanage.db
 
-### Python
+# ── Python (ai_engine) ───────────────────────────────────
+ai_engine/envs/
+ai_engine/.venv*/
+ai_engine/__pycache__/
 __pycache__/
 *.py[cod]
 *$py.class
-ai_engine/venv/
-ai_engine/.venv/
 .venv/
 env/
+venv/
+
+# ── AI Models & Output ───────────────────────────────────
 models/
 Output/
+
+# ── Installer & Binaries ─────────────────────────────────
 *.exe
 *.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+
+# ── Maven Wrapper (keep jar) ─────────────────────────────
+!.mvn/wrapper/maven-wrapper.jar

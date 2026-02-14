@@ -7,14 +7,14 @@
 
 <VBox spacing="10"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.InventoryController" style="-fx-padding: 20;">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.InventoryController" styleClass="dark-panel">
 
     <!-- Top Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT">
-        <Label text="Inventory Management" style="-fx-font-size: 20px; -fx-font-weight: bold;"/>
+        <Label text="Inventory Management" styleClass="page-title"/>
         <Region HBox.hgrow="ALWAYS"/>
         <TextField fx:id="searchField" promptText="Search Name / Company" prefWidth="250"/>
-        <Button text="Export" onAction="#handleExportExcel">
+        <Button text="Export" onAction="#handleExportExcel" styleClass="button-outlined">
             <graphic>
                 <FontIcon iconLiteral="fas-file-excel"/>
             </graphic>
@@ -39,8 +39,8 @@
             </TableView>
 
             <!-- Right: Form -->
-            <VBox spacing="15" style="-fx-padding: 20; -fx-background-color: #f9f9f9;">
-                <Label text="Medicine Details" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <VBox spacing="15" styleClass="dark-form-panel">
+                <Label text="Medicine Details" styleClass="section-title"/>
 
                 <VBox spacing="5">
                     <Label text="Medicine Name"/>
@@ -70,7 +70,7 @@
                 <Button fx:id="btnSave" text="Add New" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSave"/>
                 <HBox spacing="10">
                     <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="btnDelete" text="Delete" disable="true" style="-fx-background-color: #e74c3c; -fx-text-fill: white;" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
+                    <Button fx:id="btnDelete" text="Delete" disable="true" styleClass="button-danger" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
                 </HBox>
             </VBox>
         </items>

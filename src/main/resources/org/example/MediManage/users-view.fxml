@@ -10,8 +10,8 @@
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.UsersController">
     <!-- Left: Table -->
     <items>
-        <VBox spacing="10" style="-fx-padding: 20;">
-            <Label text="System Users" style="-fx-font-size: 20px; -fx-font-weight: bold;"/>
+        <VBox spacing="10" styleClass="dark-panel">
+            <Label text="System Users" styleClass="page-title"/>
             <TableView fx:id="userTable" VBox.vgrow="ALWAYS">
                 <columns>
                     <TableColumn fx:id="colId" text="ID" prefWidth="50"/>
@@ -25,8 +25,8 @@
         </VBox>
 
         <!-- Right: Form -->
-        <VBox spacing="15" style="-fx-padding: 20; -fx-background-color: #f9f9f9;">
-            <Label text="Manage User" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+        <VBox spacing="15" styleClass="dark-form-panel">
+            <Label text="Manage User" styleClass="section-title"/>
 
             <VBox spacing="5">
                 <Label text="Username"/>
@@ -50,10 +50,10 @@
             <Region VBox.vgrow="ALWAYS"/>
 
             <VBox spacing="10">
-                <Button fx:id="btnSave" text="Save User" style="-fx-background-color: #3498db; -fx-text-fill: white;" maxWidth="Infinity" onAction="#handleSave"/>
+                <Button fx:id="btnSave" text="Save User" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSave"/>
                 <HBox spacing="10">
                     <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="btnDelete" text="Delete" disable="true" style="-fx-background-color: #e74c3c; -fx-text-fill: white;" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
+                    <Button fx:id="btnDelete" text="Delete" disable="true" styleClass="button-danger" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
                 </HBox>
             </VBox>
         </VBox>

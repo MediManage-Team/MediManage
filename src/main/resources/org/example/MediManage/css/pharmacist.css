@@ -1,13 +1,26 @@
-/* Pharmacist Theme: Soft Blue/Green */
+/* Pharmacist Theme — Tokyo Night, Green Accent */
+
 .root {
-    -fx-base: #e0f7fa;
-    -fx-accent: #009688;
+    -fx-accent: #5fe6b3;
 }
 
-.sidebar-button {
-    -fx-text-fill: #00695c;
+.sidebar-button:focused,
+.sidebar-button:pressed {
+    -fx-background-color: #5fe6b320;
+    -fx-text-fill: #5fe6b3;
 }
 
-.label {
-    -fx-font-family: 'Segoe UI';
+.header-bar {
+    -fx-border-color: transparent transparent #5fe6b3 transparent;
+}
+
+.button-primary {
+    -fx-background-color: linear-gradient(to bottom, #5fe6b3, derive(#5fe6b3, -15%));
+    -fx-text-fill: #061427;
+    -fx-border-color: #5fe6b3;
+}
+
+.button-primary:hover {
+    -fx-background-color: linear-gradient(to bottom, #78f0c6, #5fe6b3);
+    -fx-effect: dropshadow(three-pass-box, #5fe6b340, 10, 0, 0, 0);
 }

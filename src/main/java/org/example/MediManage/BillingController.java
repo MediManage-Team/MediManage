@@ -3,9 +3,6 @@ package org.example.MediManage;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
@@ -16,7 +13,6 @@ import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
 
-import java.sql.SQLException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -174,12 +170,12 @@ public class BillingController {
 
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText(selectedCustomer.getPhone());
-            lblCustomerName.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+            lblCustomerName.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
         } else {
             lblCustomerName.setText("Not Found (Walk-in)");
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText("-");
-            lblCustomerName.setStyle("-fx-text-fill: #666;");
+            lblCustomerName.setStyle("-fx-text-fill: #4e4b6c;");
             selectedCustomer = null;
         }
     }
@@ -212,7 +208,7 @@ public class BillingController {
                         lblCustomerName.setText(selectedCustomer.getName());
                         if (lblCustomerPhone != null)
                             lblCustomerPhone.setText(selectedCustomer.getPhone());
-                        lblCustomerName.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+                        lblCustomerName.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
                         txtSearchCustomer.setText(phone);
                     }
                 } catch (Exception e) {
@@ -396,7 +392,7 @@ public class BillingController {
         careProtocolContainer.getChildren().clear();
         javafx.scene.control.Label loadingLabel = new javafx.scene.control.Label(
                 "🔄 Generating AI Care Protocol...\nThis may take a few seconds.");
-        loadingLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #666; -fx-padding: 20;");
+        loadingLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #4e4b6c; -fx-padding: 20;");
         careProtocolContainer.getChildren().add(loadingLabel);
 
         StringBuilder medicineList = new StringBuilder();
@@ -433,7 +429,7 @@ public class BillingController {
                                 "❌ Error: " + ex.getMessage()
                                         + "\n\n💡 Tip: Configure your Cloud AI API key in Settings.");
                         errLabel.setWrapText(true);
-                        errLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #D32F2F; -fx-padding: 15;");
+                        errLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #ff6b6b; -fx-padding: 15;");
                         careProtocolContainer.getChildren().add(errLabel);
                         btnGenerateCareProtocol.setDisable(false);
                         btnGenerateCareProtocol.setText("✨ Generate Care Protocol");
@@ -449,26 +445,26 @@ public class BillingController {
         // Provider header
         javafx.scene.layout.VBox headerCard = new javafx.scene.layout.VBox(3);
         headerCard.setStyle(
-                "-fx-background-color: #EDE7F6; -fx-padding: 12; -fx-background-radius: 6; -fx-border-color: #9c27b0; -fx-border-radius: 6; -fx-border-width: 0 0 0 4;");
+                "-fx-background-color: #1a0f30; -fx-padding: 12; -fx-background-radius: 8; -fx-border-color: #bb9af7; -fx-border-radius: 8; -fx-border-width: 0 0 0 4;");
         javafx.scene.control.Label headerTitle = new javafx.scene.control.Label("🏥 Patient Care Protocol");
-        headerTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #4A148C;");
+        headerTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #bb9af7;");
         javafx.scene.control.Label headerProv = new javafx.scene.control.Label("☁️ " + providerInfo);
-        headerProv.setStyle("-fx-font-size: 11px; -fx-text-fill: #7B1FA2;");
+        headerProv.setStyle("-fx-font-size: 11px; -fx-text-fill: #9d7cd8;");
         headerCard.getChildren().addAll(headerTitle, headerProv);
         careProtocolContainer.getChildren().add(headerCard);
 
         java.util.Map<String, String[]> sc = new java.util.LinkedHashMap<>();
-        sc.put("substitutes", new String[] { "#2E7D32", "#E8F5E9", "#4CAF50" });
-        sc.put("mechanism", new String[] { "#00695C", "#E0F2F1", "#009688" });
-        sc.put("usage guide", new String[] { "#BF360C", "#E8F5E9", "#4CAF50" });
-        sc.put("dietary advice", new String[] { "#E65100", "#FFF3E0", "#FF9800" });
-        sc.put("side effects", new String[] { "#B71C1C", "#FFFDE7", "#FFC107" });
-        sc.put("safety check", new String[] { "#1B5E20", "#FCE4EC", "#E91E63" });
-        sc.put("stop protocol", new String[] { "#C62828", "#FFEBEE", "#F44336" });
-        sc.put("special precautions", new String[] { "#4A148C", "#F3E5F5", "#9C27B0" });
-        sc.put("monitoring", new String[] { "#1A237E", "#E8EAF6", "#3F51B5" });
-        sc.put("combinational safety", new String[] { "#B71C1C", "#FBE9E7", "#FF5722" });
-        sc.put("drug-drug interaction", new String[] { "#B71C1C", "#FBE9E7", "#FF5722" });
+        sc.put("substitutes", new String[] { "#5fe6b3", "#0f2920", "#5fe6b380" });
+        sc.put("mechanism", new String[] { "#00d4ff", "#0f1724", "#00d4ff80" });
+        sc.put("usage guide", new String[] { "#7aa2f7", "#0f1530", "#7aa2f780" });
+        sc.put("dietary advice", new String[] { "#e8c66a", "#1a1a0f", "#e8c66a80" });
+        sc.put("side effects", new String[] { "#ff6b6b", "#1a0f0f", "#ff6b6b80" });
+        sc.put("safety check", new String[] { "#5fe6b3", "#0f2018", "#5fe6b380" });
+        sc.put("stop protocol", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+        sc.put("special precautions", new String[] { "#bb9af7", "#1a0f30", "#bb9af780" });
+        sc.put("monitoring", new String[] { "#7aa2f7", "#0f1530", "#7aa2f780" });
+        sc.put("combinational safety", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+        sc.put("drug-drug interaction", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
 
         String[] lines = text.split("\\n");
         String currentSection = null;
@@ -517,13 +513,13 @@ public class BillingController {
                     .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
         }
         javafx.scene.control.Label footer = new javafx.scene.control.Label("⚕️ Generated by MediManage AI");
-        footer.setStyle("-fx-font-size: 10px; -fx-text-fill: #999; -fx-padding: 8 0 0 0;");
+        footer.setStyle("-fx-font-size: 10px; -fx-text-fill: #4e4b6c; -fx-padding: 8 0 0 0;");
         careProtocolContainer.getChildren().add(footer);
     }
 
     private javafx.scene.layout.VBox createSectionCard(String sectionKey, String content,
             java.util.Map<String, String[]> colorMap) {
-        String[] colors = colorMap.getOrDefault(sectionKey, new String[] { "#333", "#F5F5F5", "#9E9E9E" });
+        String[] colors = colorMap.getOrDefault(sectionKey, new String[] { "#bfc9e6", "#0f1724", "#2d3555" });
         javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(4);
         card.setStyle("-fx-background-color: " + colors[1]
                 + "; -fx-padding: 10 12; -fx-background-radius: 5; -fx-border-color: " + colors[2]
@@ -533,7 +529,7 @@ public class BillingController {
         titleLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + colors[0] + ";");
         javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(content);
         bodyLabel.setWrapText(true);
-        bodyLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #333;");
+        bodyLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #bfc9e6;");
         card.getChildren().addAll(titleLabel, bodyLabel);
         return card;
     }

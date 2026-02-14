@@ -5,7 +5,7 @@
 
 <VBox alignment="CENTER"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.CustomersController" spacing="20">
-    <Label text="Customer Management" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
-    <Label text="Customer management is under development." style="-fx-font-size: 16px;"/>
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.CustomersController" spacing="20" styleClass="dark-panel">
+    <Label text="Customer Management" styleClass="page-title"/>
+    <Label text="Customer management is under development." styleClass="text-muted" style="-fx-font-size: 16px;"/>
 </VBox>

@@ -1,17 +1,22 @@
-/* Cashier Theme: High Contrast */
+/* Cashier Theme — Tokyo Night, Amber/Gold Accent */
+
 .root {
+    -fx-accent: #e8c66a;
     -fx-font-size: 14px;
 }
 
-.button {
-    -fx-font-weight: bold;
+.sidebar-button:focused,
+.sidebar-button:pressed {
+    -fx-background-color: #e8c66a20;
+    -fx-text-fill: #e8c66a;
 }
 
-.label {
-    -fx-text-fill: #000000;
+.header-bar {
+    -fx-border-color: transparent transparent #e8c66a transparent;
 }
 
+/* Larger sidebar for touch */
 .sidebar-button {
-    -fx-font-size: 16px;
-    -fx-padding: 15;
+    -fx-font-size: 15px;
+    -fx-padding: 12 16;
 }

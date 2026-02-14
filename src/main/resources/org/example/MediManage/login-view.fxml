@@ -1,32 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.Font?>
 
-<AnchorPane xmlns="http://javafx.com/javafx/11"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.LoginController" prefWidth="400" prefHeight="350">
+<StackPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.LoginController" style="-fx-background-color: transparent; -fx-padding: 30;" alignment="CENTER" prefWidth="500" prefHeight="400">
 
-    <children>
+    <VBox alignment="CENTER" spacing="20" styleClass="login-card">
 
-        <Label text="Login" layoutX="170" layoutY="20">
-            <font>
-                <Font size="20"/>
-            </font>
-        </Label>
+        <Label text="MediManage" styleClass="login-title" />
+        <Label text="Sign in to your account" styleClass="login-subtitle" />
 
-        <Label text="Role:" layoutX="25" layoutY="65" />
-        <ComboBox fx:id="roleSelector" promptText="Select Role" layoutX="100" layoutY="60" prefWidth="200"/>
+        <VBox spacing="6">
+            <Label text="Role" />
+            <ComboBox fx:id="roleSelector" promptText="Select Role" maxWidth="Infinity" />
+        </VBox>
 
-        <Label text="Username :" layoutX="25" layoutY="105"/>
-        <TextField fx:id="username" promptText="Username" layoutX="100" layoutY="100" prefWidth="200"/>
+        <VBox spacing="6">
+            <Label text="Username" />
+            <TextField fx:id="username" promptText="Enter username" />
+        </VBox>
 
-        <Label text="Password :" layoutX="25" layoutY="145"/>
-        <PasswordField fx:id="password" promptText="Password" layoutX="100" layoutY="140" prefWidth="200"/>
+        <VBox spacing="6">
+            <Label text="Password" />
+            <PasswordField fx:id="password" promptText="Enter password" />
+        </VBox>
 
-        <Button text="Login" layoutX="170" layoutY="190" prefWidth="60" onAction="#handleLogin"/>
+        <Button text="Sign In" styleClass="button-primary" maxWidth="Infinity" prefHeight="36" onAction="#handleLogin" />
 
-        <Label fx:id="message" layoutX="100" layoutY="230" prefWidth="200" style="-fx-text-fill: red;" alignment="CENTER"/>
+        <Label fx:id="message" styleClass="login-error" alignment="CENTER" maxWidth="Infinity" />
+    </VBox>
 
-    </children>
-</AnchorPane>
+</StackPane>

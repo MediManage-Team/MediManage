@@ -9,6 +9,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.example.MediManage.model.User;
+import org.example.MediManage.util.AnimationUtils;
 import org.example.MediManage.util.SidebarManager;
 import org.example.MediManage.util.UserSession;
 import org.example.MediManage.util.ViewSwitcher;
@@ -47,6 +48,9 @@ public class MainShellController implements ViewSwitcher {
         // Apply Theme
         applyTheme(currentUser.getRole());
 
+        // Animate sidebar entrance
+        AnimationUtils.slideInFromLeft(sidebar, 350, 30);
+
         // Load default view
         // Load home view based on role
         String homeView = "dashboard-view";
@@ -74,6 +78,7 @@ public class MainShellController implements ViewSwitcher {
             FXMLLoader loader = new FXMLLoader(getClass().getResource(viewName + ".fxml"));
             Parent view = loader.load();
             mainLayout.setCenter(view);
+            AnimationUtils.fadeIn(view, 250);
         } catch (IOException e) {
             e.printStackTrace();
             System.err.println("Could not load view: " + viewName);
@@ -101,11 +106,16 @@ public class MainShellController implements ViewSwitcher {
     }
 
     private void applyTheme(org.example.MediManage.model.UserRole role) {
-        String cssInfo = "";
         try {
+            // Load common dark theme for ALL roles
+            String commonCssUrl = Objects.requireNonNull(getClass().getResource("css/common.css")).toExternalForm();
+            mainLayout.getStylesheets().add(commonCssUrl);
+
+            // Layer role-specific accent CSS on top
             String cssPath = "";
             switch (role) {
                 case ADMIN:
+                case MANAGER:
                     cssPath = "css/admin.css";
                     break;
                 case CASHIER:
@@ -115,7 +125,7 @@ public class MainShellController implements ViewSwitcher {
                     cssPath = "css/pharmacist.css";
                     break;
                 default:
-                    return; // No specific theme
+                    break;
             }
 
             if (!cssPath.isEmpty()) {
@@ -132,7 +142,10 @@ public class MainShellController implements ViewSwitcher {
         try {
             Parent root = FXMLLoader.load(Objects.requireNonNull(getClass().getResource("login-view.fxml")));
             Stage stage = (Stage) mainLayout.getScene().getWindow();
-            stage.setScene(new Scene(root));
+            Scene loginScene = new Scene(root);
+            loginScene.getStylesheets().add(
+                    Objects.requireNonNull(getClass().getResource("css/common.css")).toExternalForm());
+            stage.setScene(loginScene);
             stage.setTitle("MediManage - Login");
             stage.centerOnScreen();
         } catch (IOException e) {

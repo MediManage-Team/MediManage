@@ -28,9 +28,15 @@ public class LoginController {
     private Label message;
 
     private UserDAO userDAO = new UserDAO();
+    private Stage primaryStage;
 
     @FXML
     private ComboBox<UserRole> roleSelector;
+
+    /** Called by MediManageApplication to pass the primary stage reference. */
+    public void setPrimaryStage(Stage stage) {
+        this.primaryStage = stage;
+    }
 
     @FXML
     private void initialize() {
@@ -83,13 +89,18 @@ public class LoginController {
                 UserSession.getInstance().login(authenticatedUser);
                 message.setText("Login Successful ✅");
 
-                // Switch to Main Shell
+                // Close the login popup and show main shell on the primary stage
                 try {
                     FXMLLoader loader = new FXMLLoader(getClass().getResource("main-shell-view.fxml"));
-                    Stage stage = (Stage) username.getScene().getWindow(); // current stage
-                    stage.setScene(new Scene(loader.load(), 900, 600)); // Increased height specific for shell
-                    stage.setTitle("MediManage - " + authenticatedUser.getRole());
-                    stage.show();
+                    // Close the login popup dialog
+                    Stage loginPopup = (Stage) username.getScene().getWindow();
+                    loginPopup.close();
+
+                    // Show main shell on primary stage
+                    Stage target = (primaryStage != null) ? primaryStage : new Stage();
+                    target.setScene(new Scene(loader.load(), 900, 600));
+                    target.setTitle("MediManage - " + authenticatedUser.getRole());
+                    target.show();
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     message.setText("Error loading shell: " + ex.getMessage());

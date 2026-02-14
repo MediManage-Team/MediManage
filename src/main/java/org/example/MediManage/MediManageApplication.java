@@ -5,8 +5,13 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
+import javafx.stage.Modality;
 import javafx.scene.control.Alert;
 import javafx.application.Platform;
+import javafx.scene.text.Font;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.paint.Color;
 
 public class MediManageApplication extends Application {
 
@@ -23,8 +28,14 @@ public class MediManageApplication extends Application {
         public void start(Stage stage) throws Exception {
                 instance = this;
 
+                // Load Ubuntu font family (bundled TTFs)
+                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Light.ttf"), 13);
+                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Regular.ttf"), 13);
+                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Medium.ttf"), 13);
+                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Bold.ttf"), 13);
+
                 // Apply AtlantaFX Theme immediately
-                Application.setUserAgentStylesheet(new atlantafx.base.theme.PrimerLight().getUserAgentStylesheet());
+                Application.setUserAgentStylesheet(new atlantafx.base.theme.PrimerDark().getUserAgentStylesheet());
 
                 // Show Login immediately — server starts in background
                 showLoginScreen(stage);
@@ -207,14 +218,39 @@ public class MediManageApplication extends Application {
                 try {
                         FXMLLoader loader = new FXMLLoader(
                                         getClass().getResource("/org/example/MediManage/login-view.fxml"));
-                        Scene scene = new Scene(loader.load(), 420, 520);
-                        stage.setTitle("Medical Billing System - Login");
+                        javafx.scene.Parent root = loader.load();
+
+                        // Add drop shadow to the login card for popup effect
+                        DropShadow shadow = new DropShadow();
+                        shadow.setRadius(30);
+                        shadow.setOffsetX(0);
+                        shadow.setOffsetY(8);
+                        shadow.setColor(Color.color(0, 0, 0, 0.6));
+                        root.setEffect(shadow);
+
+                        Scene scene = new Scene(root, 520, 500);
+                        scene.setFill(Color.TRANSPARENT);
+                        scene.getStylesheets().add(getClass().getResource("/org/example/MediManage/css/common.css")
+                                        .toExternalForm());
+
+                        // Create an undecorated popup stage
+                        Stage loginStage = new Stage();
+                        loginStage.initStyle(StageStyle.TRANSPARENT);
+                        loginStage.initModality(Modality.APPLICATION_MODAL);
+                        loginStage.setTitle("MediManage - Login");
                         try {
-                                stage.getIcons().add(new Image(getClass().getResourceAsStream("/app_icon.png")));
+                                loginStage.getIcons().add(new Image(getClass().getResourceAsStream("/app_icon.png")));
                         } catch (Exception e) {
                                 /* ignore */ }
-                        stage.setScene(scene);
-                        stage.show();
+                        loginStage.setScene(scene);
+                        loginStage.setResizable(false);
+                        loginStage.centerOnScreen();
+
+                        // Pass the primary stage reference to the controller
+                        LoginController controller = loader.getController();
+                        controller.setPrimaryStage(stage);
+
+                        loginStage.showAndWait();
                 } catch (Exception e) {
                         e.printStackTrace();
                 }

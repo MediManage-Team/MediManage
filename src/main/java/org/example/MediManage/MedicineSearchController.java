@@ -77,7 +77,7 @@ public class MedicineSearchController {
 
                     if (daysToExpiry < 0) {
                         // Expired
-                        setStyle("-fx-background-color: #ffcccc;"); // Red tint
+                        setStyle("-fx-background-color: #ff6b6b20;"); // Expired (dark red tint)
                         // setDisable(true); // Maybe not disable selection, but indicate visually?
                         // User asked to disable selection if expired.
                         // setDisable(true) on a row might prevent scrolling or interactions oddly but
@@ -86,7 +86,7 @@ public class MedicineSearchController {
                         // style.
                     } else if (daysToExpiry < 30) {
                         // Near Expiry
-                        setStyle("-fx-background-color: #ffebcc;"); // Orange tint
+                        setStyle("-fx-background-color: #e8c66a20;"); // Near expiry (dark amber tint)
                     } else {
                         setStyle("");
                     }
