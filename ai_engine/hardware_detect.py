@@ -153,8 +153,8 @@ def _detect_amd():
         # Check DirectML availability via DX adapter
         result = subprocess.run(
             ["powershell", "-Command",
-             "Get-WmiObject Win32_VideoController | Where-Object {$_.Name -like '*AMD*' -or $_.Name -like '*Radeon*'} | Select-Object -First 1 -ExpandProperty Name"],
-            capture_output=True, text=True, timeout=5
+             "Get-CimInstance Win32_VideoController | Where-Object {$_.Name -like '*AMD*' -or $_.Name -like '*Radeon*'} | Select-Object -First 1 -ExpandProperty Name"],
+            capture_output=True, text=True, timeout=15
         )
         if result.returncode == 0 and result.stdout.strip():
             return {"name": result.stdout.strip()}
@@ -165,8 +165,8 @@ def _detect_amd():
     try:
         result = subprocess.run(
             ["powershell", "-Command",
-             "Get-WmiObject Win32_PnPEntity | Where-Object {$_.Name -like '*NPU*' -or $_.Name -like '*Ryzen AI*'} | Select-Object -First 1 -ExpandProperty Name"],
-            capture_output=True, text=True, timeout=5
+             "Get-CimInstance Win32_PnPEntity | Where-Object {$_.Name -like '*NPU*' -or $_.Name -like '*Ryzen AI*'} | Select-Object -First 1 -ExpandProperty Name"],
+            capture_output=True, text=True, timeout=15
         )
         if result.returncode == 0 and result.stdout.strip():
             return {"name": result.stdout.strip()}
@@ -212,8 +212,8 @@ def _get_cpu_info():
         try:
             result = subprocess.run(
                 ["powershell", "-Command",
-                 "(Get-WmiObject Win32_Processor).Name"],
-                capture_output=True, text=True, timeout=5
+                 "(Get-CimInstance Win32_Processor).Name"],
+                capture_output=True, text=True, timeout=15
             )
             if result.returncode == 0 and result.stdout.strip():
                 cpu_name = result.stdout.strip()
@@ -252,3 +252,131 @@ def _get_cpu_info():
         pass
 
     return {"name": cpu_name, "ram_mb": ram_mb}
+
+
+# ======================== AMD NPU GENERATION DETECTION ========================
+
+# XDNA 1: Ryzen 7x40, 8x40 series (Phoenix, Hawk Point) — ~15 TOPS NPU
+# XDNA 2: Ryzen AI 300 series (Strix Point, Krackan Point) — 45+ TOPS NPU
+
+_XDNA1_PATTERNS = [
+    "7640", "7640HS", "7640U",
+    "7840", "7840HS", "7840U",
+    "7940", "7940HS",
+    "8640", "8640HS", "8640U",
+    "8840", "8840HS", "8840U",
+    "8845", "8845HS",
+    "8940", "8940HS",
+    "Z1",  # ASUS ROG Ally (Phoenix)
+]
+
+_XDNA2_PATTERNS = [
+    "AI 9 HX 370", "AI 9 HX 375", "AI 9 365", "AI 9 HX 395",
+    "AI 7 PRO 360", "AI 7 350",
+    "AI 5 PRO 340", "AI 5 340",
+    "Ryzen AI 300",  # Generic match
+    "Strix",         # Codename match
+    "Krackan",       # Codename match
+]
+
+
+def detect_npu_generation():
+    """
+    Detect AMD XDNA NPU generation from CPU model name.
+
+    Returns dict with:
+        - generation: "xdna1" | "xdna2" | None
+        - python_version: "3.10" | "3.12"
+        - oga_package: pip package name + version
+        - numpy_constraint: numpy version constraint
+        - recommended_model: HuggingFace repo ID for best model
+        - npu_tops: approximate NPU performance
+        - cpu_name: detected CPU model
+    """
+    cpu_name = ""
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "(Get-CimInstance Win32_Processor).Name"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0:
+                cpu_name = result.stdout.strip()
+        except Exception:
+            pass
+
+    if not cpu_name:
+        cpu_name = platform.processor() or ""
+
+    # Check XDNA 2 first (newer, more specific patterns)
+    for pattern in _XDNA2_PATTERNS:
+        if pattern.lower() in cpu_name.lower():
+            return {
+                "generation": "xdna2",
+                "python_version": "3.12",
+                "oga_package": "onnxruntime-genai-directml-ryzenai==0.11.2",
+                "numpy_constraint": "numpy",
+                "recommended_model": "amd/Phi-4-mini-instruct-awq-g128-int4-asym-fp16-onnx-hybrid",
+                "npu_tops": 50,
+                "cpu_name": cpu_name,
+                "requirements_suffix": "xdna2",
+            }
+
+    # Check XDNA 1
+    for pattern in _XDNA1_PATTERNS:
+        if pattern.lower() in cpu_name.lower():
+            return {
+                "generation": "xdna1",
+                "python_version": "3.10",
+                "oga_package": "onnxruntime-genai-directml-ryzenai==0.7.0.3",
+                "numpy_constraint": "numpy<2",
+                "recommended_model": "microsoft/Phi-4-mini-instruct-onnx",
+                "npu_tops": 15,
+                "cpu_name": cpu_name,
+                "requirements_suffix": "xdna1",
+            }
+
+    # Not an AMD AI processor
+    return {
+        "generation": None,
+        "python_version": "3.10",
+        "oga_package": "onnxruntime-genai-directml",
+        "numpy_constraint": "numpy",
+        "recommended_model": None,
+        "npu_tops": 0,
+        "cpu_name": cpu_name,
+        "requirements_suffix": None,
+    }
+
+
+def get_npu_setup_info():
+    """
+    Get full NPU setup information for the /npu_info endpoint.
+    Combines NPU generation detection with existing hardware detection.
+    """
+    npu_gen = detect_npu_generation()
+    hw = detect_hardware()
+
+    # Check if VitisAI EP is already available
+    vitisai_available = False
+    oga_version = None
+    try:
+        import onnxruntime as ort
+        vitisai_available = "VitisAIExecutionProvider" in ort.get_available_providers()
+    except ImportError:
+        pass
+    try:
+        import onnxruntime_genai as og
+        oga_version = og.__version__
+    except ImportError:
+        pass
+
+    return {
+        **npu_gen,
+        "hardware_backend": hw["backend"],
+        "device_name": hw["device_name"],
+        "vitisai_available": vitisai_available,
+        "oga_installed_version": oga_version,
+        "setup_complete": vitisai_available and oga_version is not None,
+    }

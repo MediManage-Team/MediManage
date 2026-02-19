@@ -96,10 +96,11 @@ public class LoginController {
                     Stage loginPopup = (Stage) username.getScene().getWindow();
                     loginPopup.close();
 
-                    // Show main shell on primary stage
+                    // Show main shell on primary stage — MAXIMIZED
                     Stage target = (primaryStage != null) ? primaryStage : new Stage();
-                    target.setScene(new Scene(loader.load(), 900, 600));
+                    target.setScene(new Scene(loader.load()));
                     target.setTitle("MediManage - " + authenticatedUser.getRole());
+                    target.setMaximized(true);
                     target.show();
                 } catch (Exception ex) {
                     ex.printStackTrace();

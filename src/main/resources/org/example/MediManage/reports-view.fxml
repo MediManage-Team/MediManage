@@ -42,4 +42,15 @@
             </LineChart>
         </VBox>
     </HBox>
+
+    <!-- AI Sales Analysis -->
+    <TitledPane text="🤖 AI Sales Analysis" expanded="false" animated="true" styleClass="card">
+        <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Button fx:id="btnAISummary" text="✨ Analyze Sales with AI" onAction="#handleAISummary" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
+                <ProgressIndicator fx:id="spinnerSummary" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
+            </HBox>
+            <TextArea fx:id="txtAISummary" editable="false" wrapText="true" prefHeight="120" promptText="AI-generated sales insights will appear here..." styleClass="ai-panel-text"/>
+        </VBox>
+    </TitledPane>
 </VBox>

@@ -338,4 +338,39 @@ public class CloudAIService implements AIService {
         }
         return activeProvider + " Error (" + code + "): " + response.body();
     }
+
+    // --- Structured JSON Output ---
+
+    /**
+     * Override default: requests JSON-structured response from the AI.
+     * For Gemini, uses the native response_mime_type for JSON mode.
+     */
+    @Override
+    public CompletableFuture<String> chatWithJsonSchema(String prompt, String jsonSchemaHint) {
+        String jsonPrompt = prompt + "\n\nRespond with ONLY valid JSON matching this schema:\n" + jsonSchemaHint
+                + "\nDo NOT include markdown fences or explanation — raw JSON only.";
+        return chat(jsonPrompt).thenApply(CloudAIService::parseJsonResponse);
+    }
+
+    /**
+     * Utility: strip markdown fences and whitespace from AI response to extract raw
+     * JSON.
+     */
+    public static String parseJsonResponse(String rawText) {
+        if (rawText == null)
+            return "{}";
+        String cleaned = rawText.trim();
+        // Strip ```json ... ``` fences
+        if (cleaned.startsWith("```")) {
+            int firstNewline = cleaned.indexOf('\n');
+            if (firstNewline > 0) {
+                cleaned = cleaned.substring(firstNewline + 1);
+            }
+            if (cleaned.endsWith("```")) {
+                cleaned = cleaned.substring(0, cleaned.length() - 3);
+            }
+            cleaned = cleaned.trim();
+        }
+        return cleaned;
+    }
 }

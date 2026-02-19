@@ -1,11 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox alignment="CENTER"
+<VBox spacing="10"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.PrescriptionsController" spacing="20" styleClass="dark-panel">
-    <Label text="Prescription Queue" styleClass="page-title"/>
-    <Label fx:id="lblMessage" styleClass="text-muted" style="-fx-font-size: 16px;"/>
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.PrescriptionsController" styleClass="dark-panel">
+
+    <!-- Top Bar -->
+    <HBox spacing="10" alignment="CENTER_LEFT">
+        <Label text="Prescription Queue" styleClass="page-title"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <ComboBox fx:id="statusFilter" promptText="Filter by Status" prefWidth="160"/>
+        <Button text="Refresh" onAction="#handleRefresh" styleClass="button-outlined"/>
+    </HBox>
+
+    <SplitPane dividerPositions="0.6" VBox.vgrow="ALWAYS">
+        <items>
+            <!-- Left: Table -->
+            <TableView fx:id="prescriptionTable">
+                <columns>
+                    <TableColumn fx:id="colId" text="ID" prefWidth="40"/>
+                    <TableColumn fx:id="colCustomer" text="Customer" prefWidth="130"/>
+                    <TableColumn fx:id="colDoctor" text="Doctor" prefWidth="120"/>
+                    <TableColumn fx:id="colMedicines" text="Medicines" prefWidth="180"/>
+                    <TableColumn fx:id="colStatus" text="Status" prefWidth="90"/>
+                    <TableColumn fx:id="colDate" text="Date" prefWidth="130"/>
+                </columns>
+                <columnResizePolicy>
+                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                </columnResizePolicy>
+            </TableView>
+
+            <!-- Right: Form + Actions -->
+            <ScrollPane fitToWidth="true" fitToHeight="true">
+                <VBox spacing="12" styleClass="dark-form-panel">
+                    <Label text="New Prescription" styleClass="section-title"/>
+
+                    <VBox spacing="4">
+                        <Label text="Customer Name *"/>
+                        <TextField fx:id="txtCustomerName" promptText="Patient Name"/>
+                    </VBox>
+                    <VBox spacing="4">
+                        <Label text="Doctor Name"/>
+                        <TextField fx:id="txtDoctorName" promptText="Prescribing Doctor"/>
+                    </VBox>
+                    <VBox spacing="4">
+                        <Label text="Medicines *"/>
+                        <TextArea fx:id="txtMedicines" promptText="e.g. Paracetamol 500mg, Amoxicillin 250mg" prefRowCount="3"/>
+                    </VBox>
+                    <VBox spacing="4">
+                        <Label text="Notes"/>
+                        <TextArea fx:id="txtNotes" promptText="Additional instructions..." prefRowCount="2"/>
+                    </VBox>
+
+                    <Separator/>
+
+                    <VBox spacing="4">
+                        <Label text="AI Validation" styleClass="section-title" style="-fx-font-size: 13px;"/>
+                        <TextArea fx:id="txtAIValidation" editable="false" prefRowCount="3" promptText="AI validation result will appear here..." wrapText="true"/>
+                        <Button text="🤖 Validate with AI" onAction="#handleAIValidate" styleClass="button-outlined" maxWidth="Infinity"/>
+                    </VBox>
+
+                    <Separator/>
+
+                    <Button fx:id="btnSave" text="Add Prescription" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSave"/>
+                    <HBox spacing="10">
+                        <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="btnAdvance" text="▶ Advance Status" disable="true" styleClass="button-outlined" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleAdvanceStatus"/>
+                    </HBox>
+                    <Button fx:id="btnDelete" text="Delete" disable="true" styleClass="button-danger" maxWidth="Infinity" onAction="#handleDelete"/>
+                </VBox>
+            </ScrollPane>
+        </items>
+    </SplitPane>
 </VBox>

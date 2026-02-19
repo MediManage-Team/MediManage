@@ -58,8 +58,8 @@ public class MainShellController implements ViewSwitcher {
             case CASHIER:
                 homeView = "billing-view";
                 break;
-            case PHARMACIST:
-                homeView = "medicine-search-view";
+            case STAFF:
+                homeView = "billing-view";
                 break;
             default:
                 homeView = "dashboard-view";
@@ -142,7 +142,11 @@ public class MainShellController implements ViewSwitcher {
         try {
             Parent root = FXMLLoader.load(Objects.requireNonNull(getClass().getResource("login-view.fxml")));
             Stage stage = (Stage) mainLayout.getScene().getWindow();
-            Scene loginScene = new Scene(root);
+
+            // Restore windowed mode for login screen
+            stage.setMaximized(false);
+
+            Scene loginScene = new Scene(root, 520, 600);
             loginScene.getStylesheets().add(
                     Objects.requireNonNull(getClass().getResource("css/common.css")).toExternalForm());
             stage.setScene(loginScene);

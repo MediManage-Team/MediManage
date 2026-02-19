@@ -12,8 +12,8 @@ public class SidebarManager {
         container.getChildren().clear();
         container.setSpacing(4);
 
-        // Add Common Dashboard Button (Only for Admin/Manager)
-        if (role == UserRole.ADMIN || role == UserRole.MANAGER) {
+        // Add Common Dashboard Button (Admin, Manager, and Pharmacist)
+        if (role == UserRole.ADMIN || role == UserRole.MANAGER || role == UserRole.PHARMACIST) {
             addButton(container, "📊 Stats Dashboard", "dashboard-view", switcher);
         }
 
@@ -29,6 +29,7 @@ public class SidebarManager {
                 case MANAGER:
                     addButton(container, "📦 Inventory", "inventory-view", switcher);
                     addButton(container, "📈 Reports", "reports-view", switcher);
+                    addButton(container, "⚙ Settings", "settings-view", switcher);
                     break;
                 case PHARMACIST:
                     addButton(container, "🔍 Medicine Search", "medicine-search-view", switcher);
@@ -44,6 +45,9 @@ public class SidebarManager {
                     break;
             }
         }
+
+        // AI Assistant — available to ALL roles
+        addButton(container, "🤖 AI Assistant", "ai-view", switcher);
 
         // Spacer to push Logout to bottom
         Region spacer = new Region();

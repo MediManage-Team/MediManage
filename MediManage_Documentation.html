@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediManage Documentation (v17.0)</title>
+    <!-- Github Markdown CSS for styling -->
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
+    <!-- Mermaid JS for diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <!-- Marked JS for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 45px;
+        }
+
+        @media (max-width: 767px) {
+            body {
+                padding: 15px;
+            }
+        }
+
+        /* Print Optimization */
+        @media print {
+            body {
+                max-width: 100%;
+                padding: 0;
+            }
+
+            .no-print {
+                display: none;
+            }
+
+            /* Ensure mermaid diagrams don't get cut off */
+            .mermaid {
+                break-inside: avoid;
+            }
+        }
+
+        /* Mermaid styling centering */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body class="markdown-body">
+
+    <!-- Instructions Overlay -->
+    <div class="no-print"
+        style="background: #e1f5fe; border: 1px solid #0288d1; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+        <h3 style="margin-top: 0;">🖨️ How to Save as PDF</h3>
+        <ol>
+            <li>Wait for the diagrams to render.</li>
+            <li>Press <strong>Ctrl + P</strong> (Print).</li>
+            <li>Select <strong>"Save as PDF"</strong> as the destination.</li>
+            <li>Ensure "Background Graphics" is checked in settings.</li>
+        </ol>
+    </div>
+
+    <div id="content"></div>
+
+    <!-- Hidden Markdown Source -->
+    <textarea id="markdown-source" style="display: none;">
+# 📘 MediManage: The Complete Monolithic Reference
+> **Version**: 17.0 (The Platinum Edition)
+
+# Part I: Vision & Architecture
+
+## 1. The Core Concept & Business Analysis
+**"The Why & The What"**
+
+### 1.1 The Business Problem
+Pharmacies operating explicitly on manual or legacy systems face three critical issues:
+1.  **Inventory Blindness**: Owners don't know *exactly* what is on the shelf versus what is in the books. Expired medicines result in direct financial loss.
+2.  **Billing Latency**: Handwriting bills or using slow web-apps creates queues during peak hours.
+3.  **Financial Opacity**: "Udhar" (Credit) is tracked in notebooks, leading to lost revenue. Profitability is a guess, not a metric.
+
+### 1.2 The Solution: MediManage
+**MediManage** is an **Offline-First Desktop Application** tailored for high-volume retailers.
+
+**Key Value Propositions**:
+*   **Zero Latency**: No internet required. Billing happens instantly.
+*   **Smart Inventory**: Auto-alerts for expiring medicines 30 days in advance.
+*   **AI-Powered Insights**: An integrated "Brain" that can answer medical questions and analyze sales trends locally.
+*   **Data Ownership**: 100% of data stays on the shop's machine (Privacy First).
+
+### 1.3 Success Metrics (KPIs)
+The project is successful if:
+1.  **Billing Time**: < 10 seconds per customer.
+2.  **Inventory Accuracy**: 100% match between digital and physical stock.
+3.  **Zero Downtime**: App works 24/7 without internet.
+
+### 1.4 User Roles & Access Control
+| Role | Responsibilities | Access Level |
+| :--- | :--- | :--- |
+| **Administrator** (Owner) | Full Control. Viewing Financial Reports (P&L), Managing Users, Editing Stock. | **Read/Write/Delete** |
+| **Pharmacist** (Manager) | Managing Inventory (Stock In), Handling Returns, Viewing Expiry Alerts. | **Read/Write** (No delete) |
+| **Cashier** (Counter Staff) | POS Only. Scanning barcodes, collecting payments. Cannot see profits or delete stock. | **Read/Write** (POS only) |
+
+### 1.5 High-Level Workflow Diagram
+```mermaid
+graph LR
+    classDef input fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef storage fill:#bfb,stroke:#333,stroke-width:2px;
+
+    subgraph "Inbound (Stock)"
+    Distributor[Distributor] --> |Medicine Delivery| InventoryMgr[Inventory Manager]
+    InventoryMgr --> |Entry| DB[(MediManage DB)]
+    end
+
+    subgraph "Outbound (Sales)"
+    Customer[Customer] --> |Prescription| Pharmacist
+    Pharmacist --> |Scan Barcode| POS[POS Terminal]
+    POS --> |Deduct Stock| DB
+    POS --> |Generate| Invoice[Printed Invoice]
+    end
+
+    subgraph "Analysis (AI)"
+    Owner[Owner] --> |"How are sales?"| AI_Engine[AI Brain]
+    AI_Engine --> |Query| DB
+    AI_Engine --> |Insight| Owner
+    end
+
+    class Distributor,Customer,Owner input;
+    class InventoryMgr,Pharmacist,POS,AI_Engine process;
+    class DB,Invoice storage;
+```
+
+---
+
+## 2. Technology Stack & Technical Architecture
+**"The Foundation of the Skyscraper"**
+
+### 2.1 The Core: Java 21 (LTS)
+We chose **Java 21** over Python or JS for the core logic because:
+*   **Strong Typing**: Prevents "undefined is not a function" errors at runtime.
+*   **Concurrency**: Java's virtual threads (Project Loom) allow background tasks without freezing the UI.
+*   **Maintainability**: Java code written today will run 10 years from now.
+
+### 2.2 The Presentation Layer: JavaFX + AtlantaFX
+*   **Memory Footprint**: JavaFX uses <150MB for the whole app.
+*   **Hardware Access**: Direct, low-level access to USB Thermal Printers and Barcode Scanners.
+*   **AtlantaFX**: Uses the **Primer Light** theme (GitHub's design system) for a modern look.
+
+### 2.3 The Database: SQLite
+*   **Serverless**: The client doesn't need to install MySQL. The database is a single file (`medimanage.db`).
+*   **WAL Mode**: **Write-Ahead Logging** allows simultaneous users without UI lags.
+
+### 2.4 The Intelligence: Python Sidecar
+Since Java lacks first-class support for modern LLMs, we use a **Polyglot Architecture**.
+*   **Stack**: Flask (Server) + ONNX Runtime (Inference) + Hugging Face Hub (Model Management).
+*   **Role**: Acts as a local microservice listening on Port 5000.
+
+### 2.5 Architecture Diagram
+```mermaid
+graph TD
+    classDef java fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef python fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef data fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+
+    User((User)) --> |Interaction| UI["JavaFX UI (AtlantaFX)"]
+    
+    subgraph "Java Application (JVM)"
+        UI --> Controller[Controllers]
+        Controller --> Service[Service Layer]
+        Service --> DAO[Data Access Objects]
+        Service --> HTTP[HttpClient]
+    end
+
+    subgraph "Data Storage"
+        DAO --> |SQL/JDBC| SQLite[("SQLite DB File")]
+    end
+
+    subgraph "AI Microservice (Python)"
+        HTTP --> |JSON POST| Flask["Flask Server :5000"]
+        Flask --> |Inference| ONNX[ONNX Runtime]
+        ONNX --> |Load| Model[Local LLM Models]
+    end
+
+    class UI,Controller,Service,DAO,HTTP java;
+    class Flask,ONNX,Model python;
+    class SQLite data;
+```
+
+---
+
+## 3. Project Structure & Environment Setup
+**"The Blueprint & The Tools"**
+
+### 3.1 Project Directory Layout
+This project follows the **Standard Maven Directory Layout** + `ai_engine/`.
+
+| Path | Purpose | Key Files |
+| :--- | :--- | :--- |
+| **`src/main/java/`** | The **Source Code**. | `MediManageApplication.java`, `Launcher.java` |
+| **`src/main/resources/`** | **Assets**. | `*.fxml`, `*.css`, `medimanage.db` |
+| **`ai_engine/`** | **Python Microservice**. | `server.py`, `requirements.txt` |
+| **`target/`** | **Build Output**. | `MediManage-1.0.jar` |
+
+### 3.2 Visual Tree Structure
+```text
+MediManage/
+├── pom.xml                   (Maven Project Config)
+├── build_full_installer.bat  (Script to create .exe)
+├── ai_engine/                (Python "Brain")
+│   ├── server.py             (Flask API)
+│   ├── requirements.txt      (Python Libs)
+│   └── models/               (Downloaded LLMs live here)
+└── src/
+    └── main/
+        ├── java/
+        │   └── org/example/MediManage/
+        │       ├── controller/  (UI Logic)
+        │       ├── dao/         (Database Interactions)
+        │       ├── model/       (Data Objects)
+        │       ├── service/     (Business Logic)
+        │       └── util/        (Helpers)
+        └── resources/
+            └── org/example/MediManage/
+                ├── *.fxml       (View Files)
+                ├── css/         (Styles)
+                └── images/      (Icons/Logos)
+```
+
+---
+
+# Part II: Core Implementation
+
+## 4. Application Lifecycle
+**"The Heartbeat"**
+
+### 4.1 The Entry Point: `Launcher.java`
+**Responsibility**: The Bootstrap.
+JavaFX applications packaged as JARs sometimes fail if the main class extends `Application` due to JPMS rules. This class essentially says "Hey Java, ignore the module system for a second and just launch `MediManageApplication`."
+
+### 4.2 Lifecycle Management (`MediManageApplication.java`)
+**Responsibility**: The Main Engine.
+1.  **Starts JavaFX**: Loads `login-view.fxml`.
+2.  **Lifecycle Management**: It has a `stop()` method that kills the Python AI server when you close the window.
+3.  **Global Exception Handling**: catches crashes and logs them.
+
+**Startup Sequence**:
+1.  **UI Thread**: Loads Fonts, Applies Theme, Shows Login.
+2.  **Background**: Connects to DB, Spawns Python Process (`ProcessBuilder`).
+
+**Shutdown Strategy**:
+Uses a **Double-Tap Strategy** to kill the Python sidecar:
+1.  **Polite**: Sends `POST /shutdown` to Flask.
+2.  **Force**: Calls `process.destroyForcibly()`.
+
+### 4.3 Startup Sequence Model
+```mermaid
+sequenceDiagram
+    participant User
+    participant Launcher
+    participant Main as MediManageApplication
+    participant PythonProc as "Python (Flask)"
+
+    User->>Launcher: Double Click
+    Launcher->>Main: main(args)
+    
+    par Database Init
+        Main->>Database: Connect to SQLite
+    and AI Engine Init
+        Main->>PythonProc: ProcessBuilder.start("server.py")
+        loop Output Streaming
+            PythonProc-->>Main: [AI Engine] Running on port 5000...
+        end
+    end
+```
+
+---
+
+## 5. MVC Architecture & FXML
+**"The Brain, The Face, and The Data"**
+
+### 5.1 The Pattern
+We use the strict separation of concerns provided by JavaFX.
+
+| Component | Responsibility | Example File |
+| :--- | :--- | :--- |
+| **Model** | **The Data**. Plain Java classes that hold state. | `Medicine.java` |
+| **View** | **The Look**. XML files defining the structure. | `dashboard-view.fxml` |
+| **Controller** | **The Logic**. Java classes that handle events. | `DashboardController.java` |
+
+### 5.2 Model Mapping Table
+These classes correspond directly to Database Tables.
+| Component | Database Table |
+| :--- | :--- |
+| **`Medicine.java`** | `medicines` |
+| **`Bill.java`** | `bills` |
+| **`BillItem.java`** | `bill_items` |
+| **`Customer.java`** | `customers` |
+| **`User.java`** | `users` |
+
+### 5.3 Controller Mapping Table
+| Controller | Linked View (FXML) | Responsibility |
+| :--- | :--- | :--- |
+| **`LoginController`** | `login-view.fxml` | Checks credentials via `UserDAO`. |
+| **`DashboardController`** | `dashboard-view.fxml` | Shows KPIs and navigation. |
+| **`BillingController`** | `billing-view.fxml` | Handles barcode scanning and checkout. |
+| **`InventoryController`** | `inventory-view.fxml` | Allows editing/deleting stock. |
+| **`ReportsController`** | `reports-view.fxml` | Generates PDF reports. |
+| **`AIController`** | `ai-view.fxml` | Chat interface. |
+
+---
+
+## 6. Database & DAO Pattern
+**"The Digital Vault"**
+
+### 6.1 The Database: SQLite
+A serverless, single-file database (`medimanage.db`).
+*   **Zero Configuration**: The app creates the file automatically if it's missing.
+
+### 6.2 Entity Relationship Diagram (ERD)
+```mermaid
+erDiagram
+    MEDICINES ||--o{ STOCK : has
+    BILLS ||--|{ BILL_ITEMS : contains
+    MEDICINES ||--|{ BILL_ITEMS : listed_in
+    CUSTOMERS ||--o{ BILLS : purchases
+```
+
+### 6.3 Data Access Objects (DAO)
+**Concept**: "Data Access Objects". **ONLY** these classes are allowed to talk to the SQL Database.
+| Component | Key Methods | Legacy |
+| :--- | :--- | :--- |
+| **`MedicineDAO.java`** | `addMedicine()`, `searchMedicines()`, `checkLowStock()` | Manages inventory. |
+| **`BillDAO.java`** | `createBill()`, `getDailySales()` | Handles "Checkout". |
+| **`CustomerDAO.java`** | `updateBalance()` | Updates credit balance. |
+| **`UserDAO.java`** | `authenticate()` | Checks login credentials. |
+
+### 6.4 Atomic Transactions
+Critical operations (like Billing) use ACID transactions:
+```java
+conn.setAutoCommit(false);
+try {
+    billDAO.createBill();
+    stockDAO.reduceStock();
+    conn.commit();
+} catch (Exception e) {
+    conn.rollback();
+}
+```
+
+---
+
+## 7. AI Engine Integration
+**"The Brain in the Sidecar"**
+
+### 7.1 Hybrid Architecture
+*   **Java**: Sends JSON requests (`HttpClient`).
+*   **Python**: Receives requests, runs LLM, returns JSON.
+
+### 7.2 The AI Subsystem (`service/ai`)
+| Component | Responsibility |
+| :--- | :--- |
+| **`AIOrchestrator.java`** | **The Boss**. Decides if a query needs "Medical Precision" (Cloud) or "Business Logic" (Local). Implements Caching & Rate Limiting. |
+| **`LocalAIService.java`** | **The Local Integration**. Talks to `localhost:5000`. |
+| **`CloudAIService.java`** | **The Cloud Fallback**. Connects to Gemini/OpenAI if local fails. |
+
+### 7.3 Inter-Process Communication (IPC) Flow
+```mermaid
+sequenceDiagram
+    participant User
+    participant JavaApp
+    participant PythonServer
+    participant LLM_Model
+
+    User->>JavaApp: Enters prompt "Effects of Aspirin?"
+    JavaApp->>PythonServer: POST /chat {prompt: "..."}
+    Note right of PythonServer: Tokenize -> Inference -> Decode
+    PythonServer->>LLM_Model: Run ONNX/PyTorch
+    LLM_Model-->>PythonServer: Output tokens
+    PythonServer-->>JavaApp: JSON {response: "Aspirin is..."}
+    JavaApp-->>User: Displays text in UI
+```
+
+---
+
+## 8. Analytics & Reporting
+**"Data to Decisions"**
+
+### 8.1 Dashboard Charts
+Uses `JavaFX Charts` (LineChart, PieChart) to visualize sales trends.
+
+### 8.2 PDF Invoices (`JasperReports`)
+*   **Template**: `invoice.jrxml` (Pixel-perfect design).
+*   **Process**: Compile -> Fill Data -> Export PDF.
+
+### 8.3 Excel Export
+Uses **Apache POI** to dump raw inventory/sales data to `.xlsx`.
+
+---
+
+## 9. Authentication & Security
+**"Role-Based Access Control"**
+
+### 9.1 The Login Flow
+1.  Validate Credentials against DB (`SHA-256` Hashed Passwords).
+2.  Create a **Session Singleton** (`UserSession.getInstance()`).
+
+### 9.2 Authorization (RBAC)
+Permissions are enforced at the Data Layer.
+*   **ADMIN**: All Access.
+*   **MANAGER**: No User Management.
+*   **CASHIER**: Billing Only.
+
+### 9.3 Key Utilities
+*   **`AuthService.java`**: Manages the `currentUser` object.
+*   **`UserSession.java`**: Stores session details in memory.
+
+---
+
+## 10. Patient & Prescription Management
+**"CRM for Pharmacies"**
+
+### 10.1 Patient Profiles
+Tracks Disease History and Allergies to enable personalized care.
+
+### 10.2 Digital Prescriptions & Safety
+**State Machine**: `PENDING` -> `VERIFIED` -> `DISPENSED`.
+The **AI Checker** runs against every prescription. If a Drug-Drug Interaction is found, the system blocks dispensing until an Admin overrides it.
+
+---
+
+## 11. Billing & Point of Sale (POS)
+**"The Heartbeat"**
+
+### 11.1 Workflow
+Optimized for Speed ("Heads-Down" Entry).
+1.  **F1**: Search Medicine (Instant Filter).
+2.  **Enter**: Add to Cart.
+3.  **Ctrl+Enter**: Checkout & Print.
+
+### 11.2 Transaction Sequence Diagram
+```mermaid
+sequenceDiagram
+    participant User
+    participant BillingController
+    participant BillDAO
+    participant MedicineDAO
+    participant Database
+
+    User->>BillingController: Scans Barcode
+    BillingController->>MedicineDAO: getMedicineByBarcode("12345")
+    MedicineDAO-->>BillingController: Medicine Details
+
+    User->>BillingController: Clicks "Checkout"
+    BillingController->>BillDAO: createBill(cartItems)
+    
+    rect rgb(200, 255, 200)
+    Note right of BillDAO: DATABASE TRANSACTION START
+    BillDAO->>Database: INSERT INTO bills...
+    BillDAO->>Database: INSERT INTO bill_items...
+    BillDAO->>MedicineDAO: updateStock(item.qty)
+    MedicineDAO->>Database: UPDATE medicines SET qty = qty -sold...
+    BillDAO->>Database: COMMIT
+    end
+    
+    BillDAO-->>BillingController: Success!
+    BillingController->>User: Shows "Bill Saved" & Prints Receipt
+```
+
+---
+
+## 12. Deployment & Packaging
+**"From Code to Exe"**
+
+### 12.1 The Goal: "No Prerequisites"
+The user should simply run `Setup.exe`. They do not need to install Java or Python manually.
+
+### 12.2 The Build Pipeline (`build_full_installer.bat`)
+1.  **Maven**: Compiles Java.
+2.  **JPackage**: Bundles a stripped-down JRE (Java Runtime).
+3.  **Inno Setup**: Compresses the JRE, Python Env, and App into a single Installer.
+
+---
+
+# Part III: Advanced Features & Roadmap
+
+## 13. Cloud Synchronization (Proposed)
+**"Offline First, Sync Later"**
+
+### 13.1 Architecture
+*   **Local First**: UI never blocks for network.
+*   **Background Sync**: Java `ScheduledExecutor` runs every 5 mins.
+*   **CDC**: Database uses `last_updated` and `sync_status` flags to track changes.
+
+### 13.2 SQL Schema Update
+```sql
+ALTER TABLE bills ADD COLUMN last_updated TEXT DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE bills ADD COLUMN sync_status INTEGER DEFAULT 0; -- 0=Pending, 1=Synced
+```
+
+### 13.3 Sync Logic
+**The Push (Local -> Cloud)**:
+1.  Query `SELECT * FROM bills WHERE sync_status = 0`.
+2.  Convert to JSON.
+3.  Send batch POST to Cloud API.
+
+**The Pull (Cloud -> Local)**:
+1.  Query Cloud for `bills` where `updated_at > last_local_sync_time`.
+2.  Upsert (Update or Insert) changes into SQLite.
+
+### 13.4 Tech Choice: Firebase
+Selected for its robust Offline SDK and easy JSON synchronization.
+
+---
+
+## 14. Mobile Companion App (Planned)
+**"The Pharmacy in Your Pocket"**
+
+### 14.1 Technology: Flutter
+Single codebase for Android/iOS. Use Firebase Realtime Database to listen for updates from the Desktop App.
+
+### 14.2 Code Snippet: Real-Time Listener
+```dart
+FirebaseDatabase.instance.ref('shops/shop_123/kpi/daily_sales').onValue.listen((event) {
+  setState(() {
+    sales = event.snapshot.value;
+  });
+});
+```
+
+### 14.3 Notifications
+*   **Trigger**: When `stock < 10` on Desktop.
+*   **Action**: Firebase Cloud Function sends an FCM (Firebase Cloud Message) to the phone.
+*   **Message**: "⚠️ Alert: Metformin is running low!"
+
+---
+
+## 15. Resilience & Optimization
+**"Speed & Safety"**
+
+### 15.1 AI Fallback Strategy
+1.  **Try Local AI** (Phi-3 ONNX). fast, free, private.
+2.  **If Fail**: **Try Cloud AI** (Google Gemini API).
+3.  **If Fail**: Show cached static results.
+
+### 15.2 Performance Optimization
+*   **Database Indexing**: `CREATE INDEX idx_med_name ON medicines(name);` makes search instant.
+*   **Connection Pooling**: Reusing SQLite connection instead of opening/closing every time.
+*   **UI Virtualization**: `TableView` only renders visible rows (handles 10k+ items smoothly).
+
+---
+
+## 16. Inventory Intelligence
+**"Not Just Storage, Strategy"**
+
+### 16.1 Smart Alerts
+*   **Low Stock**: Rows turn RED if `qty < threshold`.
+*   **Expiry**: Alerts 30 days in advance.
+
+### 16.2 AI Restock Suggestions
+The **AI Orchestrator** reads your low-stock items and suggests a reorder plan based on standard trends.
+
+---
+
+# Part IV: Operations & Maintenance
+
+## 17. Settings & Admin
+**"The Control Center"**
+
+### 17.1 Environment Manager
+A built-in "App Store" for Python Runtimes. Allows one-click installation of CPU or GPU optimized environments.
+
+### 17.2 AI Configuration
+Users can force specific Execution Providers (DirectML, OpenVINO, CUDA) based on their hardware.
+
+---
+
+## 18. Troubleshooting & Diagnostics
+**"When things go wrong"**
+
+### 18.1 Log Files
+*   `%APPDATA%\MediManage\logs\application.log`: Java Errors.
+*   `%APPDATA%\MediManage\logs\python_server.log`: AI/Model Errors.
+
+### 18.2 Process Watchdog
+We include a PowerShell script (`monitor_proc.ps1`) to debug "Silent Crashes" of the Python backend.
+
+---
+
+## 19. Security, Privacy & Compliance
+**"Trust but Verify"**
+
+### 19.1 Data Privacy
+*   **Local Processing**: Patient PII never leaves the machine.
+*   **Cloud Sanitization**: If Cloud AI is used, PII is stripped before sending.
+
+### 19.2 Encryption
+*   **Passwords**: Salted & Hashed (BCrypt).
+*   **Traffic**: All Cloud Sync traffic is SSL/TLS.
+
+---
+
+## 20. Testing & Developer Workflow
+**"Quality Assurance"**
+
+### 20.1 Unit Testing (`JUnit 5`)
+Tests crucial logic like Tax Calculations and Role Permissions.
+
+### 20.2 CI/CD
+Automated batch scripts (`mvn clean package`) ensure reproducible builds.
+
+---
+
+## 21. Operational Cheatsheets
+**"For the Power User"**
+
+### 21.1 Keyboard Shortcuts
+| Context | Shortcut | Action |
+| :--- | :--- | :--- |
+| **Global** | `F11` | Toggle Fullscreen |
+| **POS** | `F1` | Focus Search Bar |
+| **POS** | `F5` | Refresh Stock List |
+| **POS** | `Ctrl + Enter` | Checkout / Print Bill |
+| **Inventory** | `Ctrl + N` | New Medicine |
+| **Reports** | `Ctrl + P` | Print Report / Export PDF |
+
+### 21.2 API Error Codes
+| Error Code | Meaning | Recovery Action |
+| :--- | :--- | :--- |
+| `AI_503` | AI Warming Up | Wait 5-10 seconds for model to load. |
+| `DB_BUSY` | Database Locked | System is saving data. Wait for spinner. |
+| `NET_001` | Sync Failed | Check internet. Data is safe locally. |
+
+### 21.3 Disaster Recovery Script (`backup.bat`)
+```batch
+@echo off
+set TIMESTAMP=%date:~-4,4%%date:~-10,2%%date:~-7,2%
+set DB_PATH="C:\Users\%USERNAME%\AppData\Local\MediManage\runtime\db\medimanage.db"
+set BACKUP_DIR="D:\MediManageBackups"
+sqlite3 %DB_PATH% ".backup '%BACKUP_DIR%\medimanage_%TIMESTAMP%.db'"
+```
+
+---
+
+## 22. Open Source Guidelines
+**"Community Standards"**
+
+### 22.1 Contributing
+1.  **Fork** the repository.
+2.  **Branch**: `feature/MyFeature`.
+3.  **Test**: Add JUnit tests for new logic.
+4.  **PR**: Submit Pull Request with description.
+
+### 22.2 License
+**MIT License**. Free for commercial and private use.
+
+---
+
+# Glossary
+> *Defining the technical jargon used throughout this document.*
+
+*   **ACID**: Atomicity, Consistency, Isolation, Durability. Properties of database transactions that guarantee validity.
+*   **CDC**: Change Data Capture. A pattern to identify and synchronize only the data that has changed.
+*   **DAO**: Data Access Object. A design pattern that provides an abstract interface to some type of database or other persistence mechanism.
+*   **FCM**: Firebase Cloud Messaging. A cross-platform messaging solution for mobile notifications.
+*   **IPC**: Inter-Process Communication. How the Java process talks to the Python process (via HTTP in this project).
+*   **JPMS**: Java Platform Module System. The module system introduced in Java 9 that affects how we package dependencies.
+*   **LTS**: Long Term Support. A version of software (like Java 21) that is supported for many years.
+*   **RAG**: Retrieval-Augmented Generation. A technique to enhance LLM responses by providing relevant context from a local database.
+*   **WAL**: Write-Ahead Logging. A method for ensuring data integrity and allowing concurrent reads/writes in SQLite.
+
+---
+**End of Document**
+    </textarea>
+
+    <!-- JS Handling -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const markdown = document.getElementById('markdown-source').value;
+
+            // Configure Marked 9.x
+            // Use simplest configuration
+
+            // Custom renderer for mermaid
+            const renderer = new marked.Renderer();
+            renderer.code = function (code, language) {
+                if (language === 'mermaid') {
+                    return '<div class="mermaid">' + code + '</div>';
+                } else {
+                    return '<pre><code class="language-' + language + '">' + code + '</code></pre>';
+                }
+            };
+
+            // Parse Synchronously
+            const htmlContent = marked.parse(markdown, {
+                renderer: renderer,
+                gfm: true,
+                breaks: true
+            });
+
+            document.getElementById('content').innerHTML = htmlContent;
+
+            // Initialize Mermaid
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: 'neutral',
+                securityLevel: 'loose',
+            });
+
+            // Force Init
+            // v10+ of mermaid uses run, v9 uses init. Let's use run safely.
+            mermaid.run({
+                nodes: document.querySelectorAll('.mermaid')
+            });
+        });
+    </script>
+</body>
+
+</html>

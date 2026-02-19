@@ -21,10 +21,10 @@ public class MedicineDAO {
 
     public List<Medicine> getAllMedicines() {
         List<Medicine> list = new ArrayList<>();
-        // Updated to select generic_name
         String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
-                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id";
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
@@ -34,7 +34,7 @@ public class MedicineDAO {
                 list.add(new Medicine(
                         rs.getInt("medicine_id"),
                         rs.getString("name"),
-                        rs.getString("generic_name"), // Added generic_name
+                        rs.getString("generic_name"),
                         rs.getString("company"),
                         rs.getString("expiry_date"),
                         rs.getInt("quantity"),
@@ -137,41 +137,25 @@ public class MedicineDAO {
         }
     }
 
-    // Delete Medicine
+    /**
+     * Soft-delete a medicine by setting active = 0.
+     * This preserves referential integrity with bill_items and avoids FK constraint
+     * errors.
+     */
     public void deleteMedicine(int medicineId) {
         checkManagerPermission();
-        String deleteStock = "DELETE FROM stock WHERE medicine_id=?";
-        String deleteMed = "DELETE FROM medicines WHERE medicine_id=?";
-        // Note: bill_items also references medicine_id. Deleting a medicine used in
-        // bills will fail due to FK.
-        // For a real app, Soft Delete is better (active=0).
-        // BUT strict requirement says "deleteMedicine".
-        // I will try to delete stock first, then medicine. use try-catch to warn user
-        // if FK constraint fails.
+        String sql = "UPDATE medicines SET active = 0 WHERE medicine_id = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                try (PreparedStatement psStock = conn.prepareStatement(deleteStock)) {
-                    psStock.setInt(1, medicineId);
-                    psStock.executeUpdate();
-                }
-
-                try (PreparedStatement psMed = conn.prepareStatement(deleteMed)) {
-                    psMed.setInt(1, medicineId);
-                    psMed.executeUpdate();
-                }
-
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                System.err.println("Cannot delete medicine: It might be used in bills. " + e.getMessage());
-                // Rethrow or handle quietly? For now, print error.
-                throw new SQLException("Cannot delete medicine used in bills.");
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, medicineId);
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                System.out.println("✅ Medicine " + medicineId + " soft-deleted.");
+            } else {
+                System.err.println("⚠️ Medicine " + medicineId + " not found.");
             }
         } catch (SQLException e) {
-            // e.printStackTrace();
-            // Better to let controller handle it or just log.
             System.err.println("Delete failed: " + e.getMessage());
         }
     }
@@ -182,7 +166,7 @@ public class MedicineDAO {
         String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
-                "WHERE m.generic_name LIKE ? OR m.name LIKE ?"; // Search both for better results
+                "WHERE m.active = 1 AND (m.generic_name LIKE ? OR m.name LIKE ?)";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -209,14 +193,81 @@ public class MedicineDAO {
         return list;
     }
 
-    public List<Medicine> getExpiringMedicines(int days) {
+    /**
+     * Paginated search for medicines by keyword. Searches name, generic_name, and
+     * company.
+     * Returns at most `limit` results starting from `offset`.
+     */
+    public List<Medicine> searchMedicines(String keyword, int offset, int limit) {
         List<Medicine> list = new ArrayList<>();
-        // SQLite: date('now', '+30 days')
         String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
-                "WHERE m.expiry_date <= date('now', '+' || ? || ' days') " +
-                "AND m.expiry_date >= date('now') " + // Not already expired (optional, but good for "expiring soon")
+                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?) " +
+                "ORDER BY m.name ASC LIMIT ? OFFSET ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+            pstmt.setString(3, searchPattern);
+            pstmt.setInt(4, limit);
+            pstmt.setInt(5, offset);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    /**
+     * Count total active medicines matching a keyword.
+     */
+    public int countMedicines(String keyword) {
+        String sql = "SELECT COUNT(*) FROM medicines m " +
+                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?)";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+            pstmt.setString(3, searchPattern);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public List<Medicine> getExpiringMedicines(int days) {
+        List<Medicine> list = new ArrayList<>();
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 " +
+                "AND m.expiry_date <= date('now', '+' || ? || ' days') " +
+                "AND m.expiry_date >= date('now') " +
                 "ORDER BY m.expiry_date ASC";
 
         try (Connection conn = DatabaseUtil.getConnection();

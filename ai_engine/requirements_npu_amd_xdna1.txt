@@ -1,0 +1,19 @@
+# MediManage AI — AMD NPU Environment (XDNA 1: Ryzen 7x40/8x40)
+# For AMD Ryzen AI with XDNA 1.0 NPU (Phoenix / Hawk Point)
+# Python 3.10 | OGA 0.7.0.3 | VitisAI EP
+
+--extra-index-url https://pypi.amd.com/simple
+
+# Core
+flask
+numpy<2
+requests
+tqdm
+huggingface_hub
+duckduckgo-search
+
+# AMD NPU / VitisAI inference (XDNA 1)
+onnxruntime-genai-directml-ryzenai==0.7.0.3
+
+# CPU fallback for GGUF models
+llama-cpp-python

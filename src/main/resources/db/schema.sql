@@ -65,14 +65,61 @@ CREATE TABLE IF NOT EXISTS expenses (
     date TEXT NOT NULL,
     description TEXT
 );
--- Migrations (Will fail safely if columns exist, or we can use a more robust DBUtil approach, but for now appending)
--- Note: schema.sql is run line-by-line by DatabaseUtil. simpler validation there would be better,
--- but standard SQLite ALTER TABLE ADD COLUMN is supported.
--- We can't easily check "IF NOT EXISTS" for columns in SQL script without procedural logic.
--- Ideally, DatabaseUtil should handle these errors gracefully if column exists.
--- For a strict script, we will just assume this runs on new DBs or handled by app.
--- However, to support the user's request "Run the Schema updates", we will rely on DatabaseUtil's existing try-catch for "Error executing schema statement" to swallow "duplicate column" errors.
+-- ======================== PERFORMANCE INDEXES ========================
+-- These use IF NOT EXISTS so they are safe to re-run on existing DBs.
+CREATE INDEX IF NOT EXISTS idx_medicines_name ON medicines(name);
+CREATE INDEX IF NOT EXISTS idx_medicines_expiry ON medicines(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_stock_medicine ON stock(medicine_id);
+CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(bill_date);
+CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customer_id);
+CREATE INDEX IF NOT EXISTS idx_bill_items_bill ON bill_items(bill_id);
+CREATE INDEX IF NOT EXISTS idx_bill_items_medicine ON bill_items(medicine_id);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+-- ======================== MIGRATIONS ========================
+-- ALTER TABLE ADD COLUMN will fail safely on existing DBs (DatabaseUtil's try-catch
+-- swallows "duplicate column" errors). Safe to re-run.
+-- Original migrations
 ALTER TABLE medicines
 ADD COLUMN generic_name TEXT;
 ALTER TABLE customers
 ADD COLUMN current_balance REAL DEFAULT 0.0;
+-- Phase 1 Optimization: new columns
+ALTER TABLE bills
+ADD COLUMN payment_mode TEXT DEFAULT 'CASH';
+ALTER TABLE bills
+ADD COLUMN ai_care_protocol TEXT;
+ALTER TABLE medicines
+ADD COLUMN active INTEGER DEFAULT 1;
+-- Index on the new generic_name column
+CREATE INDEX IF NOT EXISTS idx_medicines_generic ON medicines(generic_name);
+-- 8. PRESCRIPTIONS
+CREATE TABLE IF NOT EXISTS prescriptions (
+    prescription_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER,
+    customer_name TEXT NOT NULL,
+    doctor_name TEXT,
+    status TEXT DEFAULT 'PENDING',
+    prescribed_date TEXT DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    medicines_text TEXT,
+    ai_validation TEXT,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_customer ON prescriptions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_status ON prescriptions(status);
+-- Migration: ensure prescriptions table has all required columns (safe on existing DBs)
+ALTER TABLE prescriptions
+ADD COLUMN customer_name TEXT;
+ALTER TABLE prescriptions
+ADD COLUMN doctor_name TEXT;
+ALTER TABLE prescriptions
+ADD COLUMN status TEXT DEFAULT 'PENDING';
+ALTER TABLE prescriptions
+ADD COLUMN prescribed_date TEXT DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE prescriptions
+ADD COLUMN notes TEXT;
+ALTER TABLE prescriptions
+ADD COLUMN medicines_text TEXT;
+ALTER TABLE prescriptions
+ADD COLUMN ai_validation TEXT;

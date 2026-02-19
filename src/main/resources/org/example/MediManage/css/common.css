@@ -1061,3 +1061,192 @@
     -fx-font-family: 'Consolas', 'Ubuntu Mono', monospace;
     -fx-font-size: 11px;
 }
+
+
+/* ============================
+   PROGRESS INDICATOR (Spinner)
+   ============================ */
+.progress-indicator {
+    -fx-progress-color: #00d4ff;
+    -fx-padding: 4;
+}
+
+.progress-indicator .indicator .spinner {
+    -fx-border-color: transparent;
+}
+
+.progress-indicator:indeterminate .indicator .spinner .segment {
+    -fx-background-color: #00d4ff;
+}
+
+.progress-indicator:indeterminate .indicator .spinner .segment:0 {
+    -fx-background-color: #00d4ffFF;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:1 {
+    -fx-background-color: #00d4ffDD;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:2 {
+    -fx-background-color: #00d4ffBB;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:3 {
+    -fx-background-color: #00d4ff99;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:4 {
+    -fx-background-color: #00d4ff66;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:5 {
+    -fx-background-color: #00d4ff44;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:6 {
+    -fx-background-color: #00d4ff22;
+}
+.progress-indicator:indeterminate .indicator .spinner .segment:7 {
+    -fx-background-color: #00d4ff11;
+}
+
+.progress-indicator .percentage {
+    -fx-fill: #e6f0ff;
+    -fx-font-size: 10px;
+}
+
+
+/* ============================
+   AI PANEL STYLES
+   ============================ */
+.ai-panel {
+    -fx-background-color: linear-gradient(to bottom, #171230, #0f1724);
+    -fx-border-color: #00d4ff30;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 14;
+    -fx-effect: dropshadow(gaussian, rgba(0, 212, 255, 0.06), 12, 0, 0, 2);
+}
+
+.ai-panel-title {
+    -fx-text-fill: #00d4ff;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.ai-panel-text {
+    -fx-control-inner-background: #0a0e18;
+    -fx-text-fill: #bfc9e6;
+    -fx-font-family: 'Consolas', 'Ubuntu Mono', monospace;
+    -fx-font-size: 12px;
+    -fx-border-color: #2a2650;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+/* AI action button (neon glow) */
+.button-ai {
+    -fx-background-color: linear-gradient(to bottom, #1a2850, #0f1e3d);
+    -fx-text-fill: #00d4ff;
+    -fx-border-color: #00d4ff60;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.button-ai:hover {
+    -fx-background-color: linear-gradient(to bottom, #00d4ff, derive(#00d4ff, -15%));
+    -fx-text-fill: #061427;
+    -fx-border-color: #00d4ff;
+    -fx-effect: dropshadow(three-pass-box, #00d4ff40, 12, 0, 0, 0);
+}
+
+.button-ai:disabled {
+    -fx-background-color: #1a1635;
+    -fx-text-fill: #4e4b6c;
+    -fx-border-color: #2a2650;
+    -fx-opacity: 0.6;
+}
+
+
+/* ============================
+   LOADING OVERLAY
+   ============================ */
+.loading-overlay {
+    -fx-background-color: #1e1a38CC;
+    -fx-alignment: center;
+}
+
+.loading-label {
+    -fx-text-fill: #00d4ff;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+
+/* ============================
+   RESPONSIVE LAYOUT UTILITIES
+   ============================ */
+.padded-content {
+    -fx-padding: 20 24;
+}
+
+.padded-content-compact {
+    -fx-padding: 12 16;
+}
+
+.responsive-vbox {
+    -fx-spacing: 12;
+    -fx-fill-width: true;
+}
+
+.responsive-hbox {
+    -fx-spacing: 12;
+    -fx-alignment: CENTER_LEFT;
+}
+
+/* Grow-to-fill containers */
+.fill-width {
+    -fx-max-width: infinity;
+    -fx-hgrow: always;
+}
+
+.fill-height {
+    -fx-max-height: infinity;
+    -fx-vgrow: always;
+}
+
+
+/* ============================
+   BADGE / STATUS CHIP
+   ============================ */
+.badge {
+    -fx-padding: 3 10;
+    -fx-background-radius: 12;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-success {
+    -fx-background-color: #5fe6b320;
+    -fx-text-fill: #5fe6b3;
+    -fx-border-color: #5fe6b350;
+    -fx-border-radius: 12;
+}
+
+.badge-warning {
+    -fx-background-color: #e8c66a20;
+    -fx-text-fill: #e8c66a;
+    -fx-border-color: #e8c66a50;
+    -fx-border-radius: 12;
+}
+
+.badge-danger {
+    -fx-background-color: #ff6b6b20;
+    -fx-text-fill: #ff6b6b;
+    -fx-border-color: #ff6b6b50;
+    -fx-border-radius: 12;
+}
+
+.badge-info {
+    -fx-background-color: #7aa2f720;
+    -fx-text-fill: #7aa2f7;
+    -fx-border-color: #7aa2f750;
+    -fx-border-radius: 12;
+}

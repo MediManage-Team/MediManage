@@ -31,7 +31,7 @@ public class BillDAO {
                 }
             }
 
-            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id, user_id) VALUES (?, ?, ?, ?)";
+            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id, user_id, payment_mode) VALUES (?, ?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
                 String now = java.time.LocalDateTime.now()
@@ -39,6 +39,7 @@ public class BillDAO {
                 psBill.setString(2, now);
                 psBill.setObject(3, customerId); // setInt can't handle null, setObject can
                 psBill.setObject(4, userId);
+                psBill.setString(5, paymentMode != null ? paymentMode : "CASH");
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -222,5 +223,60 @@ public class BillDAO {
             e.printStackTrace();
         }
         return sales;
+    }
+
+    // ======================== AI CARE PROTOCOL ========================
+
+    /**
+     * Save AI-generated care protocol for a bill.
+     */
+    public void saveAICareProtocol(int billId, String protocol) {
+        String sql = "UPDATE bills SET ai_care_protocol = ? WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, protocol);
+            ps.setInt(2, billId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Failed to save AI care protocol for bill " + billId + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieve AI care protocol for a bill.
+     */
+    public String getAICareProtocol(int billId) {
+        String sql = "SELECT ai_care_protocol FROM bills WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("ai_care_protocol");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to load AI care protocol for bill " + billId + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Get payment mode for a bill.
+     */
+    public String getPaymentMode(int billId) {
+        String sql = "SELECT payment_mode FROM bills WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("payment_mode");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to get payment mode for bill " + billId + ": " + e.getMessage());
+        }
+        return "CASH";
     }
 }

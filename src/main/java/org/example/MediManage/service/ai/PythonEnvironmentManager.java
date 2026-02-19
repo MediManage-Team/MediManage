@@ -232,33 +232,108 @@ public class PythonEnvironmentManager {
 
     private void createCondaEnv(String condaExe, String envName) throws Exception {
         Path envPath = getEnvPath(envName);
+        String pythonVersion = getPythonVersionForEnv(envName);
 
-        // conda create -p {path} python=3.10 -y
+        // conda create -p {path} python={version} -y
         List<String> cmd = new ArrayList<>();
         cmd.add(condaExe);
         cmd.add("create");
         cmd.add("-p");
         cmd.add(envPath.toAbsolutePath().toString());
-        cmd.add("python=3.10");
+        cmd.add("python=" + pythonVersion);
         cmd.add("-y");
 
         runCommand(cmd, "conda create " + envName);
     }
 
+    /**
+     * Get the right Python version for the given environment.
+     * XDNA 2 (Ryzen AI 300) requires Python 3.12; XDNA 1 uses 3.10.
+     */
+    private String getPythonVersionForEnv(String envName) {
+        if (ENV_NPU_AMD.equals(envName)) {
+            String xdnaGen = detectXdnaGeneration();
+            if ("xdna2".equals(xdnaGen)) {
+                log("🔹 XDNA 2 detected — using Python 3.12");
+                return "3.12";
+            }
+        }
+        return "3.10"; // Default for all other envs
+    }
+
+    /**
+     * Detect AMD XDNA NPU generation from CPU name.
+     * Returns "xdna1", "xdna2", or null.
+     */
+    public String detectXdnaGeneration() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "powershell", "-Command",
+                    "(Get-CimInstance Win32_Processor).Name");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String cpuName;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                cpuName = reader.readLine();
+            }
+            p.waitFor();
+
+            if (cpuName == null)
+                return null;
+            cpuName = cpuName.trim().toLowerCase();
+
+            // XDNA 2: Ryzen AI 300 series (Strix/Krackan Point)
+            if (cpuName.contains("ai 9 hx") || cpuName.contains("ai 7 pro") ||
+                    cpuName.contains("ai 5 pro") || cpuName.contains("ai 7 350") ||
+                    cpuName.contains("ai 5 340") || cpuName.contains("ai 9 365") ||
+                    cpuName.contains("ryzen ai 300") || cpuName.contains("strix") ||
+                    cpuName.contains("krackan")) {
+                return "xdna2";
+            }
+            // XDNA 1: Ryzen 7x40/8x40 series (Phoenix/Hawk Point)
+            if (cpuName.contains("7840") || cpuName.contains("7640") ||
+                    cpuName.contains("7940") || cpuName.contains("8840") ||
+                    cpuName.contains("8640") || cpuName.contains("8845") ||
+                    cpuName.contains("8940") || cpuName.contains(" z1")) {
+                return "xdna1";
+            }
+        } catch (Exception e) {
+            log("⚠️ Could not detect XDNA generation: " + e.getMessage());
+        }
+        return null;
+    }
+
     private void installDependencies(String envName) throws Exception {
+        // For npu_amd, check for XDNA-specific requirements first
         Path reqPath = getRequirementsPath(envName);
+        if (ENV_NPU_AMD.equals(envName)) {
+            String xdnaGen = detectXdnaGeneration();
+            if (xdnaGen != null) {
+                Path xdnaReq = aiEngineDir.resolve("requirements_npu_amd_" + xdnaGen + ".txt");
+                if (Files.exists(xdnaReq)) {
+                    log("📋 Using XDNA-specific requirements: " + xdnaReq.getFileName());
+                    reqPath = xdnaReq;
+                }
+            }
+        }
+
         if (!Files.exists(reqPath)) {
             log("⚠️ Requirements file not found: " + reqPath);
             return;
         }
 
         String pipExe = getPipExePath(envName);
-        // pip install -r requirements.txt
         List<String> cmd = new ArrayList<>();
         cmd.add(pipExe);
         cmd.add("install");
         cmd.add("-r");
         cmd.add(reqPath.toAbsolutePath().toString());
+
+        // For AMD NPU env, add AMD's pip index
+        if (ENV_NPU_AMD.equals(envName)) {
+            cmd.add("--extra-index-url");
+            cmd.add("https://pypi.amd.com/simple");
+        }
 
         runCommand(cmd, "pip install " + envName);
         writeDepTimestamp(envName);

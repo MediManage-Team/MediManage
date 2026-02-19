@@ -31,8 +31,9 @@ A robust, enterprise-grade Desktop application for managing pharmacy inventory, 
 
 ### 🧠 AI Features (New!)
 - **Local AI Engine**: Built-in Python microservice for offline inference.
+- **AMD Ryzen AI Support**: Auto-detects NPU generation (XDNA 1/2) for hardware acceleration.
 - **Model Store**: Download optimized LLMs (Phi-3, TinyLlama, Qwen) directly from Hugging Face.
-- **Privacy First**: All AI processing happens locally on your machine (CPU/GPU).
+- **Privacy First**: All AI processing happens locally on your machine (CPU/GPU/NPU).
 - **Smart Assist**: (Coming Soon) Chat with your inventory data.
 
 ---

@@ -21,6 +21,68 @@ class AIInferenceEngine:
         self.framework = None
         self._current_model_path = None
 
+    @staticmethod
+    def _find_genai_model_path(model_path, hardware_config="auto"):
+        """
+        Find the best model variant directory containing genai_config.json,
+        ranked by available hardware acceleration.
+
+        Priority (when GPU is available):
+          1. gpu/ subdirectory (for CUDA or DirectML)
+          2. cpu_and_mobile/ subdirectory
+          3. Direct path with genai_config.json
+
+        Priority (CPU-only or explicit CPU config):
+          1. cpu_and_mobile/ subdirectory
+          2. Direct path with genai_config.json
+        """
+        # Direct check — if genai_config.json is right here, use it
+        if os.path.isfile(os.path.join(model_path, "genai_config.json")):
+            return model_path
+
+        # Collect all variant directories containing genai_config.json
+        variants = []
+        for root, dirs, files in os.walk(model_path):
+            depth = root.replace(model_path, "").count(os.sep)
+            if depth > 3:
+                continue
+            if "genai_config.json" in files:
+                rel = os.path.relpath(root, model_path).lower()
+                # Classify variant
+                if "gpu" in rel and "cpu" not in rel:
+                    kind = "gpu"
+                elif "cpu" in rel or "mobile" in rel:
+                    kind = "cpu"
+                else:
+                    kind = "other"
+                variants.append((kind, root))
+
+        if not variants:
+            return None
+
+        # Detect if GPU acceleration is possible
+        gpu_available = False
+        try:
+            import onnxruntime as ort
+            eps = ort.get_available_providers()
+            gpu_available = ("CUDAExecutionProvider" in eps or
+                            "DmlExecutionProvider" in eps)
+        except ImportError:
+            pass
+
+        # Rank variants: GPU first if GPU available, CPU otherwise
+        if gpu_available and hardware_config != "cpu":
+            priority = {"gpu": 0, "other": 1, "cpu": 2}
+        else:
+            priority = {"cpu": 0, "other": 1, "gpu": 2}
+
+        variants.sort(key=lambda v: priority.get(v[0], 99))
+        best = variants[0][1]
+        logger.info(f"Selected model variant: {os.path.relpath(best, model_path)} "
+                    f"(gpu_available={gpu_available}, "
+                    f"variants={[v[0] for v in variants]})")
+        return best
+
     def load_model(self, model_path, hardware_config="auto"):
         """
         Loads the model based on the hardware configuration.
@@ -45,8 +107,11 @@ class AIInferenceEngine:
             self.framework = "gguf"  # BitNet.cpp / llama.cpp
         elif model_path.endswith(".xml"):
             self.framework = "openvino"
-        elif os.path.isdir(model_path) and os.path.exists(os.path.join(model_path, "genai_config.json")):
+        elif os.path.isdir(model_path) and self._find_genai_model_path(model_path, hardware_config):
             self.framework = "genai"
+            # Resolve to the actual subdirectory containing genai_config.json
+            model_path = self._find_genai_model_path(model_path, hardware_config)
+            self._current_model_path = model_path
         elif model_path.endswith(".onnx") or os.path.isdir(model_path):
             self.framework = "onnx_standard"
         else:
@@ -106,29 +171,48 @@ class AIInferenceEngine:
         logger.info(f"GGUF model loaded on CPU with {n_threads} threads")
 
     def _load_genai(self, model_path, hardware_config):
-        """Load model using ONNX Runtime GenAI (AMD NPU/DirectML, CUDA, CPU)."""
+        """Load model using ONNX Runtime GenAI (AMD NPU/VitisAI, DirectML, CUDA, CPU)."""
         import onnxruntime_genai as og
 
         logger.info("Using ONNX Runtime GenAI...")
 
-        # Execution Provider Selection
-        ep = "cpu"  # Default
+        # Detect available execution providers via onnxruntime
+        available_eps = []
         try:
-            available = og.Model.available_providers()
-            if hardware_config == "directml" or (hardware_config == "auto" and "dml" in available):
-                ep = "dml"
-            elif hardware_config == "cuda" or (hardware_config == "auto" and "cuda" in available):
-                ep = "cuda"
-        except AttributeError:
-            if hardware_config == "directml":
-                ep = "dml"
-            elif hardware_config == "cuda":
-                ep = "cuda"
+            import onnxruntime as ort
+            available_eps = ort.get_available_providers()
+            logger.info(f"Available ONNX Runtime EPs: {available_eps}")
+        except ImportError:
+            logger.warning("onnxruntime not available for EP detection")
 
-        logger.info(f"Loading GenAI model with provider: {ep}")
+        # Determine execution provider priority based on model variant
+        # Check if this is a GPU-compiled model (from the path)
+        model_lower = model_path.lower()
+        is_gpu_model = "gpu" in model_lower and "cpu" not in os.path.basename(model_lower)
+
+        ep = "cpu"  # Default fallback
+        if is_gpu_model:
+            # GPU model variant — use actual GPU acceleration
+            if "CUDAExecutionProvider" in available_eps:
+                ep = "cuda"
+                logger.info("CUDA EP detected — using NVIDIA GPU acceleration")
+            elif "DmlExecutionProvider" in available_eps:
+                ep = "dml"
+                logger.info("DirectML detected — using GPU acceleration")
+            else:
+                logger.warning("GPU model variant selected but no GPU EP available, falling back to CPU")
+        else:
+            # CPU model variant — GPU EPs won't help, just run on CPU
+            # VitisAI EP is registered but won't accelerate CPU-compiled models
+            if "VitisAIExecutionProvider" in available_eps:
+                logger.info("VitisAI EP available (NPU registered, model runs on CPU)")
+            logger.info("CPU model variant — using CPU execution")
+
+        logger.info(f"Loading GenAI model from: {model_path} with provider: {ep}")
         self.model = og.Model(model_path)
         self.tokenizer = og.Tokenizer(self.model)
         self.provider = f"GenAI:{ep}"
+        logger.info(f"Model device type: {self.model.device_type}")
 
         self.gen_params = og.GeneratorParams(self.model)
         self.gen_params.set_search_options(do_sample=False)
@@ -219,12 +303,28 @@ class AIInferenceEngine:
             # --- GenAI Inference ---
             elif self.framework == "genai":
                 import onnxruntime_genai as og
+                import numpy as np
 
                 input_ids = self.tokenizer.encode(full_prompt)
-                self.gen_params.set_input_sequences(input_ids)
-                self.gen_params.set_max_length(max_tokens)
 
-                output_ids = self.model.generate(self.gen_params)[0]
+                # Re-create params each call to avoid stale state
+                params = og.GeneratorParams(self.model)
+                params.set_search_options(do_sample=False, max_length=max_tokens)
+
+                # OGA 0.7.x uses set_model_input + Generator streaming loop
+                # OGA 0.10+ uses set_input_sequences + model.generate
+                if hasattr(params, 'set_input_sequences'):
+                    # --- OGA 0.10+ path ---
+                    params.set_input_sequences(input_ids)
+                    output_ids = self.model.generate(params)[0]
+                else:
+                    # --- OGA 0.7.x path (streaming Generator) ---
+                    generator = og.Generator(self.model, params)
+                    generator.append_tokens(input_ids)
+                    while not generator.is_done():
+                        generator.generate_next_token()  # OGA 0.7.x: does logits + sampling
+                    output_ids = generator.get_sequence(0)
+
                 decoded_output = self.tokenizer.decode(output_ids)
 
                 if decoded_output.startswith(full_prompt):

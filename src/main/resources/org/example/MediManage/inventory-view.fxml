@@ -72,6 +72,17 @@
                     <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                     <Button fx:id="btnDelete" text="Delete" disable="true" styleClass="button-danger" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
                 </HBox>
+
+                <Separator/>
+                <TitledPane text="🤖 AI Restock Suggestions" expanded="false" animated="true">
+                    <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button fx:id="btnAIRestock" text="✨ Get AI Suggestions" onAction="#handleAIRestock" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
+                            <ProgressIndicator fx:id="spinnerRestock" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
+                        </HBox>
+                        <TextArea fx:id="txtAIRestock" editable="false" wrapText="true" prefHeight="120" promptText="AI restock suggestions will appear here..." styleClass="ai-panel-text"/>
+                    </VBox>
+                </TitledPane>
             </VBox>
         </items>
     </SplitPane>

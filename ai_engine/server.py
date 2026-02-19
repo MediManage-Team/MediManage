@@ -92,6 +92,12 @@ def hardware():
     return jsonify(hardware_detect.get_hardware_info())
 
 
+@app.route('/npu_info', methods=['GET'])
+def npu_info():
+    """Return AMD NPU generation detection and setup status."""
+    return jsonify(hardware_detect.get_npu_setup_info())
+
+
 # ======================== MODEL LOADING ========================
 
 @app.route('/load_model', methods=['POST'])
