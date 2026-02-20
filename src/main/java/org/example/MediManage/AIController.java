@@ -296,6 +296,46 @@ public class AIController {
     }
 
     @FXML
+    private void handleTopSellersReport() {
+        sendDbQuery("Show top 20 best-selling medicines by total quantity sold from bill items",
+                "🏆 Top Selling Medicines");
+    }
+
+    @FXML
+    private void handleProfitReport() {
+        sendDbQuery(
+                "Show profit analysis - total revenue, total bills, average bill value, and revenue by payment mode",
+                "📊 Profit Analysis");
+    }
+
+    @FXML
+    private void handlePrescriptionReport() {
+        sendDbQuery("Show recent prescriptions with patient name, doctor, status, and medicines prescribed",
+                "📋 Prescription Overview");
+    }
+
+    @FXML
+    private void handleDrugInteractions() {
+        sendDbQuery(
+                "Show recent bills with multiple medicines to check for potential drug-drug interactions. List patient and all medicines per bill",
+                "💊 Drug Interaction Check");
+    }
+
+    @FXML
+    private void handleReorderSuggestions() {
+        sendDbQuery(
+                "Show medicines with stock below 20 units that have been sold recently - suggest reorder quantities based on past sales velocity",
+                "🔄 Reorder Suggestions");
+    }
+
+    @FXML
+    private void handleDailySummary() {
+        sendDbQuery(
+                "Give a complete daily summary: total sales today, number of bills, new customers, pending prescriptions, low stock alerts, and expiring medicines count",
+                "📅 Daily Summary");
+    }
+
+    @FXML
     private void handleClearChat() {
         chatBox.getChildren().clear();
         addSystemMessage("🤖 Chat cleared. Ask me anything about your pharmacy.");

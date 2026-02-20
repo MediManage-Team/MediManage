@@ -108,18 +108,3 @@ CREATE TABLE IF NOT EXISTS prescriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_prescriptions_customer ON prescriptions(customer_id);
 CREATE INDEX IF NOT EXISTS idx_prescriptions_status ON prescriptions(status);
--- Migration: ensure prescriptions table has all required columns (safe on existing DBs)
-ALTER TABLE prescriptions
-ADD COLUMN customer_name TEXT;
-ALTER TABLE prescriptions
-ADD COLUMN doctor_name TEXT;
-ALTER TABLE prescriptions
-ADD COLUMN status TEXT DEFAULT 'PENDING';
-ALTER TABLE prescriptions
-ADD COLUMN prescribed_date TEXT DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE prescriptions
-ADD COLUMN notes TEXT;
-ALTER TABLE prescriptions
-ADD COLUMN medicines_text TEXT;
-ALTER TABLE prescriptions
-ADD COLUMN ai_validation TEXT;

@@ -14,7 +14,7 @@ public class SidebarManager {
 
         // Add Common Dashboard Button (Admin, Manager, and Pharmacist)
         if (role == UserRole.ADMIN || role == UserRole.MANAGER || role == UserRole.PHARMACIST) {
-            addButton(container, "📊 Stats Dashboard", "dashboard-view", switcher);
+            addButton(container, "📊 Dashboard", "dashboard-view", switcher);
         }
 
         // Add Role-Specific Buttons
