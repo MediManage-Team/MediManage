@@ -1,5 +1,6 @@
 # MediManage AI — NVIDIA GPU Environment
 # For CUDA-accelerated inference (RTX 2060+, 4GB+ VRAM)
+# Requires: NVIDIA Driver 525+ and CUDA Toolkit 12.x
 
 # Core
 flask
@@ -9,10 +10,11 @@ tqdm
 huggingface_hub
 transformers
 duckduckgo-search
+mcp[cli]
 
 # GPU inference — CUDA acceleration
 onnxruntime-gpu
-onnxruntime-genai
+onnxruntime-genai-cuda
 
 # CPU fallback for GGUF models
 llama-cpp-python

@@ -173,6 +173,61 @@ public class PythonEnvironmentManager {
         }
     }
 
+    /**
+     * Auto-detect the best Python environment based on available hardware.
+     * Checks for NVIDIA GPU (→ gpu), AMD iGPU (→ npu_amd), fallback to CPU.
+     * Only returns envs that are already installed — avoids triggering setup
+     * for an env the user hasn't explicitly installed.
+     */
+    public String autoDetectBestEnv() {
+        // 1. Check NVIDIA GPU via nvidia-smi
+        if (isEnvReady(ENV_GPU) && hasNvidiaGpu()) {
+            log("🎯 Auto-detected NVIDIA GPU — selecting '" + ENV_GPU + "' environment");
+            return ENV_GPU;
+        }
+        // 2. Check AMD iGPU (common on Ryzen mobile processors)
+        if (isEnvReady(ENV_NPU_AMD) && hasAmdGpu()) {
+            log("🎯 Auto-detected AMD iGPU — selecting '" + ENV_NPU_AMD + "' environment");
+            return ENV_NPU_AMD;
+        }
+        // 3. Fallback to CPU
+        log("ℹ️ No GPU env ready — using CPU environment");
+        return ENV_CPU;
+    }
+
+    /** Check if an NVIDIA GPU is present via nvidia-smi. */
+    private boolean hasNvidiaGpu() {
+        try {
+            Process p = new ProcessBuilder("nvidia-smi", "--query-gpu=name", "--format=csv,noheader")
+                    .redirectErrorStream(true).start();
+            String output = new String(p.getInputStream().readAllBytes()).trim();
+            int exitCode = p.waitFor();
+            if (exitCode == 0 && !output.isEmpty()) {
+                log("🟢 NVIDIA GPU found: " + output.split("\\n")[0].trim());
+                return true;
+            }
+        } catch (Exception ignore) {
+        }
+        return false;
+    }
+
+    /** Check if an AMD GPU/iGPU is present via wmic. */
+    private boolean hasAmdGpu() {
+        try {
+            Process p = new ProcessBuilder("wmic", "path", "Win32_VideoController",
+                    "get", "Name").redirectErrorStream(true).start();
+            String output = new String(p.getInputStream().readAllBytes());
+            int exitCode = p.waitFor();
+            if (exitCode == 0 && output.toLowerCase().contains("amd")
+                    && output.toLowerCase().contains("radeon")) {
+                log("🟢 AMD iGPU found in display adapters");
+                return true;
+            }
+        } catch (Exception ignore) {
+        }
+        return false;
+    }
+
     // ======================== ENVIRONMENT LISTING ========================
 
     public List<Map<String, Object>> listEnvironments() {

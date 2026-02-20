@@ -1,6 +1,10 @@
 import os
 import logging
 import time
+import sys
+import platform
+import sqlite3
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +17,37 @@ except ImportError:
     get_hardware_info = None
 
 
+def _ensure_cuda_dlls_on_path():
+    """
+    On Windows, NVIDIA pip packages (nvidia-cublas-cu12, nvidia-cudnn-cu12, etc.)
+    install DLLs into site-packages/nvidia/*/bin/ which is NOT on os.environ['PATH'].
+    Conda cuda-toolkit installs them into Library/bin/.
+    OGA needs these DLLs at load time, so we add both locations to PATH.
+    """
+    if platform.system() != "Windows":
+        return
+
+    added = []
+    # 1. Conda env Library/bin (cudart, cublas, cusolver, etc.)
+    env_lib_bin = os.path.join(os.path.dirname(sys.executable), "Library", "bin")
+    if os.path.isdir(env_lib_bin) and env_lib_bin not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = env_lib_bin + os.pathsep + os.environ["PATH"]
+        added.append(env_lib_bin)
+
+    # 2. pip nvidia packages (cudnn, cublas, etc.)
+    site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
+    nvidia_dir = os.path.join(site_packages, "nvidia")
+    if os.path.isdir(nvidia_dir):
+        for pkg in os.listdir(nvidia_dir):
+            bin_dir = os.path.join(nvidia_dir, pkg, "bin")
+            if os.path.isdir(bin_dir) and bin_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = bin_dir + os.pathsep + os.environ["PATH"]
+                added.append(bin_dir)
+
+    if added:
+        logger.info(f"Added {len(added)} CUDA DLL paths to PATH")
+
+
 class AIInferenceEngine:
     def __init__(self):
         self.model = None
@@ -20,6 +55,12 @@ class AIInferenceEngine:
         self.provider = None
         self.framework = None
         self._current_model_path = None
+        # Performance tracking
+        self._last_tokens_generated = 0
+        self._last_generation_time = 0.0
+        self._last_tokens_per_sec = 0.0
+        self._total_tokens_generated = 0
+        self._total_generation_time = 0.0
 
     @staticmethod
     def _find_genai_model_path(model_path, hardware_config="auto"):
@@ -171,7 +212,7 @@ class AIInferenceEngine:
         logger.info(f"GGUF model loaded on CPU with {n_threads} threads")
 
     def _load_genai(self, model_path, hardware_config):
-        """Load model using ONNX Runtime GenAI (AMD NPU/VitisAI, DirectML, CUDA, CPU)."""
+        """Load model using ONNX Runtime GenAI (DirectML, CUDA, CPU)."""
         import onnxruntime_genai as og
 
         logger.info("Using ONNX Runtime GenAI...")
@@ -186,30 +227,43 @@ class AIInferenceEngine:
             logger.warning("onnxruntime not available for EP detection")
 
         # Determine execution provider priority based on model variant
-        # Check if this is a GPU-compiled model (from the path)
         model_lower = model_path.lower()
         is_gpu_model = "gpu" in model_lower and "cpu" not in os.path.basename(model_lower)
 
         ep = "cpu"  # Default fallback
-        if is_gpu_model:
-            # GPU model variant — use actual GPU acceleration
+        use_dml = False
+        use_cuda = False
+
+        if is_gpu_model or hardware_config in ("directml", "cuda"):
             if "CUDAExecutionProvider" in available_eps:
                 ep = "cuda"
+                use_cuda = True
                 logger.info("CUDA EP detected — using NVIDIA GPU acceleration")
             elif "DmlExecutionProvider" in available_eps:
                 ep = "dml"
-                logger.info("DirectML detected — using GPU acceleration")
+                use_dml = True
+                logger.info("DirectML detected — using iGPU acceleration")
             else:
                 logger.warning("GPU model variant selected but no GPU EP available, falling back to CPU")
         else:
-            # CPU model variant — GPU EPs won't help, just run on CPU
-            # VitisAI EP is registered but won't accelerate CPU-compiled models
-            if "VitisAIExecutionProvider" in available_eps:
-                logger.info("VitisAI EP available (NPU registered, model runs on CPU)")
             logger.info("CPU model variant — using CPU execution")
 
         logger.info(f"Loading GenAI model from: {model_path} with provider: {ep}")
-        self.model = og.Model(model_path)
+
+        # Use Config API to explicitly set the execution provider
+        if use_dml or use_cuda:
+            if use_cuda:
+                _ensure_cuda_dlls_on_path()
+            config = og.Config(model_path)
+            config.clear_providers()
+            if use_dml:
+                config.append_provider('dml')
+            elif use_cuda:
+                config.append_provider('cuda')
+            self.model = og.Model(config)
+        else:
+            self.model = og.Model(model_path)
+
         self.tokenizer = og.Tokenizer(self.model)
         self.provider = f"GenAI:{ep}"
         logger.info(f"Model device type: {self.model.device_type}")
@@ -275,20 +329,213 @@ class AIInferenceEngine:
             logger.error(f"Search failed: {e}")
             return "Search unavailable."
 
-    def generate(self, prompt, max_tokens=2000, use_search=False):
-        """Runs inference using the loaded model."""
-        context = ""
-        if use_search:
-            logger.info(f"Performing web search for: {prompt}")
-            search_results = self.search_web(prompt)
-            context = f"\n\n[Web Search Results]:\n{search_results}\n"
+    def search_pharmacy_db(self, query):
+        """
+        Query the MediManage SQLite database for pharmacy-related data.
+        Returns formatted context string, or empty string if no relevant data.
+        """
+        _HERE = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(os.path.dirname(_HERE), "medimanage.db")
+        if not os.path.isfile(db_path):
+            return ""
 
-        full_prompt = f"User: {prompt}\n{context}\nAssistant:"
+        q = query.lower()
+        results = []
+
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
+            # --- Medicine / Inventory queries ---
+            med_keywords = ['medicine', 'tablet', 'capsule', 'syrup', 'drug',
+                            'stock', 'inventory', 'available', 'paracetamol',
+                            'amoxicillin', 'how many', 'quantity', 'check']
+            if any(kw in q for kw in med_keywords):
+                # Extract search terms (remove common words)
+                stop = {'how', 'many', 'check', 'show', 'list', 'get', 'find',
+                        'me', 'the', 'a', 'an', 'of', 'in', 'is', 'are',
+                        'do', 'we', 'have', 'what', 'tablets', 'tablet',
+                        'capsules', 'medicine', 'medicines', 'drug', 'drugs',
+                        'stock', 'inventory', 'available', 'our'}
+                words = re.findall(r'[a-zA-Z]+', q)
+                search_terms = [w for w in words if w not in stop and len(w) > 2]
+
+                if search_terms:
+                    like_clauses = ' OR '.join(
+                        [f"m.name LIKE ? OR m.generic_name LIKE ?"
+                         for _ in search_terms])
+                    params = []
+                    for t in search_terms:
+                        params.extend([f"%{t}%", f"%{t}%"])
+
+                    cur.execute(f"""
+                        SELECT m.name, m.generic_name, m.company,
+                               m.price, m.expiry_date,
+                               COALESCE(s.quantity, 0) as stock_qty
+                        FROM medicines m
+                        LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                        WHERE {like_clauses}
+                        LIMIT 20
+                    """, params)
+                else:
+                    cur.execute("""
+                        SELECT m.name, m.generic_name, m.company,
+                               m.price, m.expiry_date,
+                               COALESCE(s.quantity, 0) as stock_qty
+                        FROM medicines m
+                        LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                        LIMIT 20
+                    """)
+
+                rows = cur.fetchall()
+                if rows:
+                    results.append(f"[Inventory Data - {len(rows)} medicines found]:")
+                    for r in rows:
+                        results.append(
+                            f"  - {r['name']} ({r['generic_name'] or 'N/A'}) | "
+                            f"Company: {r['company'] or 'N/A'} | "
+                            f"Price: {r['price']} | "
+                            f"Stock: {r['stock_qty']} | "
+                            f"Expiry: {r['expiry_date'] or 'N/A'}")
+
+            # --- Low stock queries ---
+            if any(kw in q for kw in ['low stock', 'reorder', 'running out',
+                                       'shortage', 'out of stock']):
+                cur.execute("""
+                    SELECT m.name, m.generic_name,
+                           COALESCE(s.quantity, 0) as stock_qty
+                    FROM medicines m
+                    LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                    WHERE COALESCE(s.quantity, 0) < 10
+                    ORDER BY stock_qty ASC
+                    LIMIT 20
+                """)
+                rows = cur.fetchall()
+                if rows:
+                    results.append(f"[Low Stock Alert - {len(rows)} medicines below 10 units]:")
+                    for r in rows:
+                        results.append(
+                            f"  - {r['name']} ({r['generic_name'] or 'N/A'}) | "
+                            f"Stock: {r['stock_qty']}")
+
+            # --- Expiry queries ---
+            if any(kw in q for kw in ['expir', 'expired', 'expiring',
+                                       'shelf life', 'validity']):
+                cur.execute("""
+                    SELECT m.name, m.expiry_date,
+                           COALESCE(s.quantity, 0) as stock_qty
+                    FROM medicines m
+                    LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                    WHERE m.expiry_date IS NOT NULL
+                      AND m.expiry_date <= date('now', '+90 days')
+                    ORDER BY m.expiry_date ASC
+                    LIMIT 20
+                """)
+                rows = cur.fetchall()
+                if rows:
+                    results.append(f"[Expiring Soon - {len(rows)} medicines within 90 days]:")
+                    for r in rows:
+                        results.append(
+                            f"  - {r['name']} | Expiry: {r['expiry_date']} | "
+                            f"Stock: {r['stock_qty']}")
+
+            # --- Customer queries ---
+            if any(kw in q for kw in ['customer', 'balance', 'debt',
+                                       'debtor', 'owe', 'credit']):
+                cur.execute("""
+                    SELECT name, phone, current_balance
+                    FROM customers
+                    WHERE current_balance > 0
+                    ORDER BY current_balance DESC
+                    LIMIT 15
+                """)
+                rows = cur.fetchall()
+                if rows:
+                    results.append(f"[Customer Balances - {len(rows)} with outstanding debt]:")
+                    for r in rows:
+                        results.append(
+                            f"  - {r['name']} | Phone: {r['phone'] or 'N/A'} | "
+                            f"Balance: {r['current_balance']}")
+
+            # --- Sales / Bills queries ---
+            if any(kw in q for kw in ['sale', 'sales', 'revenue', 'bill',
+                                       'today', 'income', 'profit', 'earning']):
+                cur.execute("""
+                    SELECT COUNT(*) as bill_count,
+                           COALESCE(SUM(total_amount), 0) as total_revenue
+                    FROM bills
+                    WHERE date(bill_date) = date('now')
+                """)
+                row = cur.fetchone()
+                if row:
+                    results.append(
+                        f"[Today's Sales]: {row['bill_count']} bills, "
+                        f"Total Revenue: {row['total_revenue']}")
+
+                cur.execute("""
+                    SELECT COUNT(*) as bill_count,
+                           COALESCE(SUM(total_amount), 0) as total_revenue
+                    FROM bills
+                    WHERE bill_date >= date('now', '-30 days')
+                """)
+                row = cur.fetchone()
+                if row:
+                    results.append(
+                        f"[Last 30 Days]: {row['bill_count']} bills, "
+                        f"Total Revenue: {row['total_revenue']}")
+
+            conn.close()
+        except Exception as e:
+            logger.error(f"Pharmacy DB query failed: {e}")
+            return ""
+
+        if results:
+            logger.info(f"Pharmacy DB returned {len(results)} lines of context")
+            return "\n".join(results)
+        return ""
+
+    def generate(self, prompt, max_tokens=2000, use_search=False):
+        """Runs inference using the loaded model. Tracks performance metrics."""
+        context = ""
+        system_prompt = ""
+
+        if use_search:
+            # First, try the pharmacy database
+            logger.info(f"Querying pharmacy database for: {prompt}")
+            db_context = self.search_pharmacy_db(prompt)
+
+            if db_context:
+                context = f"\n\n[MediManage Database Results]:\n{db_context}\n"
+                system_prompt = (
+                    "You are the MediManage Pharmacy AI Assistant. "
+                    "You have access to the pharmacy's real inventory database. "
+                    "Use the database results provided below to answer the user's question accurately. "
+                    "Present the data clearly in a structured format. "
+                    "If the data shows stock quantities, prices, or expiry dates, highlight them. "
+                    "Be concise and helpful.\n\n"
+                )
+            else:
+                # Fall back to web search for non-pharmacy queries
+                logger.info(f"No pharmacy data found, performing web search for: {prompt}")
+                search_results = self.search_web(prompt)
+                context = f"\n\n[Web Search Results]:\n{search_results}\n"
+                system_prompt = (
+                    "You are a helpful AI assistant. "
+                    "Use the search results below to answer the user's question. "
+                    "Be concise and accurate.\n\n"
+                )
+
+        full_prompt = f"{system_prompt}User: {prompt}\n{context}\nAssistant:"
 
         if not self.provider:
             return "Error: Model not loaded. Please load a model from Settings or Model Store."
 
         try:
+            gen_start = time.time()
+            tokens_generated = 0
+            result_text = ""
+
             # --- GGUF / BitNet / llama.cpp Inference ---
             if self.framework == "gguf":
                 response = self.model.create_completion(
@@ -298,38 +545,35 @@ class AIInferenceEngine:
                     top_p=0.9,
                     stop=["User:", "\n\n"]
                 )
-                return response["choices"][0]["text"].strip()
+                result_text = response["choices"][0]["text"].strip()
+                # Estimate token count from response
+                tokens_generated = len(result_text.split()) * 4 // 3
 
-            # --- GenAI Inference ---
+            # --- GenAI Inference (DirectML / CUDA / CPU) ---
             elif self.framework == "genai":
                 import onnxruntime_genai as og
-                import numpy as np
 
                 input_ids = self.tokenizer.encode(full_prompt)
+                input_len = len(input_ids) if hasattr(input_ids, '__len__') else 0
 
                 # Re-create params each call to avoid stale state
                 params = og.GeneratorParams(self.model)
                 params.set_search_options(do_sample=False, max_length=max_tokens)
 
-                # OGA 0.7.x uses set_model_input + Generator streaming loop
-                # OGA 0.10+ uses set_input_sequences + model.generate
-                if hasattr(params, 'set_input_sequences'):
-                    # --- OGA 0.10+ path ---
-                    params.set_input_sequences(input_ids)
-                    output_ids = self.model.generate(params)[0]
-                else:
-                    # --- OGA 0.7.x path (streaming Generator) ---
-                    generator = og.Generator(self.model, params)
-                    generator.append_tokens(input_ids)
-                    while not generator.is_done():
-                        generator.generate_next_token()  # OGA 0.7.x: does logits + sampling
-                    output_ids = generator.get_sequence(0)
+                # Streaming Generator loop (works on both OGA 0.7.x and 0.10.x)
+                generator = og.Generator(self.model, params)
+                generator.append_tokens(input_ids)
+                while not generator.is_done():
+                    generator.generate_next_token()
+                    tokens_generated += 1
+                output_ids = generator.get_sequence(0)
 
                 decoded_output = self.tokenizer.decode(output_ids)
 
                 if decoded_output.startswith(full_prompt):
-                    return decoded_output[len(full_prompt):].strip()
-                return decoded_output
+                    result_text = decoded_output[len(full_prompt):].strip()
+                else:
+                    result_text = decoded_output
 
             # --- OpenVINO / Standard ONNX Inference ---
             else:
@@ -337,9 +581,40 @@ class AIInferenceEngine:
                         f"but raw inference loop not implemented. "
                         f"Please use ONNX Runtime GenAI or GGUF format for full LLM support.")
 
+            # --- Track performance ---
+            gen_elapsed = time.time() - gen_start
+            tok_per_sec = tokens_generated / gen_elapsed if gen_elapsed > 0 else 0
+            self._last_tokens_generated = tokens_generated
+            self._last_generation_time = gen_elapsed
+            self._last_tokens_per_sec = tok_per_sec
+            self._total_tokens_generated += tokens_generated
+            self._total_generation_time += gen_elapsed
+            logger.info(f"Generated {tokens_generated} tokens in {gen_elapsed:.2f}s "
+                        f"({tok_per_sec:.1f} tok/s) on {self.provider}")
+
+            return result_text
+
         except Exception as e:
             logger.error(f"Inference failed: {e}")
             return f"Error during generation: {str(e)}"
+
+    def get_performance_stats(self):
+        """Return performance metrics from inference runs."""
+        avg_tok_per_sec = (
+            self._total_tokens_generated / self._total_generation_time
+            if self._total_generation_time > 0 else 0
+        )
+        return {
+            "provider": self.provider or "none",
+            "framework": self.framework or "none",
+            "device_type": getattr(self.model, 'device_type', 'unknown') if self.model else 'none',
+            "last_tokens": self._last_tokens_generated,
+            "last_time_s": round(self._last_generation_time, 2),
+            "last_tok_per_sec": round(self._last_tokens_per_sec, 1),
+            "total_tokens": self._total_tokens_generated,
+            "total_time_s": round(self._total_generation_time, 2),
+            "avg_tok_per_sec": round(avg_tok_per_sec, 1),
+        }
 
 
 def list_local_models(models_dir):

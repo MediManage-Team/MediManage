@@ -48,9 +48,11 @@ logger = logging.getLogger("medimanage-mcp")
 mcp = FastMCP(
     "MediManage",
     instructions=(
-        "MediManage Pharmacy Management — search medicines, track inventory, "
+        "MediManage Pharmacy Management -- search medicines, track inventory, "
         "manage customers, view sales, and query the local AI engine."
     ),
+    host="127.0.0.1",
+    port=5001,
 )
 
 # ---------------------------------------------------------------------------
@@ -765,4 +767,16 @@ def daily_report() -> str:
 # =========================================================================
 
 if __name__ == "__main__":
-    mcp.run()
+    import sys
+
+    if "--stdio" in sys.argv:
+        # STDIO mode for Claude Desktop / direct subprocess launch
+        mcp.run(transport="stdio")
+    else:
+        # SSE mode — runs as HTTP server on port 5001 alongside Flask (5000)
+        # Connect from any MCP client via: http://127.0.0.1:5001/sse
+        print("[MCP] Server starting on http://127.0.0.1:5001 (SSE transport)")
+        print(f"   Tools: 18 | Resources: 3 | Prompts: 2")
+        print(f"   AI Engine: {AI_ENGINE_URL}")
+        mcp.run(transport="sse")
+

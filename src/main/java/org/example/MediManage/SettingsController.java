@@ -296,6 +296,7 @@ public class SettingsController {
                     if (logConsole != null)
                         logConsole.appendText("🔄 Restarting AI Engine with '" + envName + "'...\n");
                     app.restartServer();
+                    scheduleModelReload();
                 }
             }
         });
@@ -403,6 +404,47 @@ public class SettingsController {
 
         // Trigger local model reload if path set
         triggerModelReload();
+
+        // Sync the active Python env to match the hardware selection
+        String hardware = hardwareCombo.getValue();
+        String config = "auto";
+        if (hardware.contains("OpenVINO"))
+            config = "openvino";
+        else if (hardware.contains("DirectML") || hardware.contains("Ryzen"))
+            config = "directml";
+        else if (hardware.contains("CUDA"))
+            config = "cuda";
+        else if (hardware.contains("CPU"))
+            config = "cpu";
+
+        if (!"auto".equals(config)) {
+            String envForHardware = org.example.MediManage.service.ai.PythonEnvironmentManager.mapBackendToEnv(config);
+            String currentEnv = envManager.getActiveEnvironment();
+            if (!envForHardware.equals(currentEnv)) {
+                envManager.setActiveEnvironment(envForHardware);
+                prefs.put("active_python_env", envForHardware);
+                loadEnvironmentList();
+
+                // Ask to restart server with new env
+                javafx.scene.control.Alert restart = new javafx.scene.control.Alert(
+                        javafx.scene.control.Alert.AlertType.CONFIRMATION,
+                        "Hardware changed to " + hardware + ".\nRestart AI Engine with '"
+                                + envForHardware + "' environment now?",
+                        javafx.scene.control.ButtonType.YES, javafx.scene.control.ButtonType.NO);
+                restart.setTitle("Environment Switch");
+                restart.setHeaderText("Restart AI Engine?");
+                restart.showAndWait().ifPresent(response -> {
+                    if (response == javafx.scene.control.ButtonType.YES) {
+                        MediManageApplication app = MediManageApplication.getInstance();
+                        if (app != null) {
+                            app.restartServer();
+                            // Reload model after new server is up
+                            scheduleModelReload();
+                        }
+                    }
+                });
+            }
+        }
     }
 
     private void triggerModelReload() {
@@ -452,6 +494,37 @@ public class SettingsController {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Schedule a model reload after server restart.
+     * Waits for the new server to become healthy, then triggers model load.
+     */
+    private void scheduleModelReload() {
+        new Thread(() -> {
+            try {
+                // Wait for the new server to start up
+                for (int i = 0; i < 15; i++) {
+                    Thread.sleep(1000);
+                    try {
+                        HttpRequest req = HttpRequest.newBuilder()
+                                .uri(URI.create("http://127.0.0.1:5000/health"))
+                                .GET().build();
+                        HttpResponse<String> resp = httpClient.send(req,
+                                HttpResponse.BodyHandlers.ofString());
+                        if (resp.statusCode() == 200) {
+                            System.out.println("✅ New AI Engine is healthy — reloading model...");
+                            javafx.application.Platform.runLater(this::triggerModelReload);
+                            return;
+                        }
+                    } catch (Exception ignored) {
+                        // Server not up yet, keep waiting
+                    }
+                }
+                System.err.println("⚠️ Timeout waiting for AI Engine — model not auto-loaded.");
+            } catch (InterruptedException ignored) {
+            }
+        }, "model-reload-scheduler").start();
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

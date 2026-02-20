@@ -98,6 +98,27 @@ def npu_info():
     return jsonify(hardware_detect.get_npu_setup_info())
 
 
+@app.route('/query_db', methods=['POST'])
+def query_db():
+    """Return pharmacy database results INSTANTLY — no AI model needed.
+    Used by quick report buttons for sub-second responses."""
+    data = request.json
+    query = data.get("query", "")
+
+    if not query:
+        return jsonify({"error": "No query provided"}), 400
+
+    try:
+        result = engine.search_pharmacy_db(query)
+        if result:
+            return jsonify({"response": result, "source": "database"})
+        else:
+            return jsonify({"response": "No matching data found in the pharmacy database.",
+                            "source": "database"})
+    except Exception as e:
+        logger.error(f"DB query error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 # ======================== MODEL LOADING ========================
 
 @app.route('/load_model', methods=['POST'])
@@ -125,12 +146,39 @@ def chat():
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
 
+    # Auto-load model if not loaded yet
+    if engine.provider is None:
+        logger.info("No model loaded - auto-loading first available model...")
+        _auto_load_model()
+
     try:
         response_text = engine.generate(prompt, use_search=use_search)
         return jsonify({"response": response_text})
     except Exception as e:
         logger.error(f"Inference error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+def _auto_load_model():
+    """Auto-detect and load the best available model from the models directory."""
+    from inference import list_local_models
+    models = list_local_models(MODELS_DIR)
+    if not models:
+        logger.warning("No models found in %s for auto-load", MODELS_DIR)
+        return
+
+    # Prefer ONNX GenAI format, then GGUF, then anything else
+    priority = {"ONNX GenAI": 0, "GGUF": 1, "ONNX": 2, "OpenVINO": 3}
+    models.sort(key=lambda m: priority.get(m.get("format", ""), 99))
+
+    best = models[0]
+    logger.info("Auto-loading model: %s (%s, %.0f MB)",
+                best["name"], best["format"], best["size_mb"])
+    try:
+        engine.load_model(best["path"], "auto")
+        logger.info("Auto-load complete: provider=%s", engine.provider)
+    except Exception as e:
+        logger.error("Auto-load failed: %s", e)
 
 
 @app.route('/chat/rag', methods=['POST'])
@@ -158,6 +206,11 @@ def chat_rag():
             "Analyze the business data above and answer the query. "
             "Be specific with numbers, trends, and actionable recommendations."
         )
+
+    # Auto-load model if not loaded yet
+    if engine.provider is None:
+        logger.info("RAG: No model loaded - auto-loading...")
+        _auto_load_model()
 
     try:
         response_text = engine.generate(augmented_prompt, use_search=use_search)
@@ -386,6 +439,74 @@ def _scan_model(path, name):
             info["format"] = "GGUF"
 
     return info
+
+
+# ======================== PERFORMANCE ========================
+
+@app.route('/performance_stats', methods=['GET'])
+def performance_stats():
+    """Return inference performance metrics."""
+    return jsonify(engine.get_performance_stats())
+
+
+@app.route('/benchmark', methods=['POST'])
+def benchmark():
+    """Run a quick benchmark comparing current model performance.
+    POST body (optional): {"prompt": "...", "max_tokens": 100}
+    """
+    data = request.json or {}
+    prompt = data.get('prompt', 'Explain the concept of machine learning in simple terms.')
+    max_tokens = data.get('max_tokens', 100)
+
+    if not engine.provider:
+        return jsonify({"error": "No model loaded"}), 400
+
+    import time as _time
+    t0 = _time.time()
+    response = engine.generate(prompt, max_tokens=max_tokens)
+    t1 = _time.time()
+
+    stats = engine.get_performance_stats()
+    stats["benchmark_prompt"] = prompt[:100]
+    stats["benchmark_response_preview"] = response[:200] if response else ""
+    stats["benchmark_wall_time_s"] = round(t1 - t0, 2)
+
+    return jsonify(stats)
+
+
+# ======================== MCP SERVER ========================
+
+@app.route('/mcp_status', methods=['GET'])
+def mcp_status():
+    """Report MCP server availability and connection instructions."""
+    import sys
+    mcp_file = os.path.join(os.path.dirname(__file__), "mcp_server.py")
+    mcp_config = os.path.join(os.path.dirname(__file__), "mcp_config.json")
+    mcp_available = os.path.isfile(mcp_file)
+
+    # Check if mcp package is installed in current env
+    mcp_installed = False
+    try:
+        import mcp
+        mcp_installed = True
+    except ImportError:
+        pass
+
+    return jsonify({
+        "mcp_server_file": mcp_available,
+        "mcp_package_installed": mcp_installed,
+        "mcp_config_file": os.path.isfile(mcp_config),
+        "python_executable": sys.executable,
+        "connect_instructions": {
+            "claude_desktop": "Add to claude_desktop_config.json → mcpServers → medimanage",
+            "vscode": "Add to .vscode/mcp.json or Copilot MCP settings",
+            "test": f"cd ai_engine && mcp dev mcp_server.py",
+            "install": f"cd ai_engine && mcp install mcp_server.py",
+        },
+        "tools_count": 18,
+        "resources_count": 3,
+        "prompts_count": 2,
+    })
 
 
 # ======================== SHUTDOWN ========================

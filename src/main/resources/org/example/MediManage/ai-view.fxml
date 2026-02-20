@@ -2,23 +2,46 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Priority?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.FlowPane?>
 
 <VBox xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.AIController" spacing="10" styleClass="dark-panel">
-    <Label text="AI Assistant" styleClass="section-title"/>
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.AIController" spacing="8" styleClass="dark-panel">
 
-    <ScrollPane fx:id="scrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
-        <VBox fx:id="chatBox" spacing="10" style="-fx-padding: 10;"/>
+    <!-- Header Bar -->
+    <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 8 12;">
+        <Label text="🤖 AI Assistant" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="modelStatusLabel" text="⏳ Checking..." style="-fx-text-fill: #888; -fx-font-size: 11px;"/>
+        <Button text="🗑 Clear" onAction="#handleClearChat" style="-fx-background-color: transparent; -fx-text-fill: #888; -fx-border-color: #555; -fx-border-radius: 12; -fx-background-radius: 12; -fx-padding: 3 10; -fx-font-size: 10px; -fx-cursor: hand;"/>
+    </HBox>
+
+    <!-- Quick Report Buttons -->
+    <FlowPane hgap="6" vgap="6" alignment="CENTER_LEFT" style="-fx-padding: 0 12;">
+        <Button text="📦 Inventory" onAction="#handleInventoryReport" style="-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="⚠ Low Stock" onAction="#handleLowStockReport" style="-fx-background-color: linear-gradient(to right, #f093fb, #f5576c); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="⏰ Expiring" onAction="#handleExpiryReport" style="-fx-background-color: linear-gradient(to right, #f6d365, #fda085); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="💰 Sales" onAction="#handleSalesReport" style="-fx-background-color: linear-gradient(to right, #a8edea, #fed6e3); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="👥 Customers" onAction="#handleCustomerReport" style="-fx-background-color: linear-gradient(to right, #43e97b, #38f9d7); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+    </FlowPane>
+
+    <!-- Chat Area -->
+    <ScrollPane fx:id="scrollPane" fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: #181a28; -fx-background-color: #181a28;">
+        <VBox fx:id="chatBox" spacing="6" style="-fx-padding: 10; -fx-background-color: #181a28;"/>
     </ScrollPane>
 
-    <HBox spacing="10" alignment="CENTER">
-        <TextField fx:id="inputField" promptText="Type your medical query or stock check..." HBox.hgrow="ALWAYS" onAction="#handleSendMessage"/>
-        <javafx.scene.control.CheckBox fx:id="webSearchCheck" text="Web Search"/>
-        <Button fx:id="sendButton" text="Send" onAction="#handleSendMessage" styleClass="button-primary"/>
+    <!-- Input Bar -->
+    <HBox spacing="8" alignment="CENTER" style="-fx-padding: 6 12 10 12;">
+        <TextField fx:id="inputField" promptText="Ask about inventory, sales, expiring medicines, or any question..." HBox.hgrow="ALWAYS" onAction="#handleSendMessage" style="-fx-background-radius: 20; -fx-padding: 8 16;"/>
+        <CheckBox fx:id="webSearchCheck" text="🔍 DB + Web" selected="true" style="-fx-text-fill: #aaa; -fx-font-size: 11px;"/>
+        <Button fx:id="sendButton" text="Send ➤" onAction="#handleSendMessage" style="-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-background-radius: 20; -fx-padding: 8 18; -fx-font-size: 12px; -fx-cursor: hand;"/>
     </HBox>
 </VBox>

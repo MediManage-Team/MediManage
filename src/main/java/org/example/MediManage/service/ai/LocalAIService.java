@@ -127,6 +127,7 @@ public class LocalAIService implements AIService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(API_URL))
                 .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(120))
                 .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
                 .build();
 
@@ -153,6 +154,7 @@ public class LocalAIService implements AIService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(RAG_URL))
                 .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(120))
                 .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
                 .build();
 
@@ -162,6 +164,31 @@ public class LocalAIService implements AIService {
                         return new JSONObject(response.body()).getString("response");
                     } else {
                         throw new RuntimeException("AI Engine RAG Error: " + response.statusCode());
+                    }
+                });
+    }
+
+    /**
+     * Instant database query — no AI model needed.
+     * Returns pharmacy data directly from SQLite in sub-second time.
+     */
+    public CompletableFuture<String> queryDatabase(String query) {
+        JSONObject json = new JSONObject();
+        json.put("query", query);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/query_db"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(10))
+                .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+                .build();
+
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() == 200) {
+                        return new JSONObject(response.body()).getString("response");
+                    } else {
+                        throw new RuntimeException("DB Query Error: " + response.statusCode());
                     }
                 });
     }

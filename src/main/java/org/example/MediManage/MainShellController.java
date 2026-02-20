@@ -140,18 +140,45 @@ public class MainShellController implements ViewSwitcher {
     private void handleLogout() {
         UserSession.getInstance().logout();
         try {
-            Parent root = FXMLLoader.load(Objects.requireNonNull(getClass().getResource("login-view.fxml")));
-            Stage stage = (Stage) mainLayout.getScene().getWindow();
+            Stage primaryStage = (Stage) mainLayout.getScene().getWindow();
 
-            // Restore windowed mode for login screen
-            stage.setMaximized(false);
+            // Load login view
+            FXMLLoader loader = new FXMLLoader(
+                    Objects.requireNonNull(getClass().getResource("login-view.fxml")));
+            Parent loginRoot = loader.load();
 
-            Scene loginScene = new Scene(root, 520, 600);
+            // Drop shadow for the login card
+            javafx.scene.effect.DropShadow shadow = new javafx.scene.effect.DropShadow();
+            shadow.setRadius(30);
+            shadow.setOffsetY(8);
+            shadow.setColor(javafx.scene.paint.Color.color(0, 0, 0, 0.6));
+            loginRoot.setEffect(shadow);
+
+            Scene loginScene = new Scene(loginRoot, 520, 500);
+            loginScene.setFill(javafx.scene.paint.Color.TRANSPARENT);
             loginScene.getStylesheets().add(
                     Objects.requireNonNull(getClass().getResource("css/common.css")).toExternalForm());
-            stage.setScene(loginScene);
-            stage.setTitle("MediManage - Login");
-            stage.centerOnScreen();
+
+            // Create a NEW transparent stage (no title bar, no decorations)
+            Stage loginStage = new Stage();
+            loginStage.initStyle(javafx.stage.StageStyle.TRANSPARENT);
+            loginStage.setTitle("MediManage - Login");
+            try {
+                loginStage.getIcons().add(new javafx.scene.image.Image(
+                        getClass().getResourceAsStream("/app_icon.png")));
+            } catch (Exception ignored) {
+            }
+            loginStage.setScene(loginScene);
+            loginStage.setResizable(false);
+            loginStage.centerOnScreen();
+
+            // Pass primary stage so LoginController can re-show it
+            LoginController controller = loader.getController();
+            controller.setPrimaryStage(primaryStage);
+
+            // HIDE the primary stage, show the login stage
+            primaryStage.hide();
+            loginStage.show();
         } catch (IOException e) {
             e.printStackTrace();
         }

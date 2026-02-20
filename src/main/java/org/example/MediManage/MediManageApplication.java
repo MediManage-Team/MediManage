@@ -17,6 +17,7 @@ public class MediManageApplication extends Application {
 
         private static MediManageApplication instance;
         private volatile Process pythonProcess;
+        private volatile Process mcpProcess;
         private org.example.MediManage.service.ai.PythonEnvironmentManager envManager;
         private volatile StartupProgressController startupPopup;
 
@@ -75,6 +76,19 @@ public class MediManageApplication extends Application {
                                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences
                                                 .userNodeForPackage(org.example.MediManage.SettingsController.class);
                                 String envPref = prefs.get("active_python_env", "cpu");
+
+                                // Auto-detect best GPU environment when hardware is set to "Auto"
+                                String aiHardware = prefs.get("ai_hardware", "Auto");
+                                if ("Auto".equals(aiHardware)) {
+                                        String detected = envManager.autoDetectBestEnv();
+                                        if (!detected.equals(envPref)) {
+                                                System.out.println("🎯 Auto-switching environment: "
+                                                                + envPref + " → " + detected);
+                                                envPref = detected;
+                                                prefs.put("active_python_env", envPref);
+                                        }
+                                }
+
                                 envManager.setActiveEnvironment(envPref);
 
                                 // Check if environment needs setup
@@ -133,6 +147,7 @@ public class MediManageApplication extends Application {
                                         startupPopup.setStatus("🚀 Starting AI Engine...");
                                 }
 
+                                final String pythonExeFinal = pythonExe;
                                 System.out.println("🚀 Starting AI Engine (server.py)...");
                                 ProcessBuilder pb = new ProcessBuilder(pythonExe, "ai_engine/server.py");
                                 pb.redirectErrorStream(true);
@@ -144,6 +159,10 @@ public class MediManageApplication extends Application {
                                         if (pythonProcess != null && pythonProcess.isAlive()) {
                                                 System.out.println("🛑 JVM Shutdown Hook: Killing AI Engine...");
                                                 pythonProcess.destroyForcibly();
+                                        }
+                                        if (mcpProcess != null && mcpProcess.isAlive()) {
+                                                System.out.println("🛑 JVM Shutdown Hook: Killing MCP Server...");
+                                                mcpProcess.destroyForcibly();
                                         }
                                 }));
 
@@ -175,6 +194,9 @@ public class MediManageApplication extends Application {
                                                         }).start();
                                                 }
                                                 popupClosed = true;
+
+                                                // Start MCP Server on port 5001 alongside Flask
+                                                startMcpServer(pythonExeFinal);
                                         }
                                 }
                         } catch (Exception e) {
@@ -210,8 +232,49 @@ public class MediManageApplication extends Application {
                                 }
                                 System.out.println("🛑 Old AI Engine stopped.");
                         }
+                        if (mcpProcess != null && mcpProcess.isAlive()) {
+                                mcpProcess.destroyForcibly();
+                                try {
+                                        mcpProcess.waitFor();
+                                } catch (InterruptedException ignored) {
+                                }
+                                System.out.println("🛑 Old MCP Server stopped.");
+                        }
                         startPythonServer();
                 }).start();
+        }
+
+        /**
+         * Start MCP Server on port 5001 as a sidecar process.
+         * Uses the same Python environment as the AI Engine.
+         */
+        private void startMcpServer(String pythonExe) {
+                new Thread(() -> {
+                        try {
+                                // Check if port 5001 already in use
+                                try (java.net.Socket ignored = new java.net.Socket("127.0.0.1", 5001)) {
+                                        System.out.println("ℹ️ MCP Server already running on port 5001.");
+                                        return;
+                                } catch (Exception e) {
+                                        // Port 5001 is free
+                                }
+
+                                System.out.println("🔌 Starting MCP Server (port 5001)...");
+                                ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, "ai_engine/mcp_server.py");
+                                mcpPb.redirectErrorStream(true);
+                                mcpProcess = mcpPb.start();
+
+                                // Consume MCP output in background
+                                java.io.BufferedReader mcpReader = new java.io.BufferedReader(
+                                                new java.io.InputStreamReader(mcpProcess.getInputStream()));
+                                String mcpLine;
+                                while ((mcpLine = mcpReader.readLine()) != null) {
+                                        System.out.println("[MCP Server]: " + mcpLine);
+                                }
+                        } catch (Exception e) {
+                                System.err.println("⚠️ MCP Server failed to start: " + e.getMessage());
+                        }
+                }, "mcp-server-thread").start();
         }
 
         private void showLoginScreen(Stage stage) {

@@ -92,16 +92,24 @@ public class LoginController {
                 // Close the login popup and show main shell on the primary stage
                 try {
                     FXMLLoader loader = new FXMLLoader(getClass().getResource("main-shell-view.fxml"));
-                    // Close the login popup dialog
-                    Stage loginPopup = (Stage) username.getScene().getWindow();
-                    loginPopup.close();
+                    Stage currentStage = (Stage) username.getScene().getWindow();
 
-                    // Show main shell on primary stage — MAXIMIZED
-                    Stage target = (primaryStage != null) ? primaryStage : new Stage();
-                    target.setScene(new Scene(loader.load()));
-                    target.setTitle("MediManage - " + authenticatedUser.getRole());
-                    target.setMaximized(true);
-                    target.show();
+                    // Determine whether login is a popup or on the primary stage
+                    if (primaryStage != null && currentStage != primaryStage) {
+                        // Login is a popup — close it, load shell on primaryStage
+                        currentStage.close();
+                        primaryStage.setScene(new Scene(loader.load()));
+                        primaryStage.setTitle("MediManage - " + authenticatedUser.getRole());
+                        primaryStage.setMaximized(true);
+                        primaryStage.show();
+                    } else {
+                        // Login is directly on the primary stage (after logout)
+                        Stage target = (primaryStage != null) ? primaryStage : currentStage;
+                        target.setScene(new Scene(loader.load()));
+                        target.setTitle("MediManage - " + authenticatedUser.getRole());
+                        target.setMaximized(true);
+                        target.show();
+                    }
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     message.setText("Error loading shell: " + ex.getMessage());

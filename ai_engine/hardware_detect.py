@@ -36,11 +36,21 @@ def detect_hardware():
     # 2. Check AMD GPU / NPU (DirectML)
     amd = _detect_amd()
     if amd:
+        # Verify DirectML EP is actually available in the runtime
+        dml_available = False
+        try:
+            import onnxruntime as ort
+            dml_available = "DmlExecutionProvider" in ort.get_available_providers()
+        except ImportError:
+            pass
+
         return {
-            "backend": "directml",
+            "backend": "directml" if dml_available else "cpu",
             "device_name": amd["name"],
             "vram_mb": amd.get("vram_mb", 0),
-            "reason": f"AMD GPU/NPU detected: {amd['name']}"
+            "dml_available": dml_available,
+            "reason": f"AMD iGPU detected: {amd['name']}" + (
+                " (DirectML accelerated)" if dml_available else " (CPU fallback — DirectML not installed)")
         }
 
     # 3. Check Intel NPU (OpenVINO)
