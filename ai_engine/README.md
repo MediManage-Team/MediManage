@@ -96,13 +96,42 @@ The `inference.py` script uses **Smart Variant Selection**:
 
 ---
 
+## 🤖 MCP Server (AI Agent Interface)
+
+The `mcp_server.py` exposes MediManage as an **MCP (Model Context Protocol) server** — enabling any AI host (Claude, Gemini CLI, VS Code Copilot) to manage the pharmacy through natural language.
+
+### Tools (18 total)
+| Category | Tools |
+|----------|-------|
+| **Inventory** | `search_medicines`, `get_low_stock`, `get_expiring_soon`, `update_stock`, `add_medicine`, `get_inventory_summary` |
+| **Customers** | `search_customers`, `get_customer_balance`, `list_top_debtors` |
+| **Billing** | `get_daily_sales`, `get_recent_bills`, `get_expenses`, `get_profit_summary` |
+| **Prescriptions** | `search_prescriptions`, `get_prescription_details` |
+| **AI Engine** | `ai_chat`, `ai_rag_query`, `get_hardware_info` |
+
+### Resources
+- `medimanage://schema` — Full database schema
+- `medimanage://inventory/summary` — Live inventory KPIs
+- `medimanage://sales/today` — Today's sales figures
+
+### Setup
+```bash
+# Test with MCP Inspector
+mcp dev mcp_server.py
+
+# Install in Claude Desktop
+mcp install mcp_server.py
+```
+
+---
+
 ## 🚀 Setup & Run
 Depending on your environment:
 ```bash
 # Install dependencies (Auto-handled by Java App)
 pip install -r requirements.txt
 
-# Run manually (for testing)
+# Run AI Engine manually (for testing)
 python server.py
 # The server will start on http://127.0.0.1:5000
 ```

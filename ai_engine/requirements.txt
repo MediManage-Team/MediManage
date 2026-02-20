@@ -6,6 +6,7 @@ tqdm
 huggingface_hub
 transformers
 duckduckgo-search
+mcp[cli]
 
 # Agent optimization (Microsoft Agent Lightning — Linux only)
 # pip install agentlightning
