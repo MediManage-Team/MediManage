@@ -3,13 +3,9 @@ package org.example.MediManage;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
-import javafx.collections.transformation.SortedList;
 import javafx.fxml.FXML;
-import javafx.print.PrinterJob;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
-import javafx.scene.layout.VBox;
-import javafx.scene.text.Text;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.CustomerDAO;
 import org.example.MediManage.dao.MedicineDAO;
@@ -18,9 +14,7 @@ import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 public class BillingController {
 
@@ -53,6 +47,10 @@ public class BillingController {
 
     @FXML
     private Button btnCheckout;
+    @FXML
+    private javafx.scene.layout.VBox careProtocolContainer;
+    @FXML
+    private Button btnGenerateCareProtocol;
 
     private MedicineDAO medicineDAO = new MedicineDAO();
     private CustomerDAO customerDAO = new CustomerDAO();
@@ -91,7 +89,8 @@ public class BillingController {
 
             String lower = newVal.toLowerCase();
             filteredDocs.setPredicate(m -> m.getName().toLowerCase().contains(lower) ||
-                    m.getCompany().toLowerCase().contains(lower));
+                    m.getCompany().toLowerCase().contains(lower) ||
+                    m.getGenericName().toLowerCase().contains(lower)); // Feature 2: Generic Name Search
 
             if (filteredDocs.isEmpty()) {
                 listMedicineSuggestions.setVisible(false);
@@ -162,15 +161,21 @@ public class BillingController {
         List<Customer> res = customerDAO.searchCustomer(q);
         if (!res.isEmpty()) {
             selectedCustomer = res.get(0);
-            lblCustomerName.setText(selectedCustomer.getName());
+            String labelText = selectedCustomer.getName();
+            // Show Balance if Credit
+            if (selectedCustomer.getCurrentBalance() > 0) {
+                labelText += String.format(" (Bal: ₹%.2f)", selectedCustomer.getCurrentBalance());
+            }
+            lblCustomerName.setText(labelText);
+
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText(selectedCustomer.getPhone());
-            lblCustomerName.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+            lblCustomerName.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
         } else {
             lblCustomerName.setText("Not Found (Walk-in)");
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText("-");
-            lblCustomerName.setStyle("-fx-text-fill: #666;");
+            lblCustomerName.setStyle("-fx-text-fill: #4e4b6c;");
             selectedCustomer = null;
         }
     }
@@ -180,7 +185,7 @@ public class BillingController {
         TextInputDialog phoneDialog = new TextInputDialog(txtSearchCustomer.getText());
         phoneDialog.setTitle("New Customer");
         phoneDialog.setHeaderText("Enter Customer Phone");
-        Optional<String> phoneResult = phoneDialog.showAndWait();
+        java.util.Optional<String> phoneResult = phoneDialog.showAndWait();
 
         if (phoneResult.isPresent() && !phoneResult.get().trim().isEmpty()) {
             String phone = phoneResult.get().trim();
@@ -188,7 +193,7 @@ public class BillingController {
             TextInputDialog nameDialog = new TextInputDialog();
             nameDialog.setTitle("New Customer");
             nameDialog.setHeaderText("Enter Customer Name");
-            Optional<String> nameResult = nameDialog.showAndWait();
+            java.util.Optional<String> nameResult = nameDialog.showAndWait();
 
             if (nameResult.isPresent() && !nameResult.get().trim().isEmpty()) {
                 String name = nameResult.get().trim();
@@ -203,7 +208,7 @@ public class BillingController {
                         lblCustomerName.setText(selectedCustomer.getName());
                         if (lblCustomerPhone != null)
                             lblCustomerPhone.setText(selectedCustomer.getPhone());
-                        lblCustomerName.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+                        lblCustomerName.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
                         txtSearchCustomer.setText(phone);
                     }
                 } catch (Exception e) {
@@ -235,7 +240,8 @@ public class BillingController {
         }
 
         // Add to List
-        Optional<BillItem> existing = billList.stream().filter(b -> b.getMedicineId() == selectedMedicine.getId())
+        java.util.Optional<BillItem> existing = billList.stream()
+                .filter(b -> b.getMedicineId() == selectedMedicine.getId())
                 .findFirst();
         if (existing.isPresent()) {
             BillItem item = existing.get();
@@ -273,24 +279,259 @@ public class BillingController {
 
         double total = billList.stream().mapToDouble(BillItem::getTotal).sum();
         Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
+        String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
 
-        try {
-            int billId = billDAO.generateInvoice(total, billList, cid);
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Bill Generated: #" + billId);
-            billList.clear();
-            updateTotal();
-            selectedCustomer = null;
-            lblCustomerName.setText("Walk-in Customer");
-            txtSearchCustomer.clear();
+        // Payment Mode Dialog
+        java.util.List<String> choices = new java.util.ArrayList<>();
+        choices.add("Cash");
+        choices.add("Credit");
+        choices.add("UPI");
 
-            // Refresh Inventory Data just in case
-            allMedicines.clear();
-            allMedicines.addAll(medicineDAO.getAllMedicines());
+        ChoiceDialog<String> dialog = new ChoiceDialog<>("Cash", choices);
+        dialog.setTitle("Payment Mode");
+        dialog.setHeaderText("Select Payment Mode");
+        dialog.setContentText("Mode:");
 
-        } catch (SQLException e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Error", "Checkout Failed");
+        java.util.Optional<String> result = dialog.showAndWait();
+        if (result.isEmpty())
+            return; // Cancelled
+        String paymentMode = result.get();
+
+        if ("Credit".equals(paymentMode) && cid == null) {
+            showAlert(Alert.AlertType.WARNING, "Credit Error", "Credit requires a selected customer!");
+            return;
         }
+
+        // --- AI Patient Care Assistant ---
+        btnCheckout.setDisable(true);
+        btnCheckout.setText("Generating Care Protocol...");
+
+        // Construct Prompt
+        StringBuilder medicineList = new StringBuilder();
+        billList.forEach(item -> medicineList.append("- ").append(item.getName()).append("\n"));
+
+        String prompt = "I am a Pharmacist. Create a 'Patient Care Protocol' for the following medicines:\n" +
+                medicineList.toString() + "\n" +
+                "For EACH medicine, provide a 7-point guide:\n" +
+                "1. Mechanism (Simplified)\n" +
+                "2. Usage Guide (When/How)\n" +
+                "3. Dietary Advice\n" +
+                "4. Side Effects\n" +
+                "5. Stop Protocol\n" +
+                "Also check for Combinational Safety (Drug-Drug Interactions) between these items.\n" +
+                "Format as a clean, printable guide.";
+
+        // We use the AIOrchestrator to fetch this.
+        // Note: AIOrchestrator is not injected yet, I will use a local instance or
+        // inject via constructor.
+        // For existing code consistency (like Dashboard), I'll instantiate it here or
+        // add field.
+        // Let's add the field using separate Edit, but here I'll assume it exists or
+        // use direct instantiation for now to keep this block self-contained if
+        // possible,
+        // but cleaner to use the field. I'll add the field in the same file using
+        // `initAI` pattern if needed.
+        // Actually, for this specific block replacement, I will assume `aiOrchestrator`
+        // is available or instantiate it.
+        org.example.MediManage.service.ai.AIOrchestrator aiOrchestrator = new org.example.MediManage.service.ai.AIOrchestrator();
+
+        aiOrchestrator.processQuery(prompt, true, false) // High precision (Cloud) preferred for medical advice
+                .thenAccept(careProtocol -> {
+                    // Return to FX Thread for UI & PDF generation
+                    javafx.application.Platform.runLater(() -> {
+                        try {
+                            int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+                            int billId = billDAO.generateInvoice(total, billList, cid, userId, paymentMode);
+
+                            // Generate PDF with AI Protocol
+                            String pdfPath = "Invoice_" + billId + ".pdf";
+                            new org.example.MediManage.service.ReportService().generateInvoicePDF(billList, total,
+                                    customerName, pdfPath, careProtocol);
+
+                            showAlert(Alert.AlertType.INFORMATION, "Success",
+                                    "Bill #" + billId + " & Care Protocol Generated!\nSaved to: " + pdfPath);
+
+                            // Cleanup
+                            billList.clear();
+                            updateTotal();
+                            selectedCustomer = null;
+                            lblCustomerName.setText("Walk-in Customer");
+                            txtSearchCustomer.clear();
+                            allMedicines.clear();
+                            allMedicines.addAll(medicineDAO.getAllMedicines());
+
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            showAlert(Alert.AlertType.ERROR, "Error", "Checkout/Printing Failed: " + e.getMessage());
+                        } finally {
+                            btnCheckout.setDisable(false);
+                            btnCheckout.setText("CHECKOUT (PRINT)");
+                        }
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.ERROR, "AI Error",
+                                "Failed to generate Care Protocol: " + ex.getMessage());
+                        btnCheckout.setDisable(false);
+                        btnCheckout.setText("CHECKOUT (PRINT)");
+                    });
+                    return null;
+                });
+    }
+
+    @FXML
+    private void handleGenerateCareProtocol() {
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add items to the bill first.");
+            return;
+        }
+
+        btnGenerateCareProtocol.setDisable(true);
+        btnGenerateCareProtocol.setText("⏳ Generating...");
+        careProtocolContainer.getChildren().clear();
+        javafx.scene.control.Label loadingLabel = new javafx.scene.control.Label(
+                "🔄 Generating AI Care Protocol...\nThis may take a few seconds.");
+        loadingLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #4e4b6c; -fx-padding: 20;");
+        careProtocolContainer.getChildren().add(loadingLabel);
+
+        StringBuilder medicineList = new StringBuilder();
+        billList.forEach(item -> medicineList.append("- ").append(item.getName()).append("\n"));
+
+        String prompt = "I am a Pharmacist. Create a 'Patient Care Protocol' for the following medicines:\n" +
+                medicineList.toString() + "\n" +
+                "For EACH medicine, provide these sections with EXACT section names as headers:\n" +
+                "Substitutes\nMechanism\nUsage Guide\nDietary Advice\nSide Effects\nSafety Check\nStop Protocol\n\n" +
+                "Also include a 'Combinational Safety' section for Drug-Drug Interactions.\n" +
+                "Format each section as: 'SectionName: content on same line'. " +
+                "Start each medicine with its full name on its own line. " +
+                "Do NOT use markdown formatting like ** or #.";
+
+        org.example.MediManage.service.ai.AIOrchestrator aiOrchestrator = org.example.MediManage.service.ai.AIServiceProvider
+                .get().getOrchestrator();
+
+        org.example.MediManage.service.ai.CloudAIService cloud = org.example.MediManage.service.ai.AIServiceProvider
+                .get().getCloudService();
+        String providerInfo = cloud.getProviderName() + " — " + cloud.getActiveModel();
+
+        aiOrchestrator.cloudQuery(prompt)
+                .thenAccept(protocol -> {
+                    javafx.application.Platform.runLater(() -> {
+                        buildCareProtocolCards(protocol, providerInfo);
+                        btnGenerateCareProtocol.setDisable(false);
+                        btnGenerateCareProtocol.setText("✨ Generate Care Protocol");
+                    });
+                })
+                .exceptionally(ex -> {
+                    javafx.application.Platform.runLater(() -> {
+                        careProtocolContainer.getChildren().clear();
+                        javafx.scene.control.Label errLabel = new javafx.scene.control.Label(
+                                "❌ Error: " + ex.getMessage()
+                                        + "\n\n💡 Tip: Configure your Cloud AI API key in Settings.");
+                        errLabel.setWrapText(true);
+                        errLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #ff6b6b; -fx-padding: 15;");
+                        careProtocolContainer.getChildren().add(errLabel);
+                        btnGenerateCareProtocol.setDisable(false);
+                        btnGenerateCareProtocol.setText("✨ Generate Care Protocol");
+                    });
+                    return null;
+                });
+    }
+
+    private void buildCareProtocolCards(String raw, String providerInfo) {
+        careProtocolContainer.getChildren().clear();
+        String text = raw.replaceAll("\\*\\*(.+?)\\*\\*", "$1").replaceAll("(?m)^#{1,3}\\s*", "").trim();
+
+        // Provider header
+        javafx.scene.layout.VBox headerCard = new javafx.scene.layout.VBox(3);
+        headerCard.setStyle(
+                "-fx-background-color: #1a0f30; -fx-padding: 12; -fx-background-radius: 8; -fx-border-color: #bb9af7; -fx-border-radius: 8; -fx-border-width: 0 0 0 4;");
+        javafx.scene.control.Label headerTitle = new javafx.scene.control.Label("🏥 Patient Care Protocol");
+        headerTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #bb9af7;");
+        javafx.scene.control.Label headerProv = new javafx.scene.control.Label("☁️ " + providerInfo);
+        headerProv.setStyle("-fx-font-size: 11px; -fx-text-fill: #9d7cd8;");
+        headerCard.getChildren().addAll(headerTitle, headerProv);
+        careProtocolContainer.getChildren().add(headerCard);
+
+        java.util.Map<String, String[]> sc = new java.util.LinkedHashMap<>();
+        sc.put("substitutes", new String[] { "#5fe6b3", "#0f2920", "#5fe6b380" });
+        sc.put("mechanism", new String[] { "#00d4ff", "#0f1724", "#00d4ff80" });
+        sc.put("usage guide", new String[] { "#7aa2f7", "#0f1530", "#7aa2f780" });
+        sc.put("dietary advice", new String[] { "#e8c66a", "#1a1a0f", "#e8c66a80" });
+        sc.put("side effects", new String[] { "#ff6b6b", "#1a0f0f", "#ff6b6b80" });
+        sc.put("safety check", new String[] { "#5fe6b3", "#0f2018", "#5fe6b380" });
+        sc.put("stop protocol", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+        sc.put("special precautions", new String[] { "#bb9af7", "#1a0f30", "#bb9af780" });
+        sc.put("monitoring", new String[] { "#7aa2f7", "#0f1530", "#7aa2f780" });
+        sc.put("combinational safety", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+        sc.put("drug-drug interaction", new String[] { "#ff6b6b", "#200f0f", "#ff6b6b80" });
+
+        String[] lines = text.split("\\n");
+        String currentSection = null;
+        StringBuilder currentContent = new StringBuilder();
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty())
+                continue;
+            String lowerLine = trimmed.toLowerCase().replaceFirst("^\\d+\\.?\\s*", "");
+            String matchedSection = null;
+            for (String key : sc.keySet()) {
+                if (lowerLine.startsWith(key)) {
+                    matchedSection = key;
+                    break;
+                }
+            }
+            if (matchedSection != null) {
+                if (currentSection != null && currentContent.length() > 0) {
+                    careProtocolContainer.getChildren()
+                            .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
+                }
+                currentSection = matchedSection;
+                int colonIdx = trimmed.indexOf(':');
+                currentContent = new StringBuilder(
+                        colonIdx >= 0 && colonIdx < trimmed.length() - 1 ? trimmed.substring(colonIdx + 1).trim() : "");
+            } else if (trimmed.matches("^[A-Z].*(?:Tablet|Capsule|Syrup|Injection|Cream|Drops|Gel|mg|ml|Sugar Free).*$")
+                    && !trimmed.contains(":")) {
+                if (currentSection != null && currentContent.length() > 0) {
+                    careProtocolContainer.getChildren()
+                            .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
+                    currentSection = null;
+                    currentContent = new StringBuilder();
+                }
+                javafx.scene.control.Label medLabel = new javafx.scene.control.Label("💊 " + trimmed);
+                medLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 10 0 2 0;");
+                careProtocolContainer.getChildren().add(medLabel);
+            } else {
+                if (currentContent.length() > 0)
+                    currentContent.append("\n");
+                currentContent.append(trimmed);
+            }
+        }
+        if (currentSection != null && currentContent.length() > 0) {
+            careProtocolContainer.getChildren()
+                    .add(createSectionCard(currentSection, currentContent.toString().trim(), sc));
+        }
+        javafx.scene.control.Label footer = new javafx.scene.control.Label("⚕️ Generated by MediManage AI");
+        footer.setStyle("-fx-font-size: 10px; -fx-text-fill: #4e4b6c; -fx-padding: 8 0 0 0;");
+        careProtocolContainer.getChildren().add(footer);
+    }
+
+    private javafx.scene.layout.VBox createSectionCard(String sectionKey, String content,
+            java.util.Map<String, String[]> colorMap) {
+        String[] colors = colorMap.getOrDefault(sectionKey, new String[] { "#bfc9e6", "#0f1724", "#2d3555" });
+        javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(4);
+        card.setStyle("-fx-background-color: " + colors[1]
+                + "; -fx-padding: 10 12; -fx-background-radius: 5; -fx-border-color: " + colors[2]
+                + "; -fx-border-radius: 5; -fx-border-width: 0 0 0 4;");
+        String displayName = sectionKey.substring(0, 1).toUpperCase() + sectionKey.substring(1);
+        javafx.scene.control.Label titleLabel = new javafx.scene.control.Label(displayName);
+        titleLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + colors[0] + ";");
+        javafx.scene.control.Label bodyLabel = new javafx.scene.control.Label(content);
+        bodyLabel.setWrapText(true);
+        bodyLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #bfc9e6;");
+        card.getChildren().addAll(titleLabel, bodyLabel);
+        return card;
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

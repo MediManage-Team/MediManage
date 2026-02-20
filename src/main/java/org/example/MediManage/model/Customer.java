@@ -12,6 +12,7 @@ public class Customer {
     private String diseases;
     private String photoIdPath;
     private String phoneNumber;
+    private double currentBalance;
 
     public Customer() {
     }
@@ -127,5 +128,13 @@ public class Customer {
 
     public void setPhotoIdPath(String photoIdPath) {
         this.photoIdPath = photoIdPath;
+    }
+
+    public double getCurrentBalance() {
+        return currentBalance;
+    }
+
+    public void setCurrentBalance(double currentBalance) {
+        this.currentBalance = currentBalance;
     }
 }

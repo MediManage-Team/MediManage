@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.model.UserRole;
 import org.example.MediManage.util.UserSession;
@@ -21,11 +21,12 @@ public class MedicineDAO {
 
     public List<Medicine> getAllMedicines() {
         List<Medicine> list = new ArrayList<>();
-        String sql = "SELECT m.medicine_id, m.name, m.company, m.expiry_date, m.price, s.quantity " +
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
-                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id";
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
@@ -33,6 +34,7 @@ public class MedicineDAO {
                 list.add(new Medicine(
                         rs.getInt("medicine_id"),
                         rs.getString("name"),
+                        rs.getString("generic_name"),
                         rs.getString("company"),
                         rs.getString("expiry_date"),
                         rs.getInt("quantity"),
@@ -44,18 +46,20 @@ public class MedicineDAO {
         return list;
     }
 
-    public void addMedicine(String name, String company, String expiry, double price, int initialStock) {
+    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+            int initialStock) {
         checkManagerPermission();
-        String insertMed = "INSERT INTO medicines(name, company, expiry_date, price) VALUES(?, ?, ?, ?)";
+        String insertMed = "INSERT INTO medicines(name, generic_name, company, expiry_date, price) VALUES(?, ?, ?, ?, ?)";
         String insertStock = "INSERT INTO stock(medicine_id, quantity) VALUES(?, ?)";
 
-        try (Connection conn = DBUtil.getConnection()) {
+        try (Connection conn = DatabaseUtil.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement psMed = conn.prepareStatement(insertMed, Statement.RETURN_GENERATED_KEYS)) {
                 psMed.setString(1, name);
-                psMed.setString(2, company);
-                psMed.setString(3, expiry);
-                psMed.setDouble(4, price);
+                psMed.setString(2, genericName);
+                psMed.setString(3, company);
+                psMed.setString(4, expiry);
+                psMed.setDouble(5, price);
                 psMed.executeUpdate();
 
                 ResultSet rs = psMed.getGeneratedKeys();
@@ -81,98 +85,211 @@ public class MedicineDAO {
         }
     }
 
-    // Update Medicine (Name, Company, Price, Expiry)
+    // Update Medicine (Name, Generic, Company, Price, Expiry)
     public void updateMedicine(Medicine medicine) {
         checkManagerPermission();
-        String sql = "UPDATE medicines SET name=?, company=?, price=?, expiry_date=? WHERE medicine_id=?";
+        String sql = "UPDATE medicines SET name=?, generic_name=?, company=?, price=?, expiry_date=? WHERE medicine_id=?";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, medicine.getName());
-            pstmt.setString(2, medicine.getCompany());
-            pstmt.setDouble(3, medicine.getPrice());
-            pstmt.setString(4, medicine.getExpiry());
-            pstmt.setInt(5, medicine.getId());
+            pstmt.setString(2, medicine.getGenericName());
+            pstmt.setString(3, medicine.getCompany());
+            pstmt.setDouble(4, medicine.getPrice());
+            pstmt.setString(5, medicine.getExpiry());
+            pstmt.setInt(6, medicine.getId());
 
             pstmt.executeUpdate();
-
-            // Also ensure stock is updated if changed via this object?
-            // The requirement says "updateStock" is separate, but if we pass a Medicine
-            // object that has stock,
-            // we might want to sync it. For now, strict separation as per requirement.
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
 
     // Direct Stock Update
+    // Direct Stock Update
     public void updateStock(int medicineId, int newQuantity) {
         checkManagerPermission();
-        // Stock might not exist if medicine was added manually without stock entry
-        // (edge case),
-        // but assuming addMedicine always creates it.
-        // Use insert on duplicate key update or check existence.
-        // Safer: UPDATE stock SET quantity=? WHERE medicine_id=?
-        String sql = "UPDATE stock SET quantity=? WHERE medicine_id=?";
+        String updateSql = "UPDATE stock SET quantity=? WHERE medicine_id=?";
+        String insertSql = "INSERT INTO stock (medicine_id, quantity) VALUES (?, ?)";
 
-        try (Connection conn = DBUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement startStmt = conn.prepareStatement(updateSql)) {
+                startStmt.setInt(1, newQuantity);
+                startStmt.setInt(2, medicineId);
+                int rows = startStmt.executeUpdate();
 
-            pstmt.setInt(1, newQuantity);
-            pstmt.setInt(2, medicineId);
-            int rows = pstmt.executeUpdate();
-
-            if (rows == 0) {
-                // Insert if not exists
-                String insert = "INSERT INTO stock (medicine_id, quantity) VALUES (?, ?)";
-                try (PreparedStatement ps2 = conn.prepareStatement(insert)) {
-                    ps2.setInt(1, medicineId);
-                    ps2.setInt(2, newQuantity);
-                    ps2.executeUpdate();
+                if (rows == 0) {
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
+                        insertStmt.setInt(1, medicineId);
+                        insertStmt.setInt(2, newQuantity);
+                        insertStmt.executeUpdate();
+                    }
                 }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
 
-    // Delete Medicine
+    /**
+     * Soft-delete a medicine by setting active = 0.
+     * This preserves referential integrity with bill_items and avoids FK constraint
+     * errors.
+     */
     public void deleteMedicine(int medicineId) {
         checkManagerPermission();
-        String deleteStock = "DELETE FROM stock WHERE medicine_id=?";
-        String deleteMed = "DELETE FROM medicines WHERE medicine_id=?";
-        // Note: bill_items also references medicine_id. Deleting a medicine used in
-        // bills will fail due to FK.
-        // For a real app, Soft Delete is better (active=0).
-        // BUT strict requirement says "deleteMedicine".
-        // I will try to delete stock first, then medicine. use try-catch to warn user
-        // if FK constraint fails.
+        String sql = "UPDATE medicines SET active = 0 WHERE medicine_id = ?";
 
-        try (Connection conn = DBUtil.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                try (PreparedStatement psStock = conn.prepareStatement(deleteStock)) {
-                    psStock.setInt(1, medicineId);
-                    psStock.executeUpdate();
-                }
-
-                try (PreparedStatement psMed = conn.prepareStatement(deleteMed)) {
-                    psMed.setInt(1, medicineId);
-                    psMed.executeUpdate();
-                }
-
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                System.err.println("Cannot delete medicine: It might be used in bills. " + e.getMessage());
-                // Rethrow or handle quietly? For now, print error.
-                throw new SQLException("Cannot delete medicine used in bills.");
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, medicineId);
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                System.out.println("✅ Medicine " + medicineId + " soft-deleted.");
+            } else {
+                System.err.println("⚠️ Medicine " + medicineId + " not found.");
             }
         } catch (SQLException e) {
-            // e.printStackTrace();
-            // Better to let controller handle it or just log.
             System.err.println("Delete failed: " + e.getMessage());
         }
+    }
+    // --- Business Intelligence Methods ---
+
+    public List<Medicine> searchByGeneric(String keyword) {
+        List<Medicine> list = new ArrayList<>();
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 AND (m.generic_name LIKE ? OR m.name LIKE ?)";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    /**
+     * Paginated search for medicines by keyword. Searches name, generic_name, and
+     * company.
+     * Returns at most `limit` results starting from `offset`.
+     */
+    public List<Medicine> searchMedicines(String keyword, int offset, int limit) {
+        List<Medicine> list = new ArrayList<>();
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?) " +
+                "ORDER BY m.name ASC LIMIT ? OFFSET ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+            pstmt.setString(3, searchPattern);
+            pstmt.setInt(4, limit);
+            pstmt.setInt(5, offset);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    /**
+     * Count total active medicines matching a keyword.
+     */
+    public int countMedicines(String keyword) {
+        String sql = "SELECT COUNT(*) FROM medicines m " +
+                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?)";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            String searchPattern = "%" + keyword + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+            pstmt.setString(3, searchPattern);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public List<Medicine> getExpiringMedicines(int days) {
+        List<Medicine> list = new ArrayList<>();
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 " +
+                "AND m.expiry_date <= date('now', '+' || ? || ' days') " +
+                "AND m.expiry_date >= date('now') " +
+                "ORDER BY m.expiry_date ASC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, days);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
     }
 }

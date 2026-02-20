@@ -10,8 +10,8 @@
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.BillingController">
     <!-- Left: Cart -->
     <items>
-        <VBox spacing="10" style="-fx-padding: 20; -fx-background-color: white;">
-            <Label text="Current Bill" style="-fx-font-size: 24px; -fx-font-weight: bold;"/>
+        <VBox spacing="10" styleClass="dark-panel">
+            <Label text="Current Bill" styleClass="page-title"/>
 
             <TableView fx:id="billingTable" VBox.vgrow="ALWAYS">
                 <columns>
@@ -25,33 +25,33 @@
                 </columnResizePolicy>
             </TableView>
 
-            <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10; -fx-background-color: #f0f0f0;">
-                <Label text="Total Payable:" style="-fx-font-size: 18px;"/>
-                <Label fx:id="lblTotal" text="₹ 0.00" style="-fx-font-size: 28px; -fx-font-weight: bold; -fx-text-fill: #27ae60;"/>
+            <HBox alignment="CENTER_RIGHT" spacing="10" styleClass="dark-section">
+                <Label text="Total Payable:" styleClass="total-label"/>
+                <Label fx:id="lblTotal" text="₹ 0.00" styleClass="total-value"/>
             </HBox>
         </VBox>
 
         <!-- Right: Controls -->
-        <VBox spacing="20" style="-fx-padding: 20; -fx-background-color: #2c3e50;">
+        <VBox spacing="16" styleClass="billing-controls">
             <!-- Customer Section -->
-            <VBox spacing="5" style="-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 5;">
+            <VBox spacing="5" styleClass="billing-section">
                 <Label text="Customer Details" style="-fx-font-weight: bold;"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <TextField fx:id="txtSearchCustomer" promptText="Phone / Name" HBox.hgrow="ALWAYS"/>
                     <Button text="🔍" onAction="#handleCustomerSearch"/>
-                    <Button text="+" onAction="#handleAddCustomer" style="-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold;"/>
+                    <Button text="+" onAction="#handleAddCustomer" styleClass="button-success"/>
                 </HBox>
                 <GridPane hgap="10" vgap="5">
-                    <Label text="Name:" GridPane.columnIndex="0" GridPane.rowIndex="0" style="-fx-text-fill: #666;"/>
+                    <Label text="Name:" GridPane.columnIndex="0" GridPane.rowIndex="0" styleClass="text-muted"/>
                     <Label fx:id="lblCustomerName" text="Walk-in Customer" GridPane.columnIndex="1" GridPane.rowIndex="0" style="-fx-font-weight: bold;"/>
 
-                    <Label text="Phone:" GridPane.columnIndex="0" GridPane.rowIndex="1" style="-fx-text-fill: #666;"/>
+                    <Label text="Phone:" GridPane.columnIndex="0" GridPane.rowIndex="1" styleClass="text-muted"/>
                     <Label fx:id="lblCustomerPhone" text="-" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
                 </GridPane>
             </VBox>
 
             <!-- Item Entry Section -->
-            <VBox spacing="10" style="-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 5;" VBox.vgrow="ALWAYS">
+            <VBox spacing="10" styleClass="billing-section" VBox.vgrow="ALWAYS">
                 <Label text="Add Item" style="-fx-font-weight: bold;"/>
 
                 <VBox spacing="2">
@@ -59,7 +59,7 @@
                     <StackPane alignment="TOP_LEFT">
                         <TextField fx:id="txtSearchMedicine" promptText="Type medicine name..."/>
                         <!-- Autocomplete List Overlay -->
-                        <ListView fx:id="listMedicineSuggestions" visible="false" maxHeight="150" style="-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 10, 0, 0, 5);"/>
+                        <ListView fx:id="listMedicineSuggestions" visible="false" maxHeight="150"/>
                     </StackPane>
                 </VBox>
 
@@ -68,18 +68,28 @@
                         <Label text="Quantity"/>
                         <TextField fx:id="txtQty" promptText="1"/>
                     </VBox>
-                    <Button text="ADD" onAction="#handleAdd" style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;" prefHeight="50" prefWidth="80"/>
+                    <Button text="ADD" onAction="#handleAdd" styleClass="button-primary" prefHeight="50" prefWidth="80"/>
                 </HBox>
 
                 <Region VBox.vgrow="ALWAYS"/>
 
-                <Label text="Shortcuts:" style="-fx-text-fill: #888; -fx-font-size: 10px;"/>
-                <Label text="Enter on Search -> Select List" style="-fx-text-fill: #888; -fx-font-size: 10px;"/>
-                <Label text="Enter on Qty -> Add Item" style="-fx-text-fill: #888; -fx-font-size: 10px;"/>
+                <Label text="Shortcuts:" styleClass="text-muted"/>
+                <Label text="Enter on Search → Select List" styleClass="text-muted"/>
+                <Label text="Enter on Qty → Add Item" styleClass="text-muted"/>
             </VBox>
 
+            <!-- Patient Care Assistant (Cloud AI) -->
+            <TitledPane text="🤖 Patient Care Assistant (AI)" expanded="false" animated="true">
+                <VBox spacing="10" style="-fx-padding: 10;">
+                    <ScrollPane fitToWidth="true" prefHeight="350" VBox.vgrow="ALWAYS">
+                        <VBox fx:id="careProtocolContainer" spacing="8" style="-fx-padding: 10;"/>
+                    </ScrollPane>
+                    <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="38" styleClass="button-purple"/>
+                </VBox>
+            </TitledPane>
+
             <!-- Checkout Button -->
-            <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" style="-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: bold; -fx-cursor: hand;"/>
+            <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success" style="-fx-font-size: 18px;"/>
         </VBox>
     </items>
 </SplitPane>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.ModelStoreController" prefHeight="650.0" prefWidth="900.0">
+
+    <top>
+        <VBox spacing="10" alignment="CENTER_LEFT" styleClass="card" style="-fx-background-radius: 0;">
+            <Label text="AI Model Store" styleClass="page-title"/>
+            <Label text="Download, manage, and load local AI models for hardware-accelerated inference." styleClass="text-muted"/>
+        </VBox>
+    </top>
+
+    <center>
+        <TabPane fx:id="mainTabPane" tabClosingPolicy="UNAVAILABLE" style="-fx-padding: 10;">
+
+            <!-- Tab 1: Download Models -->
+            <Tab text="📥 Download Models">
+                <VBox spacing="15" style="-fx-padding: 15;">
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <TextField fx:id="searchField" promptText="Search Hugging Face Models..." HBox.hgrow="ALWAYS"/>
+                        <Button text="Search" onAction="#handleSearch" styleClass="button-primary"/>
+                    </HBox>
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                        <VBox fx:id="modelsContainer" spacing="20" style="-fx-padding: 5;"/>
+                    </ScrollPane>
+                </VBox>
+            </Tab>
+
+            <!-- Tab 2: Installed Models -->
+            <Tab text="💾 Installed Models">
+                <VBox spacing="15" style="-fx-padding: 15;">
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Label text="Models Directory:" style="-fx-font-weight: bold;"/>
+                        <Label fx:id="modelsDirLabel" text="~" styleClass="text-muted"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button text="Refresh" onAction="#handleRefreshInstalled" styleClass="button-primary"/>
+                        <Button text="Open Folder" onAction="#handleOpenModelsFolder" styleClass="button-outlined"/>
+                    </HBox>
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                        <VBox fx:id="installedModelsContainer" spacing="10" style="-fx-padding: 5;"/>
+                    </ScrollPane>
+                </VBox>
+            </Tab>
+
+        </TabPane>
+    </center>
+
+    <bottom>
+        <VBox spacing="5" styleClass="status-bar">
+            <Label fx:id="statusLabel" text="Ready" style="-fx-font-weight: bold;"/>
+            <ProgressBar fx:id="globalProgressBar" progress="0.0" maxWidth="1.7976931348623157E308"/>
+        </VBox>
+    </bottom>
+
+</BorderPane>

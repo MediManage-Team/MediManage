@@ -11,6 +11,9 @@ import org.example.MediManage.model.Medicine;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import javafx.application.Platform;
+import org.example.MediManage.service.ai.AIAssistantService;
 
 public class InventoryController {
 
@@ -46,8 +49,15 @@ public class InventoryController {
     private Button btnSave;
     @FXML
     private Button btnDelete;
+    @FXML
+    private Button btnAIRestock;
+    @FXML
+    private TextArea txtAIRestock;
+    @FXML
+    private ProgressIndicator spinnerRestock;
 
     private MedicineDAO medicineDAO = new MedicineDAO();
+    private AIAssistantService aiService = new AIAssistantService();
     private ObservableList<Medicine> masterData = FXCollections.observableArrayList();
     private Medicine selectedMedicine = null;
 
@@ -74,7 +84,7 @@ public class InventoryController {
                 if (item == null || empty) {
                     setStyle("");
                 } else if (item.getStock() < 10) {
-                    setStyle("-fx-background-color: #ffcccc;"); // Light red for low stock
+                    setStyle("-fx-background-color: #ff6b6b20;"); // Low stock (dark red tint)
                 } else {
                     setStyle("");
                 }
@@ -155,7 +165,10 @@ public class InventoryController {
 
             if (selectedMedicine == null) {
                 // Add New
-                medicineDAO.addMedicine(name, company, expiry, price, stock);
+                // defaulting generic name to empty string as we don't have a field in UI yet
+                // for InventoryAdd (User requirement didn't specify updating Inventory UI, but
+                // "Substitute Search" implies it should be there. For now, empty to fix build).
+                medicineDAO.addMedicine(name, "", company, expiry, price, stock);
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine added.");
             } else {
                 // Update Existing
@@ -214,6 +227,54 @@ public class InventoryController {
     private void handleExportExcel() {
         // Placeholder for future implementation
         showAlert(Alert.AlertType.INFORMATION, "Export", "Export to Excel not implemented yet.");
+    }
+
+    @FXML
+    private void handleAIRestock() {
+        if (masterData.isEmpty()) {
+            txtAIRestock.setText("No inventory data loaded.");
+            return;
+        }
+
+        // Build inventory snapshot for AI
+        String snapshot = masterData.stream()
+                .filter(m -> m.getStock() < 20) // Focus on low stock items
+                .map(m -> m.getName() + " (" + m.getCompany() + ") — Stock: " + m.getStock() + ", Price: ₹"
+                        + m.getPrice())
+                .collect(Collectors.joining("\n"));
+
+        if (snapshot.isEmpty()) {
+            txtAIRestock.setText("All items have adequate stock (20+).");
+            return;
+        }
+
+        txtAIRestock.setText("Analyzing inventory with AI...");
+        btnAIRestock.setDisable(true);
+        if (spinnerRestock != null) {
+            spinnerRestock.setVisible(true);
+            spinnerRestock.setManaged(true);
+        }
+
+        aiService.suggestRestock(snapshot)
+                .thenAccept(result -> Platform.runLater(() -> {
+                    txtAIRestock.setText(result);
+                    btnAIRestock.setDisable(false);
+                    if (spinnerRestock != null) {
+                        spinnerRestock.setVisible(false);
+                        spinnerRestock.setManaged(false);
+                    }
+                }))
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> {
+                        txtAIRestock.setText("Error: " + ex.getMessage());
+                        btnAIRestock.setDisable(false);
+                        if (spinnerRestock != null) {
+                            spinnerRestock.setVisible(false);
+                            spinnerRestock.setManaged(false);
+                        }
+                    });
+                    return null;
+                });
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

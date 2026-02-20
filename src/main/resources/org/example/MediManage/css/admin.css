@@ -1,13 +1,15 @@
-/* Admin Theme: Standard Professional */
+/* Admin Theme — Tokyo Night, Cyan Accent */
+
 .root {
-    -fx-base: #f0f0f0;
-    -fx-accent: #2c3e50;
+    -fx-accent: #00d4ff;
 }
-.sidebar-button {
-    -fx-background-color: transparent;
-    -fx-text-fill: #34495e;
-    -fx-font-size: 14px;
+
+.sidebar-button:focused,
+.sidebar-button:pressed {
+    -fx-background-color: #00d4ff28;
+    -fx-text-fill: #00d4ff;
 }
-.sidebar-button:hover {
-    -fx-background-color: #bdc3c7;
+
+.header-bar {
+    -fx-border-color: transparent transparent #00d4ff transparent;
 }

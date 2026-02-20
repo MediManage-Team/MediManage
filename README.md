@@ -1,69 +1,187 @@
-# MediManage - Medical Shop Management System
+# MediManage - Professional Pharmacy Management System
 
-A modern, robust Desktop application for managing pharmacy inventory, billing, and customer records. Built with JavaFX and optimized for performance and usability.
+A robust, enterprise-grade Desktop application for managing pharmacy inventory, billing, expenses, and customer records. Built with **JavaFX** and **SQLite**, optimized for performance, reliability, and ease of use.
+
+![MediManage](https://via.placeholder.com/800x400?text=MediManage+Dashboard) *Note: Add actual screenshot here*
+
+> **For AI Agents & Contributors**: Please read [AGENT_README.md](./AGENT_README.md) for architectural context and quirks.
 
 ## 🚀 Key Features
 
-### 🛒 Point of Sale (POS)
-- **Fast Billing**: Keyboard-optimized checkout flow.
-- **Barcode Scanner Support**: Auto-focus search, "Scan to Add", and auto-increment quantity logic using **ZXing** integration.
-- **Thermal Printing**: Automatic 58mm receipt printing support.
-- **Smart Search**: Search medicines by name or company.
+### 🛒 Point of Sale (POS) & Billing
+- **Fast Billing**: Keyboard-optimized checkout flow for high-volume environments.
+- **Barcode Scanner Integration**: Auto-focus search (`ZXing`), "Scan to Add", and smart quantity increments.
+- **Payment Modes**: Support for **Cash**, **Credit (Udhar)**, and UPI logging.
+- **Thermal Printing**: Automatic 58mm/80mm receipt printing.
+- **Substitute Search**: Find medicines by **Generic Name** (e.g., search "Paracetamol" to find "Calpol").
 
-### 📦 Inventory Management
-- **Excel Export**: Export your entire inventory to `.xlsx` format using **Apache POI**.
-- **Stock Tracking**: Low stock alerts and KPI dashboard.
-- **Expiry Management**: Track medicine expiry dates.
+### 📦 Inventory & Stock
+- **Real-time Tracking**: Low stock alerts and KPI dashboard.
+- **Expiry Management**: Dedicated "Expiry Alerts" tab for medicines expiring in < 30 days.
+- **Excel Export**: Export full inventory to `.xlsx` using **Apache POI**.
 
-### 📄 Reporting & Invoices
-- **PDF Invoices**: Generate pixel-perfect A4 invoices with **JasperReports** and **iText**.
-- **Bill History**: View and reprint past invoices.
+### 💰 Financial Management
+- **Expense Manager**: Track operating costs (Rent, Salaries, Utilities).
+- **Net Profit Calculation**: Real-time simple P&L (Gross Profit - Expenses).
+- **Customer Credit**: Track "Udhar" balances and customer debt.
 
-### 👥 Customer Management
-- **CRM Features**: Track customer purchase history and disease profiles.
-- **Smart Flow**: Auto-redirect to "Add Customer" with pre-filled data if a search fails.
+### 📅 Reporting & Invoices
+- **PDF Invoices**: Generate A4 invoices with **JasperReports**.
+- **Bill History**: View, reprint, or share past invoices.
 
-### 🎨 Modern UI/UX
-- **AtlantaFX**: styled with the `PrimerLight` theme for a clean, modern look.
-- **Responsive Design**: Adaptive layouts using JavaFX `BorderPane` and `SplitPane`.
+### 🧠 AI Features (New!)
+- **Local AI Engine**: Built-in Python microservice for offline inference.
+- **AMD Ryzen AI Support**: Auto-detects NPU generation (XDNA 1/2) for hardware acceleration.
+- **Model Store**: Download optimized LLMs (Phi-3, TinyLlama, Qwen) directly from Hugging Face.
+- **Privacy First**: All AI processing happens locally on your machine (CPU/GPU/NPU).
+- **Smart Assist**: (Coming Soon) Chat with your inventory data.
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Language**: Java 21
-- **UI Framework**: JavaFX 17+
-- **Styling**: [AtlantaFX](https://github.com/mkpaz/atlantafx) (PrimerLight Theme)
-- **Database**: MySQL (Connector/J 9.5.0)
-- **Reporting**: 
-  - [JasperReports](https://community.jaspersoft.com/) (v6.21.0)
-  - [iText](https://github.com/itext/itext) (v2.1.7)
-- **Data Export**: [Apache POI](https://poi.apache.org/) (v5.2.5)
-- **Barcode/Scanning**: [ZXing](https://github.com/zxing/zxing) (v3.5.3)
+- **Language**: Java 21 LTS
+- **UI Framework**: JavaFX 21 + [AtlantaFX](https://github.com/mkpaz/atlantafx) (PrimerLight Theme)
+- **Database**: SQLite (Embedded, Zero-configuration) with `sqlite-jdbc`
 - **Build Tool**: Maven
+- **Reporting**: JasperReports 6.21
+- **Utilities**:
+    - **Apache POI**: Excel Export
+    - **ZXing**: Barcode Scanning
+    - **OpenPDF**: Secure PDF Generation (Replaced vulnerable iText)
 
 ---
 
-## ⚙️ Setup & Installation
+## 📂 Project Structure & Architecture
 
-1.  **Prerequisites**:
-    - Java 21 SDK
-    - Maven
-    - MySQL Server
+The application follows a standard **MVC (Model-View-Controller)** architecture with a dedicated **DAO (Data Access Object)** layer for database interactions.
 
-2.  **Database Configuration**:
-    - Ensure MySQL is running.
-    - Update `src/main/resources/db_config.properties` with your credentials:
-        ```properties
-        db.url=jdbc:mysql://localhost:3306/medimanage_db
-        db.user=your_username
-        db.password=your_password
-        ```
+### Directory Layout
+```text
+src/main/java/org/example/MediManage/
+├── config/           # Configuration classes (DatabaseConfig)
+├── dao/              # Data Access Objects (SQL Logic)
+├── model/            # POJOs / Data Transfer Objects
+├── service/          # Business Logic Services (Reports, Print)
+├── util/             # Helpers (PDFUtil, UserSession)
+├── *Controller.java  # JavaFX UI Controllers
+└── Launcher.java     # Application Entry Components
+```
 
-3.  **Build & Run**:
+### Key Components
+
+#### 1. Configuration (`config/`)
+- **`DatabaseConfig.java`**: Manages SQLite connection reuse and file location.
+    - *Dev Mode Check*: Automatically detects if running in IDE (uses local `medimanage.db`) vs. Installed (uses `%APPDATA%/MediManage/medimanage.db`) to prevent permission errors in "Program Files".
+
+#### 2. Models (`model/`)
+- **`Medicine`**, **`Customer`**, **`Bill`**, **`User`**, **`Expense`**: represent DB entities with JavaFX Properties for UI binding.
+
+#### 3. DAOs (`dao/`) - The Data Layer
+- **`BillDAO`**: Handles Invoice generation (Transactional), Daily Sales queries.
+- **`MedicineDAO`**: Manages Inventory, Stock updates, and Generic Search.
+- **`CustomerDAO`**: Manages Customer profiles and Credit Balances.
+- **`ExpenseDAO`**: Logs expenses and calculates monthly totals.
+
+#### 4. Controllers (`*Controller.java`)
+- **`DashboardController`**: Main Hub. Loads KPIs, Expiry Alerts, and navigation.
+- **`BillingController`**: Handles the POS flow, Scanner input payment dialogs.
+- **`InventoryController`**: CRUD operations for medicines.
+- **`CustomersController`**: Manages Customer profiles (Under Development).
+- **`SettingsController`**: System configuration (Under Development).
+
+---
+
+## 🗄️ Database Schema (SQLite)
+
+The application uses a relational SQLite database initialized programmatically via `DatabaseUtil.java` and `schema.sql`.
+
+### Tables
+1.  **`users`**: Auth credentials (`username`, `password`, `role`).
+2.  **`medicines`**: Product catalog (`name`, `generic_name`, `company`, `price`, `expiry_date`).
+3.  **`stock`**: Quantity tracking (`medicine_id`, `quantity`).
+4.  **`customers`**: Profiles (`name`, `phone`, `current_balance`, `details...`).
+5.  **`bills`**: Invoice headers (`total`, `date`, `customer_id`, `payment_mode`).
+6.  **`bill_items`**: Invoice line items (`qty`, `price`, `total`).
+7.  **`expenses`**: Operating costs (`category`, `amount`, `date`).
+
+---
+
+## 💻 Development Setup
+
+### Prerequisites
+1.  **Java Development Kit (JDK) 21**
+2.  **Maven** (3.8+)
+3.  **IDE**: IntelliJ IDEA (Recommended) or Eclipse
+
+### How to Run Locally
+1.  **Clone the Repository**:
     ```bash
-    mvn clean compile javafx:run
+    git clone https://github.com/your-repo/MediManage.git
+    cd MediManage
     ```
+2.  **Build**:
+    ```bash
+    mvn clean install
+    ```
+3.  **Run**:
+    ```bash
+    mvn javafx:run
+    ```
+    *Note*: In Dev mode, the app creates/uses `medimanage.db` in the project root.
+
+4.  **AI Engine Setup**:
+    The application automatically launches the Python AI Engine. Ensure Python 3.8+ is installed.
+    ```bash
+    pip install -r ai_engine/requirements.txt
+    ```
+    See [ai_engine/README.md](ai_engine/README.md) for full details.
+
+### Building the Installer (.exe)
+To create a distributable Windows installer with bundled JRE:
+1. Ensure **Inno Setup** is installed and allowed in your PATH or update the path in `build_full_installer.bat`.
+2. Run the build script:
+    ```powershell
+    ./build_full_installer.bat
+    ```
+    *This script will:*
+    1. Clean and Build the project with Maven.
+    2. Use `jpackage` to create a bundled runtime image (JDK 21).
+    3. Use `Inno Setup` to compile the final `MediManage_Setup_x.x.x.exe`.
+    
+    **Installer Features**:
+    - **Bundled JRE**: No Java installation required on client machine.
+    - **Pre-configured DB**: Includes `medimanage.db` with Admin user and default settings.
+    - **Permissions**: Automatically grants write access to `runtime/db` for seamless persistence.
+    
+    **Output Location**: `Output/MediManage_Setup_0.1.5.exe`
+
+---
+
+## 🔄 Data Flow Example: Generating a Bill (Transaction Logic)
+
+1.  **UI**: User scans a barcode in `BillingController` or searches by **Generic Name**.
+2.  **Add**: Item added to `TableView` (`ObservableList`).
+3.  **Checkout**: User clicks "Checkout", selects Payment Mode (Cash/Credit/UPI).
+4.  **Transaction**: `BillDAO.generateInvoice()` starts a Atomic DB Transaction:
+    - **Validates** User ID (Fallback to Admin if session stale).
+    - Insert into `bills`.
+    - Insert into `bill_items` (Batch Insert).
+    - Update `stock` (Decrement Quantity).
+    - **Credit Logic**: If Mode is 'Credit', executes SQL Update on `customers` balance within the **same connection** to prevent locking.
+    - `commit()` transaction.
+5.  **Output**: PDF generated via `ReportService` and Thermal Receipt printed.
+
+---
+
+## 🧩 Layouts & UI
+
+- **`main-shell-view.fxml`**: The sidebar navigation container.
+- **`dashboard-view.fxml`**: High-level KPIs and Tabs (Expenses, Expiry Alerts).
+- **`billing-view.fxml`**: Split-pane design (Search/Table on left, Totals/Actions on right).
+- **Login UI**: Role-based access (Admin, Manager, Pharmacist, Cashier). *Staff role hidden by default.*
+
+---
 
 ## 📝 License
-This project is for educational and commercial management use.
+MIT License. See `LICENSE.txt` for details.

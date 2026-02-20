@@ -1,0 +1,18 @@
+# MediManage AI — Intel NPU Environment (OpenVINO / Intel AI)
+# For Intel Core Ultra NPU and Arc GPU acceleration
+
+# Core
+flask
+numpy
+requests
+tqdm
+huggingface_hub
+transformers
+duckduckgo-search
+
+# Intel NPU / OpenVINO inference
+openvino
+optimum[openvino]
+
+# CPU fallback for GGUF models
+llama-cpp-python

@@ -11,24 +11,18 @@
     xmlns="http://javafx.com/javafx/17"
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.MainShellController">
     <top>
-        <HBox alignment="CENTER_LEFT" prefHeight="60.0" prefWidth="900.0" style="-fx-background-color: #2c3e50;" BorderPane.alignment="CENTER">
+        <HBox alignment="CENTER_LEFT" styleClass="header-bar" BorderPane.alignment="CENTER">
             <children>
-                <Label text="MediManage" textFill="WHITE">
-                    <font>
-                        <Font name="System Bold" size="24.0" />
-                    </font>
+                <Label text="MediManage" styleClass="header-title">
                     <HBox.margin>
-                        <Insets left="20.0" />
+                        <Insets left="16.0" />
                     </HBox.margin>
                 </Label>
                 <HBox alignment="CENTER_RIGHT" HBox.hgrow="ALWAYS">
                     <children>
-                        <Label fx:id="userInfoLabel" text="User: ..." textFill="WHITE">
-                            <font>
-                                <Font size="14.0" />
-                            </font>
+                        <Label fx:id="userInfoLabel" text="User: ..." styleClass="header-user-label">
                             <HBox.margin>
-                                <Insets right="20.0" />
+                                <Insets right="16.0" />
                             </HBox.margin>
                         </Label>
                     </children>
@@ -37,7 +31,7 @@
         </HBox>
     </top>
     <left>
-        <VBox fx:id="sidebar" prefHeight="540.0" prefWidth="200.0" style="-fx-background-color: #ecf0f1; -fx-padding: 10;" BorderPane.alignment="CENTER" />
+        <VBox fx:id="sidebar" prefWidth="180.0" styleClass="sidebar" BorderPane.alignment="CENTER" />
     </left>
     <center>
         <!-- Content will be loaded here dynamically -->

@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DBUtil;
+import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.BillItem;
 
 import java.sql.*;
@@ -11,17 +11,35 @@ import java.util.Map;
 
 public class BillDAO {
 
-    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId) throws SQLException {
+    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
+            String paymentMode)
+            throws SQLException {
         Connection conn = null;
         int billId = -1;
         try {
-            conn = DBUtil.getConnection();
+            conn = DatabaseUtil.getConnection();
             conn.setAutoCommit(false);
 
-            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id) VALUES (?, CURRENT_TIMESTAMP, ?)";
+            String checkUser = "SELECT 1 FROM users WHERE user_id = ?";
+            try (PreparedStatement psCheck = conn.prepareStatement(checkUser)) {
+                psCheck.setInt(1, userId);
+                try (ResultSet rsCheck = psCheck.executeQuery()) {
+                    if (!rsCheck.next()) {
+                        System.err.println("⚠️ Warning: User ID " + userId + " not found. Fallback to Admin (1).");
+                        userId = 1;
+                    }
+                }
+            }
+
+            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id, user_id, payment_mode) VALUES (?, ?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
-                psBill.setObject(2, customerId);
+                String now = java.time.LocalDateTime.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                psBill.setString(2, now);
+                psBill.setObject(3, customerId); // setInt can't handle null, setObject can
+                psBill.setObject(4, userId);
+                psBill.setString(5, paymentMode != null ? paymentMode : "CASH");
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -51,11 +69,29 @@ public class BillDAO {
                 psStock.executeBatch();
             }
 
+            if ("Credit".equalsIgnoreCase(paymentMode) && customerId != null) {
+                // Update Customer Balance
+                // Execute directly on 'conn' to avoid SQLITE_BUSY (Database Locked)
+                String updateBalanceSql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
+                try (PreparedStatement psUpdate = conn.prepareStatement(updateBalanceSql)) {
+                    psUpdate.setDouble(1, totalAmount);
+                    psUpdate.setInt(2, customerId);
+                    psUpdate.executeUpdate();
+                }
+            }
+
             conn.commit();
         } catch (SQLException e) {
             if (conn != null)
                 conn.rollback();
-            throw e;
+            String debugMsg = "Invoice Generation Failed.\n" +
+                    "Debug Info:\n" +
+                    "Customer ID: " + customerId + "\n" +
+                    "User ID: " + userId + "\n" +
+                    "Items: " + items.size() + "\n" +
+                    "First Item Medicine ID: " + (items.isEmpty() ? "N/A" : items.get(0).getMedicineId());
+            System.err.println(debugMsg);
+            throw new SQLException(debugMsg + "\nOriginal Error: " + e.getMessage(), e);
         } finally {
             if (conn != null) {
                 conn.setAutoCommit(true);
@@ -66,8 +102,11 @@ public class BillDAO {
     }
 
     public double getDailySales() {
-        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date) = CURDATE()";
-        try (Connection conn = DBUtil.getConnection();
+        // SQLite: compare stored local date (string) with calculated local date of now
+        // stored: "2023-10-27 14:00:00" -> date() -> "2023-10-27"
+        // now: date('now', 'localtime') -> "2023-10-27" (if running locally)
+        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date) = date('now', 'localtime')";
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) {
@@ -81,12 +120,13 @@ public class BillDAO {
 
     public java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> getBillHistory() {
         java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> history = new java.util.ArrayList<>();
-        String sql = "SELECT b.bill_id, b.bill_date, b.total_amount, c.name, c.phone " +
+        String sql = "SELECT b.bill_id, b.bill_date, b.total_amount, c.name, c.phone, u.username " +
                 "FROM bills b " +
                 "LEFT JOIN customers c ON b.customer_id = c.customer_id " +
+                "LEFT JOIN users u ON b.user_id = u.user_id " +
                 "ORDER BY b.bill_date DESC";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
@@ -96,7 +136,8 @@ public class BillDAO {
                         rs.getString("bill_date"),
                         rs.getDouble("total_amount"),
                         rs.getString("name"),
-                        rs.getString("phone")));
+                        rs.getString("phone"),
+                        rs.getString("username")));
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -107,15 +148,17 @@ public class BillDAO {
     // New Method for Reports
     public Map<String, Double> getSalesBetweenDates(LocalDate start, LocalDate end) {
         Map<String, Double> sales = new LinkedHashMap<>();
-        String sql = "SELECT DATE(bill_date) as day, SUM(total_amount) as total " +
-                "FROM bills WHERE DATE(bill_date) BETWEEN ? AND ? " +
+        // SQLite: group by the date part of the timestamp string
+        // Assuming format yyyy-MM-dd HH:mm:ss, date() extracts yyyy-MM-dd
+        String sql = "SELECT date(bill_date) as day, SUM(total_amount) as total " +
+                "FROM bills WHERE date(bill_date) BETWEEN ? AND ? " +
                 "GROUP BY day ORDER BY day ASC";
 
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setDate(1, java.sql.Date.valueOf(start));
-            ps.setDate(2, java.sql.Date.valueOf(end));
+            ps.setString(1, start.toString());
+            ps.setString(2, end.toString());
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -131,7 +174,7 @@ public class BillDAO {
     public List<BillItem> getBillItemsExtended(int billId) {
         List<BillItem> items = new java.util.ArrayList<>();
         String sql = "SELECT bi.medicine_id, m.name, m.expiry_date, bi.quantity, bi.price, bi.total FROM bill_items bi LEFT JOIN medicines m ON bi.medicine_id = m.medicine_id WHERE bi.bill_id = ?";
-        try (Connection conn = DBUtil.getConnection();
+        try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, billId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -152,5 +195,88 @@ public class BillDAO {
             e.printStackTrace();
         }
         return items;
+    }
+
+    // For Business Intelligence: Sales by Item (Medicine)
+    public Map<String, Integer> getItemizedSales(LocalDate start, LocalDate end) {
+        Map<String, Integer> sales = new LinkedHashMap<>();
+        String sql = "SELECT m.name, SUM(bi.quantity) as total_qty " +
+                "FROM bill_items bi " +
+                "JOIN bills b ON bi.bill_id = b.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE date(b.bill_date) BETWEEN ? AND ? " +
+                "GROUP BY m.name " +
+                "ORDER BY total_qty DESC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, start.toString());
+            ps.setString(2, end.toString());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    sales.put(rs.getString("name"), rs.getInt("total_qty"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return sales;
+    }
+
+    // ======================== AI CARE PROTOCOL ========================
+
+    /**
+     * Save AI-generated care protocol for a bill.
+     */
+    public void saveAICareProtocol(int billId, String protocol) {
+        String sql = "UPDATE bills SET ai_care_protocol = ? WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, protocol);
+            ps.setInt(2, billId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Failed to save AI care protocol for bill " + billId + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieve AI care protocol for a bill.
+     */
+    public String getAICareProtocol(int billId) {
+        String sql = "SELECT ai_care_protocol FROM bills WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("ai_care_protocol");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to load AI care protocol for bill " + billId + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Get payment mode for a bill.
+     */
+    public String getPaymentMode(int billId) {
+        String sql = "SELECT payment_mode FROM bills WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("payment_mode");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to get payment mode for bill " + billId + ": " + e.getMessage());
+        }
+        return "CASH";
     }
 }

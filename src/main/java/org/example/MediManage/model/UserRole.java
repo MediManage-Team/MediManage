@@ -4,7 +4,8 @@ public enum UserRole {
     ADMIN,
     MANAGER,
     PHARMACIST,
-    CASHIER;
+    CASHIER,
+    STAFF;
 
     public static UserRole fromString(String role) {
         if (role == null) {

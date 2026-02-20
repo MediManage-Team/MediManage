@@ -84,7 +84,7 @@ public class MediManageTest {
     @Order(4)
     @DisplayName("Database Connection Check")
     void testDBConnection() {
-        try (Connection conn = org.example.MediManage.DBUtil.getConnection()) {
+        try (Connection conn = org.example.MediManage.DatabaseUtil.getConnection()) {
             assertNotNull(conn, "Connection should not be null if DB is running");
             System.out.println("DB Connection Successful!");
         } catch (Exception e) {
