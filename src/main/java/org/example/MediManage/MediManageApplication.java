@@ -29,11 +29,9 @@ public class MediManageApplication extends Application {
         public void start(Stage stage) throws Exception {
                 instance = this;
 
-                // Load Ubuntu font family (bundled TTFs)
-                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Light.ttf"), 13);
-                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Regular.ttf"), 13);
-                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Medium.ttf"), 13);
-                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/Ubuntu-Bold.ttf"), 13);
+                // Load Cascadia Code font family (bundled TTFs)
+                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/CascadiaCode.ttf"), 13);
+                Font.loadFont(getClass().getResourceAsStream("/org/example/MediManage/fonts/CascadiaMono.ttf"), 13);
 
                 // Apply AtlantaFX Theme immediately
                 Application.setUserAgentStylesheet(new atlantafx.base.theme.PrimerDark().getUserAgentStylesheet());
