@@ -5,9 +5,10 @@ import sys
 import platform
 import sqlite3
 import re
+from logging_setup import configure_structured_logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure structured logging
+configure_structured_logging()
 logger = logging.getLogger(__name__)
 
 try:

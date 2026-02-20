@@ -4,20 +4,43 @@ import hashlib
 import os
 import signal
 from flask import Flask, request, jsonify
+from logging_setup import (
+    clear_correlation_id,
+    configure_structured_logging,
+    get_correlation_id,
+    set_correlation_id,
+)
 from inference import engine
 import download_manager
 import hardware_detect
 
 app = Flask(__name__)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure structured logging
+configure_structured_logging(force=True)
 logger = logging.getLogger(__name__)
 
 # Thread-safe download progress state
 _progress_lock = threading.Lock()
 _download_progress = {"status": "idle", "percent": 0, "message": "", "speed": ""}
 _download_cancel = threading.Event()  # Set this to cancel a running download
+
+
+@app.before_request
+def _bind_correlation_id():
+    correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get("X-Request-Id")
+    set_correlation_id(correlation_id)
+
+
+@app.after_request
+def _propagate_correlation_id(response):
+    response.headers["X-Correlation-Id"] = get_correlation_id()
+    return response
+
+
+@app.teardown_request
+def _clear_request_context(_error):
+    clear_correlation_id()
 
 
 def _set_progress(data):

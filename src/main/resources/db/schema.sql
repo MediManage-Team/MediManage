@@ -11,9 +11,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE TABLE IF NOT EXISTS medicines (
     medicine_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    generic_name TEXT,
     company TEXT,
     price REAL NOT NULL,
-    expiry_date TEXT
+    expiry_date TEXT,
+    active INTEGER DEFAULT 1
 );
 -- 3. STOCK
 CREATE TABLE IF NOT EXISTS stock (
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS customers (
     insurance_provider TEXT,
     insurance_policy_no TEXT,
     diseases TEXT,
-    photo_id_path TEXT
+    photo_id_path TEXT,
+    current_balance REAL DEFAULT 0.0
 );
 -- 5. BILLS
 CREATE TABLE IF NOT EXISTS bills (
@@ -43,6 +46,8 @@ CREATE TABLE IF NOT EXISTS bills (
     user_id INTEGER,
     total_amount REAL,
     bill_date TEXT DEFAULT CURRENT_TIMESTAMP,
+    payment_mode TEXT DEFAULT 'CASH',
+    ai_care_protocol TEXT,
     FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
@@ -77,8 +82,8 @@ CREATE INDEX IF NOT EXISTS idx_bill_items_medicine ON bill_items(medicine_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
 -- ======================== MIGRATIONS ========================
--- ALTER TABLE ADD COLUMN will fail safely on existing DBs (DatabaseUtil's try-catch
--- swallows "duplicate column" errors). Safe to re-run.
+-- Keep ADD COLUMN migrations for existing installs that predate these fields.
+-- DatabaseUtil checks PRAGMA table_info and skips when columns already exist.
 -- Original migrations
 ALTER TABLE medicines
 ADD COLUMN generic_name TEXT;

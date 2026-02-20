@@ -118,7 +118,7 @@ MediManage follows a **layered MVC architecture** with clear separation of conce
 ## 🛠️ Technology Stack
 
 - **Java 21** - LTS version with modern features
-- **JavaFX 21** - Rich desktop UI framework
+- **JavaFX 21 LTS** - Rich desktop UI framework (with AtlantaFX PrimerDark theme)
 - **SQLite** - Embedded zero-configuration database
 - **Maven** - Dependency management and build tool
 - **AtlantaFX** - Modern UI theme

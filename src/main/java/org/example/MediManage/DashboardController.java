@@ -210,7 +210,7 @@ public class DashboardController {
         TableColumn<Medicine, String> colExp = new TableColumn<>("Expiry Date");
         colExp.setCellValueFactory(data -> data.getValue().expiryProperty());
 
-        expiryTable.getColumns().addAll(colMed, colExp);
+        expiryTable.getColumns().setAll(java.util.List.of(colMed, colExp));
 
         java.time.LocalDate today = java.time.LocalDate.now();
         java.time.LocalDate warningDate = today.plusDays(30);
@@ -298,8 +298,8 @@ public class DashboardController {
         TableColumn<BillItem, Double> colTotal = new TableColumn<>("Total");
         colTotal.setCellValueFactory(d -> d.getValue().totalProperty().asObject());
 
-        table.getColumns().addAll(colName, colExpiry, colQty, colPr, colTotal);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.getColumns().setAll(java.util.List.of(colName, colExpiry, colQty, colPr, colTotal));
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPrefHeight(300);
 
         // Download button

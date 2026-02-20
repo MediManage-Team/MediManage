@@ -5,10 +5,15 @@ import org.example.MediManage.config.DatabaseConfig;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DatabaseUtil {
+    private static final Pattern ALTER_ADD_COLUMN_PATTERN = Pattern.compile(
+            "(?is)^ALTER\\s+TABLE\\s+([`\"\\[]?[A-Za-z_][A-Za-z0-9_]*[`\"\\]]?)\\s+ADD\\s+COLUMN\\s+([`\"\\[]?[A-Za-z_][A-Za-z0-9_]*[`\"\\]]?).*");
 
     public static Connection getConnection() throws SQLException {
         return DatabaseConfig.getConnection();
@@ -43,14 +48,17 @@ public class DatabaseUtil {
                     while (scanner.hasNext()) {
                         String sql = scanner.next().trim();
                         if (!sql.isEmpty()) {
+                            if (shouldSkipAlterAddColumn(conn, sql)) {
+                                continue;
+                            }
+
                             try {
                                 stmt.execute(sql);
                                 System.out.println("✅ Executed schema statement: "
                                         + sql.substring(0, Math.min(50, sql.length())) + "...");
                             } catch (SQLException e) {
-                                // Log but don't fail, as some statements (like duplicate columns) are expected
-                                // on existing DBs
-                                System.err.println("Database Initialization Note: " + e.getMessage() + " [Statement: "
+                                // Log but don't fail so existing DBs can still boot.
+                                System.err.println("Database Initialization Warning: " + e.getMessage() + " [Statement: "
                                         + sql.substring(0, Math.min(50, sql.length())) + "...]");
                             }
                         }
@@ -62,5 +70,73 @@ public class DatabaseUtil {
         }
 
         System.out.println("✅ Schema initialized successfully.");
+    }
+
+    private static boolean shouldSkipAlterAddColumn(Connection conn, String sql) throws SQLException {
+        String normalized = stripLeadingSqlComments(sql).trim();
+        Matcher matcher = ALTER_ADD_COLUMN_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
+            return false;
+        }
+
+        String tableName = sanitizeIdentifier(matcher.group(1));
+        String columnName = sanitizeIdentifier(matcher.group(2));
+        if (tableName.isEmpty() || columnName.isEmpty()) {
+            return false;
+        }
+
+        if (columnExists(conn, tableName, columnName)) {
+            System.out.println("ℹ️ Skipped migration: column '" + columnName + "' already exists on '" + tableName + "'.");
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean columnExists(Connection conn, String tableName, String columnName) throws SQLException {
+        String pragma = "PRAGMA table_info(" + quoteIdentifier(tableName) + ")";
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(pragma)) {
+            while (rs.next()) {
+                String existing = rs.getString("name");
+                if (columnName.equalsIgnoreCase(existing)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static String stripLeadingSqlComments(String sql) {
+        StringBuilder cleaned = new StringBuilder(sql.length());
+        boolean started = false;
+
+        for (String line : sql.split("\\R")) {
+            String trimmed = line.trim();
+            if (!started && (trimmed.isEmpty() || trimmed.startsWith("--"))) {
+                continue;
+            }
+            started = true;
+            cleaned.append(line).append('\n');
+        }
+        return cleaned.toString();
+    }
+
+    private static String sanitizeIdentifier(String identifier) {
+        if (identifier == null) {
+            return "";
+        }
+        String value = identifier.trim();
+        if (value.length() >= 2) {
+            if ((value.startsWith("\"") && value.endsWith("\""))
+                    || (value.startsWith("`") && value.endsWith("`"))
+                    || (value.startsWith("[") && value.endsWith("]"))) {
+                value = value.substring(1, value.length() - 1);
+            }
+        }
+        return value;
+    }
+
+    private static String quoteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 }

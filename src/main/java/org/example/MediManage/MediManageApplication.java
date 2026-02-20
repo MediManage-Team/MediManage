@@ -332,8 +332,10 @@ public class MediManageApplication extends Application {
                 } else {
                         // Try to kill via HTTP if process handle is missing
                         try {
-                                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(
-                                                "http://127.0.0.1:5000/shutdown").openConnection();
+                                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI
+                                                .create("http://127.0.0.1:5000/shutdown")
+                                                .toURL()
+                                                .openConnection();
                                 conn.setRequestMethod("POST");
                                 conn.getInputStream();
                                 System.out.println("🛑 Sent shutdown signal to existing AI Engine.");

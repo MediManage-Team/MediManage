@@ -25,6 +25,7 @@ from contextlib import contextmanager
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+from logging_setup import configure_structured_logging
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -39,6 +40,8 @@ DB_PATH = os.path.join(_PROJECT_ROOT, "medimanage.db")
 # AI Engine server (Flask on port 5000)
 AI_ENGINE_URL = "http://127.0.0.1:5000"
 
+# Configure structured logging
+configure_structured_logging(force=True)
 logger = logging.getLogger("medimanage-mcp")
 
 # ---------------------------------------------------------------------------
