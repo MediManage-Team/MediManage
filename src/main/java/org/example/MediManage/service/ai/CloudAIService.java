@@ -7,8 +7,11 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.example.MediManage.security.CloudApiKeyStore;
 
 /**
  * Multi-provider Cloud AI Service.
@@ -72,34 +75,28 @@ public class CloudAIService implements AIService {
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
 
-        // Load all keys from Preferences
-        java.util.prefs.Preferences prefs = null;
-        try {
-            prefs = java.util.prefs.Preferences
-                    .userNodeForPackage(org.example.MediManage.SettingsController.class);
-        } catch (Exception ignored) {
+        for (Provider provider : Provider.values()) {
+            apiKeys.put(provider, CloudApiKeyStore.get(provider));
         }
 
-        if (prefs != null) {
-            apiKeys.put(Provider.GEMINI, prefs.get("cloud_api_key", geminiKey != null ? geminiKey : ""));
-            apiKeys.put(Provider.GROQ, prefs.get("groq_api_key", ""));
-            apiKeys.put(Provider.OPENROUTER, prefs.get("openrouter_api_key", ""));
-            apiKeys.put(Provider.OPENAI, prefs.get("openai_api_key", ""));
-            apiKeys.put(Provider.CLAUDE, prefs.get("claude_api_key", ""));
+        // Compatibility fallback if caller still passes a Gemini key explicitly.
+        if (geminiKey != null && !geminiKey.isBlank() && apiKeys.getOrDefault(Provider.GEMINI, "").isBlank()) {
+            apiKeys.put(Provider.GEMINI, geminiKey);
+        }
 
-            String providerStr = prefs.get("cloud_provider", "GEMINI");
-            try {
-                this.activeProvider = Provider.valueOf(providerStr);
-            } catch (Exception e) {
-                this.activeProvider = Provider.GEMINI;
-            }
-            this.activeModel = prefs.get("cloud_model", getModels(activeProvider).get(0).id());
-        } else {
-            if (geminiKey != null && !geminiKey.isEmpty()) {
-                apiKeys.put(Provider.GEMINI, geminiKey);
-            }
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences
+                .userNodeForPackage(org.example.MediManage.SettingsController.class);
+        String providerStr = prefs.get("cloud_provider", "GEMINI");
+        try {
+            this.activeProvider = Provider.valueOf(providerStr);
+        } catch (Exception e) {
             this.activeProvider = Provider.GEMINI;
-            this.activeModel = "gemini-2.0-flash-lite";
+        }
+
+        String defaultModel = getModels(activeProvider).isEmpty() ? "" : getModels(activeProvider).get(0).id();
+        this.activeModel = prefs.get("cloud_model", defaultModel);
+        if (this.activeModel == null || this.activeModel.isBlank()) {
+            this.activeModel = defaultModel;
         }
 
         System.out.println("☁️ Cloud AI: " + activeProvider + " / " + activeModel);
@@ -178,18 +175,26 @@ public class CloudAIService implements AIService {
 
     private CompletableFuture<String> sendWithRetry(String prompt, int retriesLeft) {
         return sendRequest(prompt)
-                .exceptionally(ex -> {
-                    if (retriesLeft > 0 && ex.getMessage() != null && ex.getMessage().contains("429")) {
-                        System.out.println("⏳ Rate limited. Retrying in 15s... (" + retriesLeft + " left)");
-                        try {
-                            Thread.sleep(15000);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                        }
-                        return sendWithRetry(prompt, retriesLeft - 1).join();
+                .handle((response, ex) -> {
+                    if (ex == null) {
+                        return CompletableFuture.completedFuture(response);
                     }
-                    throw new RuntimeException(ex);
-                });
+
+                    Throwable root = unwrapCompletion(ex);
+                    if (retriesLeft > 0 && isRateLimitError(root)) {
+                        System.out.println("⏳ Rate limited. Retrying in 15s... (" + retriesLeft + " left)");
+                        return CompletableFuture
+                                .runAsync(() -> {
+                                }, CompletableFuture.delayedExecutor(15, TimeUnit.SECONDS))
+                                .thenCompose(ignored -> sendWithRetry(prompt, retriesLeft - 1));
+                    }
+
+                    RuntimeException failure = (root instanceof RuntimeException r)
+                            ? r
+                            : new RuntimeException(root);
+                    return CompletableFuture.<String>failedFuture(failure);
+                })
+                .thenCompose(future -> future);
     }
 
     // --- Internal: Route to Provider ---
@@ -337,6 +342,19 @@ public class CloudAIService implements AIService {
         } catch (Exception ignored) {
         }
         return activeProvider + " Error (" + code + "): " + response.body();
+    }
+
+    private static Throwable unwrapCompletion(Throwable throwable) {
+        Throwable cause = throwable;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
+    private static boolean isRateLimitError(Throwable throwable) {
+        String message = throwable == null ? null : throwable.getMessage();
+        return message != null && message.contains("429");
     }
 
     // --- Structured JSON Output ---

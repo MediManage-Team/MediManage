@@ -21,6 +21,13 @@
         </Button>
     </HBox>
 
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="lblPageInfo" text="Rows 0-0 of 0 (Page 1/1)"/>
+        <Button fx:id="btnPrevPage" text="Prev" onAction="#handlePrevPage"/>
+        <Button fx:id="btnNextPage" text="Next" onAction="#handleNextPage"/>
+    </HBox>
+
     <SplitPane dividerPositions="0.7" VBox.vgrow="ALWAYS">
         <!-- Center: Table -->
         <items>
@@ -75,7 +82,7 @@
 
                 <Separator/>
                 <TitledPane text="🤖 AI Restock Suggestions" expanded="false" animated="true">
-                    <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
+                    <VBox spacing="10" styleClass="content-pad-10 ai-panel">
                         <HBox spacing="10" alignment="CENTER_LEFT">
                             <Button fx:id="btnAIRestock" text="✨ Get AI Suggestions" onAction="#handleAIRestock" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
                             <ProgressIndicator fx:id="spinnerRestock" prefWidth="24" prefHeight="24" visible="false" managed="false"/>

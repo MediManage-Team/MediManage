@@ -1,8 +1,13 @@
 package org.example.MediManage.service.ai;
 
+import org.example.MediManage.security.CloudApiKeyStore;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -48,9 +53,7 @@ public class AIOrchestrator {
      */
     public AIOrchestrator() {
         this.localService = new LocalAIService();
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                .userNodeForPackage(org.example.MediManage.SettingsController.class);
-        String apiKey = prefs.get("cloud_api_key", "");
+        String apiKey = CloudApiKeyStore.get(CloudAIService.Provider.GEMINI);
         this.cloudService = new CloudAIService(apiKey);
     }
 
@@ -96,12 +99,17 @@ public class AIOrchestrator {
             if (localService.isAvailable()) {
                 return localService.chat(query, useSearch)
                         .thenApply(r -> cacheAndReturn(cacheKey, r))
-                        .exceptionally(ex -> {
-                            if (cloudService.isAvailable()) {
-                                return cacheAndReturn(cacheKey, cloudService.chat(query).join());
+                        .handle((result, ex) -> {
+                            if (ex == null) {
+                                return CompletableFuture.completedFuture(result);
                             }
-                            return "Error: Local AI failed and Cloud AI unavailable. " + ex.getMessage();
-                        });
+                            if (cloudService.isAvailable()) {
+                                return cloudService.chat(query).thenApply(r -> cacheAndReturn(cacheKey, r));
+                            }
+                            return CompletableFuture.completedFuture(
+                                    "Error: Local AI failed and Cloud AI unavailable. " + rootCauseMessage(ex));
+                        })
+                        .thenCompose(future -> future);
             } else if (cloudService.isAvailable()) {
                 return cloudService.chat(query).thenApply(r -> cacheAndReturn(cacheKey, r));
             } else {
@@ -167,6 +175,18 @@ public class AIOrchestrator {
     }
 
     /**
+     * Execute a structured database query via the local AI engine.
+     * This path is intentionally local-only.
+     */
+    public CompletableFuture<String> queryDatabase(String query) {
+        if (localService.isAvailable()) {
+            return localService.queryDatabase(query);
+        }
+        return CompletableFuture.failedFuture(
+                new RuntimeException("Local AI engine unavailable for database query."));
+    }
+
+    /**
      * Combined query: Local AI analyzes business data → Cloud AI adds medical
      * precision.
      */
@@ -180,18 +200,16 @@ public class AIOrchestrator {
             CompletableFuture<String> localAnalysis;
             if (localService.isAvailable()) {
                 localAnalysis = localService.chatWithContext(
-                        "Analyze this business data and produce a concise summary with key findings:\n" + prompt,
+                        AIPromptCatalog.combinedBusinessSummaryPrompt(prompt),
                         businessContext);
             } else {
                 localAnalysis = CompletableFuture.completedFuture(
-                        "Business Data Summary:\n" + businessContext);
+                        AIPromptCatalog.combinedBusinessFallbackPrompt(businessContext));
             }
 
             return localAnalysis.thenCompose(localResult -> {
                 if (cloudService.isAvailable()) {
-                    String cloudPrompt = "Based on this business analysis:\n\n" +
-                            localResult + "\n\n" +
-                            "Now answer the following with medical/pharmaceutical precision:\n" + prompt;
+                    String cloudPrompt = AIPromptCatalog.combinedMedicalPrecisionPrompt(localResult, prompt);
                     return cloudService.chat(cloudPrompt);
                 }
                 return CompletableFuture.completedFuture(localResult);
@@ -229,21 +247,32 @@ public class AIOrchestrator {
     // ======================== RATE LIMITER ========================
 
     private <T> CompletableFuture<T> withRateLimit(java.util.function.Supplier<CompletableFuture<T>> task) {
-        return CompletableFuture.supplyAsync(() -> {
+        return CompletableFuture.runAsync(() -> {
             try {
                 rateLimiter.acquire();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Rate limiter interrupted", e);
             }
-            return null;
         }).thenCompose(ignored -> {
+            CompletableFuture<T> taskFuture;
             try {
-                return task.get();
-            } finally {
+                taskFuture = task.get();
+            } catch (RuntimeException e) {
                 rateLimiter.release();
+                return CompletableFuture.failedFuture(e);
             }
+
+            return taskFuture.whenComplete((result, ex) -> rateLimiter.release());
         });
+    }
+
+    private static String rootCauseMessage(Throwable throwable) {
+        Throwable cause = throwable;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() != null ? cause.getMessage() : cause.toString();
     }
 
     // ======================== STATUS ========================
@@ -254,5 +283,39 @@ public class AIOrchestrator {
 
     public boolean isCloudAvailable() {
         return cloudService.isAvailable();
+    }
+
+    // ======================== LOCAL MODEL MANAGEMENT ========================
+
+    public void loadLocalModel() {
+        localService.loadModel();
+    }
+
+    public void loadLocalModel(String modelPath, String hardwareConfig) {
+        localService.loadModel(modelPath, hardwareConfig);
+    }
+
+    public JSONObject getLocalHealth() {
+        return localService.getHealth();
+    }
+
+    public void startModelDownload(String repoId, String filename, String source) {
+        localService.startDownload(repoId, filename, source);
+    }
+
+    public JSONObject getModelDownloadStatus() {
+        return localService.getDownloadStatus();
+    }
+
+    public void stopModelDownload() {
+        localService.stopDownload();
+    }
+
+    public JSONArray listLocalModels() {
+        return localService.listModels();
+    }
+
+    public boolean deleteLocalModel(String modelPath) {
+        return localService.deleteModel(modelPath);
     }
 }

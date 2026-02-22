@@ -8,6 +8,52 @@
     <VBox spacing="20" styleClass="dark-panel">
         <Label text="System Settings" styleClass="page-title"/>
 
+        <!-- Database Configuration -->
+        <TitledPane text="Database Configuration" collapsible="false">
+            <VBox spacing="10">
+                <Label text="Switch between SQLite and PostgreSQL. SQLite remains the default for local usage." styleClass="text-muted" wrapText="true"/>
+
+                <Label text="Backend" style="-fx-font-weight: bold;"/>
+                <ComboBox fx:id="dbBackendCombo" maxWidth="Infinity"/>
+
+                <VBox spacing="6">
+                    <Label text="SQLite Database File" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="sqlitePathField" promptText="Path to medimanage.db"/>
+                </VBox>
+
+                <VBox fx:id="postgresConfigBox" spacing="8" visible="false" managed="false">
+                    <Separator/>
+                    <Label text="PostgreSQL Connection" style="-fx-font-weight: bold;"/>
+                    <GridPane hgap="10" vgap="8">
+                        <Label text="Host" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextField fx:id="postgresHostField" promptText="localhost" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label text="Port" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="postgresPortField" promptText="5432" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Database" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <TextField fx:id="postgresDatabaseField" promptText="medimanage" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Username" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <TextField fx:id="postgresUserField" promptText="postgres" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Password" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <PasswordField fx:id="postgresPasswordField" promptText="Database password" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="80" prefWidth="90"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+                    </GridPane>
+                </VBox>
+
+                <HBox alignment="CENTER_RIGHT" spacing="10">
+                    <Button text="Migrate SQLite → PostgreSQL" onAction="#handleMigrateSqliteToPostgres" styleClass="button-purple"/>
+                    <Button text="Test Database Connection" onAction="#handleTestDatabaseConnection" styleClass="button-outlined"/>
+                </HBox>
+            </VBox>
+        </TitledPane>
+
         <!-- Local AI Configuration -->
         <TitledPane text="Local AI Configuration" collapsible="false">
             <VBox spacing="10">

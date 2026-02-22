@@ -93,6 +93,88 @@ def rows_to_dicts(rows):
     return [dict(r) for r in rows]
 
 
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    if not _table_exists(conn, table_name):
+        return set()
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {r["name"] for r in rows}
+
+
+def _resolve_prescription_schema(conn: sqlite3.Connection) -> dict[str, str]:
+    """Resolve prescription table compatibility across legacy and current schemas."""
+    cols = _table_columns(conn, "prescriptions")
+    if not cols:
+        raise RuntimeError("prescriptions table not found.")
+
+    if "prescription_id" in cols:
+        id_col = "prescription_id"
+    elif "id" in cols:
+        id_col = "id"
+    else:
+        raise RuntimeError("No prescription identifier column found.")
+
+    date_col = None
+    for candidate in ("prescribed_date", "created_at", "prescription_date"):
+        if candidate in cols:
+            date_col = candidate
+            break
+    if not date_col:
+        raise RuntimeError("No prescription date column found.")
+
+    customer_name_expr = "COALESCE(p.customer_name, '')" if "customer_name" in cols else "''"
+    medicines_expr = "COALESCE(p.medicines_text, '')" if "medicines_text" in cols else "''"
+    status_expr = "COALESCE(p.status, 'N/A')" if "status" in cols else "'N/A'"
+    notes_expr = "COALESCE(p.notes, '')" if "notes" in cols else "''"
+    ai_validation_expr = "COALESCE(p.ai_validation, 'Not validated')" if "ai_validation" in cols else "'Not validated'"
+
+    customer_cols = _table_columns(conn, "customers")
+    customer_pk = "customer_id" if "customer_id" in customer_cols else ("id" if "id" in customer_cols else None)
+    if customer_pk and "customer_id" in cols and "phone" in customer_cols:
+        phone_expr = (
+            f"(SELECT c.phone FROM customers c "
+            f"WHERE CAST(c.{customer_pk} AS TEXT) = CAST(p.customer_id AS TEXT) LIMIT 1)"
+        )
+    else:
+        phone_expr = "'N/A'"
+
+    doctor_cols = _table_columns(conn, "doctors")
+    doctor_lookup_expr = None
+    if "doctor_id" in cols and "id" in doctor_cols and "name" in doctor_cols:
+        doctor_lookup_expr = (
+            "(SELECT d.name FROM doctors d "
+            "WHERE CAST(d.id AS TEXT) = CAST(p.doctor_id AS TEXT) LIMIT 1)"
+        )
+
+    if "doctor_name" in cols and doctor_lookup_expr:
+        doctor_name_expr = f"COALESCE(p.doctor_name, {doctor_lookup_expr}, 'N/A')"
+    elif "doctor_name" in cols:
+        doctor_name_expr = "COALESCE(p.doctor_name, 'N/A')"
+    elif doctor_lookup_expr:
+        doctor_name_expr = f"COALESCE({doctor_lookup_expr}, 'N/A')"
+    else:
+        doctor_name_expr = "'N/A'"
+
+    return {
+        "id_col": id_col,
+        "date_col": date_col,
+        "customer_name_expr": customer_name_expr,
+        "doctor_name_expr": doctor_name_expr,
+        "medicines_expr": medicines_expr,
+        "status_expr": status_expr,
+        "notes_expr": notes_expr,
+        "ai_validation_expr": ai_validation_expr,
+        "phone_expr": phone_expr,
+    }
+
+
 def fmt_table(rows, max_rows: int = 50) -> str:
     """Format a list of dicts as a readable markdown table string."""
     if not rows:
@@ -581,40 +663,48 @@ def search_prescriptions(query: str, limit: int = 20) -> str:
         limit: Maximum results (default 20)
     """
     with get_db() as conn:
+        schema = _resolve_prescription_schema(conn)
         cur = conn.execute(
-            """
-            SELECT p.id, c.name AS patient,
-                   p.created_at, p.status,
-                   p.medicines_text
+            f"""
+            SELECT CAST(p.{schema['id_col']} AS TEXT) AS prescription_id,
+                   {schema['customer_name_expr']} AS patient,
+                   p.{schema['date_col']} AS prescribed_date,
+                   {schema['status_expr']} AS status,
+                   {schema['medicines_expr']} AS medicines_text
             FROM prescriptions p
-            LEFT JOIN customers c ON p.customer_id = c.customer_id
-            WHERE c.name LIKE ? OR p.medicines_text LIKE ?
-            ORDER BY p.created_at DESC
+            WHERE {schema['customer_name_expr']} LIKE ?
+               OR {schema['doctor_name_expr']} LIKE ?
+               OR {schema['medicines_expr']} LIKE ?
+            ORDER BY p.{schema['date_col']} DESC, p.{schema['id_col']} DESC
             LIMIT ?
             """,
-            (f"%{query}%", f"%{query}%", limit),
+            (f"%{query}%", f"%{query}%", f"%{query}%", limit),
         )
         return fmt_table(rows_to_dicts(cur.fetchall()))
 
 
 @mcp.tool()
-def get_prescription_details(prescription_id: int) -> str:
+def get_prescription_details(prescription_id: str) -> str:
     """Get full details of a specific prescription.
 
     Args:
-        prescription_id: Prescription ID to look up
+        prescription_id: Prescription ID to look up (supports numeric or text IDs)
     """
     with get_db() as conn:
+        schema = _resolve_prescription_schema(conn)
         row = conn.execute(
-            """
-            SELECT p.id, c.name AS patient, c.phone,
-                   d.name AS doctor, p.created_at,
-                   p.status, p.medicines_text,
-                   p.ai_validation
+            f"""
+            SELECT CAST(p.{schema['id_col']} AS TEXT) AS prescription_id,
+                   {schema['customer_name_expr']} AS patient,
+                   {schema['phone_expr']} AS phone,
+                   {schema['doctor_name_expr']} AS doctor,
+                   p.{schema['date_col']} AS prescribed_date,
+                   {schema['status_expr']} AS status,
+                   {schema['medicines_expr']} AS medicines_text,
+                   {schema['ai_validation_expr']} AS ai_validation,
+                   {schema['notes_expr']} AS notes
             FROM prescriptions p
-            LEFT JOIN customers c ON p.customer_id = c.customer_id
-            LEFT JOIN doctors d ON p.doctor_id = d.id
-            WHERE p.id = ?
+            WHERE CAST(p.{schema['id_col']} AS TEXT) = CAST(? AS TEXT)
             """,
             (prescription_id,),
         ).fetchone()
@@ -622,13 +712,14 @@ def get_prescription_details(prescription_id: int) -> str:
             return f"Prescription #{prescription_id} not found."
         d = dict(row)
         return (
-            f"## Prescription #{d['id']}\n\n"
+            f"## Prescription #{d['prescription_id']}\n\n"
             f"- **Patient**: {d.get('patient', 'N/A')} ({d.get('phone', 'N/A')})\n"
             f"- **Doctor**: {d.get('doctor', 'N/A')}\n"
-            f"- **Date**: {d.get('created_at', 'N/A')}\n"
+            f"- **Date**: {d.get('prescribed_date', 'N/A')}\n"
             f"- **Status**: {d.get('status', 'N/A')}\n\n"
             f"### Medicines\n{d.get('medicines_text', 'None')}\n\n"
-            f"### AI Validation\n{d.get('ai_validation', 'Not validated')}"
+            f"### AI Validation\n{d.get('ai_validation', 'Not validated')}\n\n"
+            f"### Notes\n{d.get('notes', 'None')}"
         )
 
 

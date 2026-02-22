@@ -24,6 +24,8 @@ public class SidebarManager {
                     addButton(container, "👤 Users", "users-view", switcher);
                     addButton(container, "📦 Inventory", "inventory-view", switcher);
                     addButton(container, "📈 Reports", "reports-view", switcher);
+                    addButton(container, "💳 Billing", "billing-view", switcher);
+                    addButton(container, "👥 Customers", "customers-view", switcher);
                     addButton(container, "⚙ Settings", "settings-view", switcher);
                     break;
                 case MANAGER:

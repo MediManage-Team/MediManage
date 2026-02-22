@@ -5,6 +5,7 @@ import org.example.MediManage.config.DatabaseConfig;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -21,9 +22,11 @@ public class DatabaseUtil {
 
     public static void initDB() throws SQLException {
         try (Connection conn = getConnection()) {
-            // Enable foreign keys for SQLite
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute("PRAGMA foreign_keys = ON;");
+            if (DatabaseConfig.isSqlite(conn)) {
+                // Ensure SQLite FK checks are on for each new connection.
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("PRAGMA foreign_keys = ON;");
+                }
             }
 
             System.out.println("✅ Connected to Database successfully");
@@ -33,12 +36,26 @@ public class DatabaseUtil {
         }
     }
 
+    public static void initDB(DatabaseConfig.ConnectionSettings settings) throws SQLException {
+        try (Connection conn = DatabaseConfig.getConnection(settings)) {
+            if (DatabaseConfig.isSqlite(conn)) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("PRAGMA foreign_keys = ON;");
+                }
+            }
+
+            System.out.println("✅ Connected to Database successfully");
+            runSchema(conn);
+        }
+    }
+
     private static void runSchema(Connection conn) throws SQLException {
         System.out.println("⚙️ Initializing Database Schema...");
+        String schemaResource = resolveSchemaResource(conn);
 
-        try (InputStream is = DatabaseUtil.class.getResourceAsStream("/db/schema.sql")) {
+        try (InputStream is = DatabaseUtil.class.getResourceAsStream(schemaResource)) {
             if (is == null) {
-                System.err.println("❌ Critical: /db/schema.sql not found!");
+                System.err.println("❌ Critical: " + schemaResource + " not found!");
                 return;
             }
             // Use Scanner to read the file and split by semicolon
@@ -72,6 +89,10 @@ public class DatabaseUtil {
         System.out.println("✅ Schema initialized successfully.");
     }
 
+    private static String resolveSchemaResource(Connection conn) throws SQLException {
+        return DatabaseConfig.isPostgreSql(conn) ? "/db/schema_postgresql.sql" : "/db/schema.sql";
+    }
+
     private static boolean shouldSkipAlterAddColumn(Connection conn, String sql) throws SQLException {
         String normalized = stripLeadingSqlComments(sql).trim();
         Matcher matcher = ALTER_ADD_COLUMN_PATTERN.matcher(normalized);
@@ -93,11 +114,18 @@ public class DatabaseUtil {
     }
 
     private static boolean columnExists(Connection conn, String tableName, String columnName) throws SQLException {
-        String pragma = "PRAGMA table_info(" + quoteIdentifier(tableName) + ")";
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(pragma)) {
+        DatabaseMetaData metaData = conn.getMetaData();
+        try (ResultSet rs = metaData.getColumns(conn.getCatalog(), null, tableName, null)) {
             while (rs.next()) {
-                String existing = rs.getString("name");
+                String existing = rs.getString("COLUMN_NAME");
+                if (columnName.equalsIgnoreCase(existing)) {
+                    return true;
+                }
+            }
+        }
+        try (ResultSet rs = metaData.getColumns(conn.getCatalog(), "public", tableName, null)) {
+            while (rs.next()) {
+                String existing = rs.getString("COLUMN_NAME");
                 if (columnName.equalsIgnoreCase(existing)) {
                     return true;
                 }
@@ -134,9 +162,5 @@ public class DatabaseUtil {
             }
         }
         return value;
-    }
-
-    private static String quoteIdentifier(String identifier) {
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 }

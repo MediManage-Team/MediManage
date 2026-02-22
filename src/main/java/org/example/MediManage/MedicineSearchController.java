@@ -11,11 +11,11 @@ import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.model.Medicine;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 
 public class MedicineSearchController {
+    private static final long UNKNOWN_EXPIRY_DAYS = Long.MAX_VALUE;
 
     @FXML
     private TextField txtSearch;
@@ -32,7 +32,7 @@ public class MedicineSearchController {
     @FXML
     private TableColumn<Medicine, Integer> colStock;
     @FXML
-    private TableColumn<Medicine, String> colLocation; // Placeholder if not in DB
+    private TableColumn<Medicine, String> colLocation;
 
     // Details Panel
     @FXML
@@ -40,9 +40,9 @@ public class MedicineSearchController {
     @FXML
     private Label lblDetailCompany;
     @FXML
-    private Label lblDetailGeneric; // Placeholder
+    private Label lblDetailGeneric;
     @FXML
-    private Label lblDetailSideEffects; // Placeholder
+    private Label lblDetailSideEffects;
     @FXML
     private VBox detailsPanel;
 
@@ -61,8 +61,13 @@ public class MedicineSearchController {
         colCompany.setCellValueFactory(data -> data.getValue().companyProperty());
         colExpiry.setCellValueFactory(data -> data.getValue().expiryProperty());
         colStock.setCellValueFactory(data -> data.getValue().stockProperty().asObject());
-        // colLocation is placeholder, let's just show empty or "A-1" default
-        colLocation.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty("Shelf A"));
+        colLocation.setCellValueFactory(data -> {
+            String generic = data.getValue().getGenericName();
+            if (generic == null || generic.isBlank()) {
+                generic = "-";
+            }
+            return new javafx.beans.property.SimpleStringProperty(generic);
+        });
 
         // Row Highlighting for Expiry
         searchTable.setRowFactory(tv -> new TableRow<Medicine>() {
@@ -105,13 +110,13 @@ public class MedicineSearchController {
 
     private long getDaysToExpiry(String expiryStr) {
         if (expiryStr == null || expiryStr.isEmpty())
-            return 999;
+            return UNKNOWN_EXPIRY_DAYS;
         try {
             // Try standard ISO first
             LocalDate expiry = LocalDate.parse(expiryStr);
             return ChronoUnit.DAYS.between(LocalDate.now(), expiry);
         } catch (DateTimeParseException e) {
-            return 999; // Fallback
+            return UNKNOWN_EXPIRY_DAYS;
         }
     }
 
@@ -144,9 +149,32 @@ public class MedicineSearchController {
         lblDetailCompany.setText(med.getCompany());
 
         long days = getDaysToExpiry(med.getExpiry());
-        String status = days < 0 ? "EXPIRED" : (days < 30 ? "Expiring Soon" : "Valid");
+        String status = days == UNKNOWN_EXPIRY_DAYS ? "Expiry Not Available"
+                : (days < 0 ? "EXPIRED" : (days < 30 ? "Expiring Soon" : "Valid"));
 
-        lblDetailGeneric.setText("Generic: Paracetamol (Example)"); // Placeholder
-        lblDetailSideEffects.setText("Status: " + status + "\nDays to Expiry: " + days);
+        String genericName = med.getGenericName();
+        if (genericName == null || genericName.isBlank()) {
+            genericName = "N/A";
+        }
+        lblDetailGeneric.setText("Generic: " + genericName);
+
+        String expiryText = med.getExpiry();
+        if (expiryText == null || expiryText.isBlank()) {
+            expiryText = "N/A";
+        }
+        String daysText;
+        if (days == UNKNOWN_EXPIRY_DAYS) {
+            daysText = "N/A";
+        } else if (days >= 0) {
+            daysText = days + " day(s) left";
+        } else {
+            daysText = Math.abs(days) + " day(s) overdue";
+        }
+
+        lblDetailSideEffects.setText(
+                "Status: " + status
+                        + "\nStock: " + med.getStock() + " unit(s)"
+                        + "\nPrice: ₹" + String.format("%.2f", med.getPrice())
+                        + "\nExpiry: " + expiryText + " (" + daysText + ")");
     }
 }

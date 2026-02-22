@@ -6,10 +6,13 @@ import org.example.MediManage.model.UserRole;
 import org.example.MediManage.util.UserSession;
 
 import java.sql.*;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MedicineDAO {
+    private static final int DEFAULT_PAGE_SIZE = 50;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private void checkManagerPermission() {
         if (!UserSession.getInstance().isLoggedIn() ||
@@ -24,7 +27,8 @@ public class MedicineDAO {
         String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
-                "WHERE m.active = 1";
+                "WHERE m.active = 1 " +
+                "ORDER BY m.name ASC";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement();
@@ -44,6 +48,58 @@ public class MedicineDAO {
             e.printStackTrace();
         }
         return list;
+    }
+
+    /**
+     * Paginated active medicines list.
+     */
+    public List<Medicine> getMedicinesPage(int offset, int limit) {
+        List<Medicine> list = new ArrayList<>();
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = normalizeLimit(limit);
+
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 " +
+                "ORDER BY m.name ASC LIMIT ? OFFSET ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, safeLimit);
+            pstmt.setInt(2, safeOffset);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Medicine(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getString("expiry_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public int countActiveMedicines() {
+        String sql = "SELECT COUNT(*) FROM medicines WHERE active = 1";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql);
+                ResultSet rs = pstmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 
     public void addMedicine(String name, String genericName, String company, String expiry, double price,
@@ -200,6 +256,13 @@ public class MedicineDAO {
      */
     public List<Medicine> searchMedicines(String keyword, int offset, int limit) {
         List<Medicine> list = new ArrayList<>();
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = normalizeLimit(limit);
+        String safeKeyword = keyword == null ? "" : keyword.trim();
+        if (safeKeyword.isEmpty()) {
+            return getMedicinesPage(safeOffset, safeLimit);
+        }
+
         String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
@@ -209,12 +272,12 @@ public class MedicineDAO {
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            String searchPattern = "%" + keyword + "%";
+            String searchPattern = "%" + safeKeyword + "%";
             pstmt.setString(1, searchPattern);
             pstmt.setString(2, searchPattern);
             pstmt.setString(3, searchPattern);
-            pstmt.setInt(4, limit);
-            pstmt.setInt(5, offset);
+            pstmt.setInt(4, safeLimit);
+            pstmt.setInt(5, safeOffset);
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -238,13 +301,18 @@ public class MedicineDAO {
      * Count total active medicines matching a keyword.
      */
     public int countMedicines(String keyword) {
+        String safeKeyword = keyword == null ? "" : keyword.trim();
+        if (safeKeyword.isEmpty()) {
+            return countActiveMedicines();
+        }
+
         String sql = "SELECT COUNT(*) FROM medicines m " +
                 "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?)";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            String searchPattern = "%" + keyword + "%";
+            String searchPattern = "%" + safeKeyword + "%";
             pstmt.setString(1, searchPattern);
             pstmt.setString(2, searchPattern);
             pstmt.setString(3, searchPattern);
@@ -262,18 +330,21 @@ public class MedicineDAO {
 
     public List<Medicine> getExpiringMedicines(int days) {
         List<Medicine> list = new ArrayList<>();
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate = startDate.plusDays(days);
         String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
                 "WHERE m.active = 1 " +
-                "AND m.expiry_date <= date('now', '+' || ? || ' days') " +
-                "AND m.expiry_date >= date('now') " +
+                "AND m.expiry_date >= ? " +
+                "AND m.expiry_date <= ? " +
                 "ORDER BY m.expiry_date ASC";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setInt(1, days);
+            pstmt.setString(1, startDate.toString());
+            pstmt.setString(2, endDate.toString());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -291,5 +362,12 @@ public class MedicineDAO {
             e.printStackTrace();
         }
         return list;
+    }
+
+    private int normalizeLimit(int limit) {
+        if (limit <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(limit, MAX_PAGE_SIZE);
     }
 }

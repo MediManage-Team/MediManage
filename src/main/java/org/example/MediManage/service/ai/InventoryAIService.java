@@ -28,8 +28,7 @@ public class InventoryAIService {
      * 2. Search DB for that generic.
      */
     public CompletableFuture<String> findSubstitutes(String brandName) {
-        String prompt = "What is the generic composition of the medicine '" + brandName + "'? " +
-                "Provide ONLY the generic name(s) in a comma-separated list. Do not accept any other text.";
+        String prompt = AIPromptCatalog.genericCompositionPrompt(brandName);
 
         // Use AI to get generic name
         return aiOrchestrator.processQuery(prompt, true, false) // Precision required for drug info
@@ -87,10 +86,7 @@ public class InventoryAIService {
         sales.entrySet().stream().limit(50).forEach(entry -> context.append("- ").append(entry.getKey())
                 .append(": ").append(entry.getValue()).append(" units\n"));
 
-        String prompt = "Analyze the sales trends. " +
-                "1. Identify top-selling and slow-moving items.\n" +
-                "2. Suggest seasonal stock adjustments.\n" +
-                "3. Generate a 'To-Buy List' for the distributor with recommended quantities.";
+        String prompt = AIPromptCatalog.inventoryTrendAnalysisPrompt();
 
         // Explicit: Local AI with RAG context (falls back to Cloud if local
         // unavailable)
@@ -118,10 +114,7 @@ public class InventoryAIService {
                 .append(" | Stock: ").append(m.getStock())
                 .append(" | Price: ₹").append(m.getPrice()).append("\n"));
 
-        String prompt = "For these expiring medicines:\n" +
-                "1. Suggest discount strategies to clear stock before expiry.\n" +
-                "2. Provide chemical-specific disposal instructions for safety.\n" +
-                "3. Flag any controlled or hazardous substances requiring special handling.";
+        String prompt = AIPromptCatalog.expiryStrategyPrompt();
 
         // Combined: Local analyzes stock data → Cloud adds medical disposal precision
         return aiOrchestrator.combinedQuery(prompt, context.toString());

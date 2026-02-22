@@ -16,10 +16,35 @@ import java.net.http.HttpResponse;
 import java.util.prefs.Preferences;
 import org.json.JSONObject;
 
+import org.example.MediManage.config.DatabaseConfig;
+import org.example.MediManage.security.CloudApiKeyStore;
+import org.example.MediManage.security.LocalAdminTokenManager;
+import org.example.MediManage.service.DatabaseMigrationService;
 import org.example.MediManage.service.ai.CloudAIService;
 import org.example.MediManage.service.ai.AIServiceProvider;
+import org.example.MediManage.util.AppExecutors;
 
 public class SettingsController {
+    private static final String DB_BACKEND_SQLITE = "SQLite (Default)";
+    private static final String DB_BACKEND_POSTGRES = "PostgreSQL";
+
+    // --- Database ---
+    @FXML
+    private ComboBox<String> dbBackendCombo;
+    @FXML
+    private TextField sqlitePathField;
+    @FXML
+    private javafx.scene.layout.VBox postgresConfigBox;
+    @FXML
+    private TextField postgresHostField;
+    @FXML
+    private TextField postgresPortField;
+    @FXML
+    private TextField postgresDatabaseField;
+    @FXML
+    private TextField postgresUserField;
+    @FXML
+    private PasswordField postgresPasswordField;
 
     // --- Local AI ---
     @FXML
@@ -54,10 +79,14 @@ public class SettingsController {
 
     private Preferences prefs;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final DatabaseMigrationService migrationService = new DatabaseMigrationService();
 
     @FXML
     public void initialize() {
         prefs = Preferences.userNodeForPackage(SettingsController.class);
+
+        // --- Database ---
+        setupDatabaseSettings();
 
         // --- Local AI ---
         modelPathField.setText(prefs.get("local_model_path", ""));
@@ -86,15 +115,197 @@ public class SettingsController {
         });
 
         // API Keys
-        geminiKeyField.setText(prefs.get("cloud_api_key", ""));
-        groqKeyField.setText(prefs.get("groq_api_key", ""));
-        openrouterKeyField.setText(prefs.get("openrouter_api_key", ""));
-        openaiKeyField.setText(prefs.get("openai_api_key", ""));
-        claudeKeyField.setText(prefs.get("claude_api_key", ""));
+        geminiKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.GEMINI));
+        groqKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.GROQ));
+        openrouterKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.OPENROUTER));
+        openaiKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.OPENAI));
+        claudeKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.CLAUDE));
 
         // Environment list
         setupLogStreaming();
         loadEnvironmentList();
+    }
+
+    private void setupDatabaseSettings() {
+        if (dbBackendCombo == null) {
+            return;
+        }
+
+        dbBackendCombo.getItems().setAll(DB_BACKEND_SQLITE, DB_BACKEND_POSTGRES);
+        DatabaseConfig.ConnectionSettings current = DatabaseConfig.getCurrentSettings();
+        dbBackendCombo.setValue(current.backend() == DatabaseConfig.Backend.POSTGRESQL
+                ? DB_BACKEND_POSTGRES
+                : DB_BACKEND_SQLITE);
+
+        if (sqlitePathField != null) {
+            String sqlitePath = current.sqlitePath();
+            if (sqlitePath == null || sqlitePath.isBlank()) {
+                sqlitePath = new java.io.File(System.getProperty("user.dir"), "medimanage.db").getAbsolutePath();
+            }
+            sqlitePathField.setText(sqlitePath);
+        }
+        if (postgresHostField != null) {
+            postgresHostField.setText(current.postgresHost());
+        }
+        if (postgresPortField != null) {
+            postgresPortField.setText(String.valueOf(current.postgresPort()));
+        }
+        if (postgresDatabaseField != null) {
+            postgresDatabaseField.setText(current.postgresDatabase());
+        }
+        if (postgresUserField != null) {
+            postgresUserField.setText(current.postgresUser());
+        }
+        if (postgresPasswordField != null) {
+            postgresPasswordField.setText(current.postgresPassword());
+        }
+
+        dbBackendCombo.setOnAction(event -> updateDatabaseFieldVisibility());
+        updateDatabaseFieldVisibility();
+    }
+
+    private void updateDatabaseFieldVisibility() {
+        if (postgresConfigBox == null) {
+            return;
+        }
+        boolean postgresSelected = DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue());
+        postgresConfigBox.setManaged(postgresSelected);
+        postgresConfigBox.setVisible(postgresSelected);
+    }
+
+    @FXML
+    private void handleTestDatabaseConnection() {
+        try {
+            DatabaseConfig.ConnectionSettings dbSettings = buildDatabaseSettingsFromForm();
+            DatabaseConfig.testConnection(dbSettings);
+            showAlert(Alert.AlertType.INFORMATION, "Database Test Successful",
+                    "Connection established using " + dbSettings.backend().name() + ".");
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Database Test Failed",
+                    "Could not connect with current settings:\n" + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleMigrateSqliteToPostgres() {
+        try {
+            if (!DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue())) {
+                showAlert(Alert.AlertType.WARNING, "Migration Not Available",
+                        "Select PostgreSQL as the target backend before starting migration.");
+                return;
+            }
+
+            DatabaseConfig.ConnectionSettings postgresSettings = buildDatabaseSettingsFromForm();
+            DatabaseConfig.ConnectionSettings sqliteSettings = buildSqliteSourceSettings();
+
+            DatabaseConfig.testConnection(sqliteSettings);
+            DatabaseConfig.testConnection(postgresSettings);
+
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Confirm Migration");
+            confirm.setHeaderText("Migrate SQLite data to PostgreSQL?");
+            confirm.setContentText("This will replace all existing PostgreSQL table data with SQLite data.\n"
+                    + "A SQLite backup file will be created before migration.");
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == javafx.scene.control.ButtonType.YES || response == javafx.scene.control.ButtonType.OK) {
+                    runMigrationAsync(sqliteSettings, postgresSettings);
+                }
+            });
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Migration Setup Error", e.getMessage());
+        }
+    }
+
+    private void runMigrationAsync(
+            DatabaseConfig.ConnectionSettings sqliteSettings,
+            DatabaseConfig.ConnectionSettings postgresSettings) {
+        AppExecutors.runBackground(() -> {
+            try {
+                DatabaseMigrationService.MigrationResult result = migrationService
+                        .migrateSqliteToPostgres(sqliteSettings, postgresSettings);
+                javafx.application.Platform.runLater(() -> {
+                    StringBuilder summary = new StringBuilder();
+                    summary.append("SQLite backup: ").append(result.backupPath()).append("\n\n");
+                    summary.append("Rows migrated:\n");
+                    result.migratedRowsByTable().forEach((table, rows) -> summary
+                            .append(" - ").append(table).append(": ").append(rows).append('\n'));
+                    summary.append("\nMigration complete. Click Save Settings to persist PostgreSQL as active backend.");
+                    showAlert(Alert.AlertType.INFORMATION, "Migration Successful", summary.toString());
+                });
+            } catch (Exception migrationError) {
+                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Migration Failed",
+                        migrationError.getMessage()));
+            }
+        });
+    }
+
+    private DatabaseConfig.ConnectionSettings buildDatabaseSettingsFromForm() {
+        DatabaseConfig.Backend backend = DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue())
+                ? DatabaseConfig.Backend.POSTGRESQL
+                : DatabaseConfig.Backend.SQLITE;
+
+        String sqlitePath = sqlitePathField == null ? "" : sqlitePathField.getText().trim();
+        String pgHost = postgresHostField == null ? "" : postgresHostField.getText().trim();
+        String pgPortRaw = postgresPortField == null ? "" : postgresPortField.getText().trim();
+        String pgDatabase = postgresDatabaseField == null ? "" : postgresDatabaseField.getText().trim();
+        String pgUser = postgresUserField == null ? "" : postgresUserField.getText().trim();
+        String pgPassword = postgresPasswordField == null ? "" : postgresPasswordField.getText();
+
+        int pgPort = 5432;
+        if (!pgPortRaw.isBlank()) {
+            try {
+                pgPort = Integer.parseInt(pgPortRaw);
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException("PostgreSQL port must be a valid number.");
+            }
+        }
+        if (pgPort <= 0 || pgPort > 65535) {
+            throw new IllegalArgumentException("PostgreSQL port must be between 1 and 65535.");
+        }
+
+        return new DatabaseConfig.ConnectionSettings(
+                backend,
+                sqlitePath,
+                pgHost,
+                pgPort,
+                pgDatabase,
+                pgUser,
+                pgPassword);
+    }
+
+    private DatabaseConfig.ConnectionSettings buildSqliteSourceSettings() {
+        String sqlitePath = sqlitePathField == null ? "" : sqlitePathField.getText().trim();
+        return new DatabaseConfig.ConnectionSettings(
+                DatabaseConfig.Backend.SQLITE,
+                sqlitePath,
+                "",
+                5432,
+                "",
+                "",
+                "");
+    }
+
+    private void saveDatabaseSettings(DatabaseConfig.ConnectionSettings settings) {
+        prefs.put(DatabaseConfig.PREF_DB_BACKEND, settings.backend().name().toLowerCase());
+        prefs.put(DatabaseConfig.PREF_DB_PATH, settings.sqlitePath() == null ? "" : settings.sqlitePath());
+        prefs.put(DatabaseConfig.PREF_PG_HOST, settings.postgresHost() == null ? "" : settings.postgresHost());
+        prefs.put(DatabaseConfig.PREF_PG_PORT, String.valueOf(settings.postgresPort()));
+        prefs.put(DatabaseConfig.PREF_PG_DATABASE,
+                settings.postgresDatabase() == null ? "" : settings.postgresDatabase());
+        prefs.put(DatabaseConfig.PREF_PG_USER, settings.postgresUser() == null ? "" : settings.postgresUser());
+        prefs.put(DatabaseConfig.PREF_PG_PASSWORD, settings.postgresPassword() == null ? "" : settings.postgresPassword());
+
+        System.setProperty(DatabaseConfig.DB_BACKEND_PROPERTY, settings.backend().name().toLowerCase());
+        System.setProperty(DatabaseConfig.DB_PATH_PROPERTY, settings.sqlitePath() == null ? "" : settings.sqlitePath());
+        System.setProperty(DatabaseConfig.DB_PG_HOST_PROPERTY,
+                settings.postgresHost() == null ? "" : settings.postgresHost());
+        System.setProperty(DatabaseConfig.DB_PG_PORT_PROPERTY, String.valueOf(settings.postgresPort()));
+        System.setProperty(DatabaseConfig.DB_PG_DATABASE_PROPERTY,
+                settings.postgresDatabase() == null ? "" : settings.postgresDatabase());
+        System.setProperty(DatabaseConfig.DB_PG_USER_PROPERTY,
+                settings.postgresUser() == null ? "" : settings.postgresUser());
+        System.setProperty(DatabaseConfig.DB_PG_PASSWORD_PROPERTY,
+                settings.postgresPassword() == null ? "" : settings.postgresPassword());
     }
 
     private void populateModels(String providerName) {
@@ -227,7 +438,7 @@ public class SettingsController {
             popup.appendLog("");
         }
 
-        new Thread(() -> {
+        AppExecutors.runBackground(() -> {
             try {
                 envManager.setLogCallback(msg -> {
                     if (popup != null && !popup.isClosed()) {
@@ -262,7 +473,7 @@ public class SettingsController {
                 javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Error",
                         "Failed to install environment: " + e.getMessage()));
             }
-        }).start();
+        });
     }
 
     private void handleDeleteEnv(String envName) {
@@ -355,6 +566,18 @@ public class SettingsController {
 
     @FXML
     private void handleSaveSettings() {
+        DatabaseConfig.ConnectionSettings dbSettings;
+        try {
+            dbSettings = buildDatabaseSettingsFromForm();
+            DatabaseConfig.testConnection(dbSettings);
+            saveDatabaseSettings(dbSettings);
+            DatabaseUtil.initDB();
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Database Settings Error",
+                    "Could not save database settings:\n" + e.getMessage());
+            return;
+        }
+
         // Local AI
         prefs.put("local_model_path", modelPathField.getText());
         prefs.put("ai_hardware", hardwareCombo.getValue());
@@ -367,12 +590,12 @@ public class SettingsController {
         if (modelId != null)
             prefs.put("cloud_model", modelId);
 
-        // Cloud AI — API Keys
-        prefs.put("cloud_api_key", geminiKeyField.getText());
-        prefs.put("groq_api_key", groqKeyField.getText());
-        prefs.put("openrouter_api_key", openrouterKeyField.getText());
-        prefs.put("openai_api_key", openaiKeyField.getText());
-        prefs.put("claude_api_key", claudeKeyField.getText());
+        // Cloud AI — API Keys (secure store)
+        CloudApiKeyStore.put(CloudAIService.Provider.GEMINI, geminiKeyField.getText());
+        CloudApiKeyStore.put(CloudAIService.Provider.GROQ, groqKeyField.getText());
+        CloudApiKeyStore.put(CloudAIService.Provider.OPENROUTER, openrouterKeyField.getText());
+        CloudApiKeyStore.put(CloudAIService.Provider.OPENAI, openaiKeyField.getText());
+        CloudApiKeyStore.put(CloudAIService.Provider.CLAUDE, claudeKeyField.getText());
 
         // Update the live CloudAIService via AIServiceProvider
         try {
@@ -400,7 +623,9 @@ public class SettingsController {
         }
 
         showAlert(Alert.AlertType.INFORMATION, "Settings Saved",
-                "AI Configuration saved.\nCloud AI: " + provider + " / " + (modelId != null ? modelId : "default"));
+                "Configuration saved.\nDatabase: " + dbSettings.backend().name()
+                        + "\nCloud AI: " + provider + " / " + (modelId != null ? modelId : "default")
+                        + "\nIf database backend changed, restart the app to reconnect cleanly.");
 
         // Trigger local model reload if path set
         triggerModelReload();
@@ -469,11 +694,12 @@ public class SettingsController {
             json.put("model_path", modelPath);
             json.put("hardware_config", config);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create("http://127.0.0.1:5000/load_model"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
 
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
@@ -501,7 +727,7 @@ public class SettingsController {
      * Waits for the new server to become healthy, then triggers model load.
      */
     private void scheduleModelReload() {
-        new Thread(() -> {
+        AppExecutors.runBackground(() -> {
             try {
                 // Wait for the new server to start up
                 for (int i = 0; i < 15; i++) {
@@ -523,8 +749,9 @@ public class SettingsController {
                 }
                 System.err.println("⚠️ Timeout waiting for AI Engine — model not auto-loaded.");
             } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
             }
-        }, "model-reload-scheduler").start();
+        });
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

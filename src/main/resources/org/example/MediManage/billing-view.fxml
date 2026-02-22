@@ -35,7 +35,7 @@
         <VBox spacing="16" styleClass="billing-controls">
             <!-- Customer Section -->
             <VBox spacing="5" styleClass="billing-section">
-                <Label text="Customer Details" style="-fx-font-weight: bold;"/>
+                <Label text="Customer Details" styleClass="label-strong"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <TextField fx:id="txtSearchCustomer" promptText="Phone / Name" HBox.hgrow="ALWAYS"/>
                     <Button text="🔍" onAction="#handleCustomerSearch"/>
@@ -43,7 +43,7 @@
                 </HBox>
                 <GridPane hgap="10" vgap="5">
                     <Label text="Name:" GridPane.columnIndex="0" GridPane.rowIndex="0" styleClass="text-muted"/>
-                    <Label fx:id="lblCustomerName" text="Walk-in Customer" GridPane.columnIndex="1" GridPane.rowIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblCustomerName" text="Walk-in Customer" GridPane.columnIndex="1" GridPane.rowIndex="0" styleClass="customer-name-muted"/>
 
                     <Label text="Phone:" GridPane.columnIndex="0" GridPane.rowIndex="1" styleClass="text-muted"/>
                     <Label fx:id="lblCustomerPhone" text="-" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
@@ -52,7 +52,7 @@
 
             <!-- Item Entry Section -->
             <VBox spacing="10" styleClass="billing-section" VBox.vgrow="ALWAYS">
-                <Label text="Add Item" style="-fx-font-weight: bold;"/>
+                <Label text="Add Item" styleClass="label-strong"/>
 
                 <VBox spacing="2">
                     <Label text="Search Medicine"/>
@@ -80,16 +80,16 @@
 
             <!-- Patient Care Assistant (Cloud AI) -->
             <TitledPane text="🤖 Patient Care Assistant (AI)" expanded="false" animated="true">
-                <VBox spacing="10" style="-fx-padding: 10;">
+                <VBox spacing="10" styleClass="content-pad-10">
                     <ScrollPane fitToWidth="true" prefHeight="350" VBox.vgrow="ALWAYS">
-                        <VBox fx:id="careProtocolContainer" spacing="8" style="-fx-padding: 10;"/>
+                        <VBox fx:id="careProtocolContainer" spacing="8" styleClass="content-pad-10"/>
                     </ScrollPane>
                     <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="38" styleClass="button-purple"/>
                 </VBox>
             </TitledPane>
 
             <!-- Checkout Button -->
-            <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success" style="-fx-font-size: 18px;"/>
+            <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success button-xl"/>
         </VBox>
     </items>
 </SplitPane>

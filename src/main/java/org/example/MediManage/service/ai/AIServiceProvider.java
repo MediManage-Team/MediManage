@@ -1,5 +1,7 @@
 package org.example.MediManage.service.ai;
 
+import org.example.MediManage.security.CloudApiKeyStore;
+
 /**
  * Singleton service provider for all AI services.
  * Prevents duplicate instantiation of LocalAIService, CloudAIService, and
@@ -25,10 +27,8 @@ public class AIServiceProvider {
         // Single LocalAIService — no auto-load (server may not be ready yet)
         this.localService = new LocalAIService(false);
 
-        // Single CloudAIService — loads API key from prefs
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                .userNodeForPackage(org.example.MediManage.SettingsController.class);
-        String apiKey = prefs.get("cloud_api_key", "");
+        // Single CloudAIService — loads API keys from secure storage
+        String apiKey = CloudApiKeyStore.get(CloudAIService.Provider.GEMINI);
         this.cloudService = new CloudAIService(apiKey);
 
         // Single AIOrchestrator — reuses the above services
@@ -90,6 +90,6 @@ public class AIServiceProvider {
      * Trigger model reload (e.g. after settings change).
      */
     public void reloadModel() {
-        localService.loadModel();
+        orchestrator.loadLocalModel();
     }
 }

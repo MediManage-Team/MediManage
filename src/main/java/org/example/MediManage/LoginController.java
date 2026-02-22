@@ -12,6 +12,7 @@ import javafx.stage.Stage;
 import org.example.MediManage.dao.UserDAO;
 import org.example.MediManage.model.User;
 import org.example.MediManage.model.UserRole;
+import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.util.UserSession;
 
 import java.util.Objects;
@@ -135,7 +136,7 @@ public class LoginController {
             message.setText("DB Conn Error: " + ex.getMessage());
         });
 
-        new Thread(loginTask).start();
+        AppExecutors.background().execute(loginTask);
     }
 
     private void reenableUI() {

@@ -2,14 +2,18 @@ package org.example.MediManage.dao;
 
 import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.BillItem;
+import org.example.MediManage.model.BillHistoryRecord;
 
 import java.sql.*;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class BillDAO {
+    private static final int DEFAULT_HISTORY_LIMIT = 50;
+    private static final int MAX_HISTORY_LIMIT = 500;
 
     public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
             String paymentMode)
@@ -102,15 +106,20 @@ public class BillDAO {
     }
 
     public double getDailySales() {
-        // SQLite: compare stored local date (string) with calculated local date of now
-        // stored: "2023-10-27 14:00:00" -> date() -> "2023-10-27"
-        // now: date('now', 'localtime') -> "2023-10-27" (if running locally)
-        String sql = "SELECT IFNULL(SUM(total_amount), 0) FROM bills WHERE date(bill_date) = date('now', 'localtime')";
+        LocalDate today = LocalDate.now();
+        String start = today.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String end = today.plusDays(1).atStartOfDay()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String sql = "SELECT COALESCE(SUM(total_amount), 0) FROM bills " +
+                "WHERE bill_date >= ? AND bill_date < ?";
         try (Connection conn = DatabaseUtil.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return rs.getDouble(1);
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, start);
+            stmt.setString(2, end);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getDouble(1);
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -118,26 +127,36 @@ public class BillDAO {
         return 0.0;
     }
 
-    public java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> getBillHistory() {
-        java.util.List<org.example.MediManage.DashboardController.BillHistoryDTO> history = new java.util.ArrayList<>();
+    public List<BillHistoryRecord> getBillHistory() {
+        return getBillHistoryPage(0, DEFAULT_HISTORY_LIMIT);
+    }
+
+    public List<BillHistoryRecord> getBillHistoryPage(int offset, int limit) {
+        List<BillHistoryRecord> history = new ArrayList<>();
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = normalizeHistoryLimit(limit);
         String sql = "SELECT b.bill_id, b.bill_date, b.total_amount, c.name, c.phone, u.username " +
                 "FROM bills b " +
                 "LEFT JOIN customers c ON b.customer_id = c.customer_id " +
                 "LEFT JOIN users u ON b.user_id = u.user_id " +
-                "ORDER BY b.bill_date DESC";
+                "ORDER BY b.bill_date DESC LIMIT ? OFFSET ?";
 
         try (Connection conn = DatabaseUtil.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            while (rs.next()) {
-                history.add(new org.example.MediManage.DashboardController.BillHistoryDTO(
-                        rs.getInt("bill_id"),
-                        rs.getString("bill_date"),
-                        rs.getDouble("total_amount"),
-                        rs.getString("name"),
-                        rs.getString("phone"),
-                        rs.getString("username")));
+            stmt.setInt(1, safeLimit);
+            stmt.setInt(2, safeOffset);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    history.add(new BillHistoryRecord(
+                            rs.getInt("bill_id"),
+                            rs.getString("bill_date"),
+                            rs.getDouble("total_amount"),
+                            rs.getString("name"),
+                            rs.getString("phone"),
+                            rs.getString("username")));
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -145,20 +164,33 @@ public class BillDAO {
         return history;
     }
 
+    public int countBillHistory() {
+        String sql = "SELECT COUNT(*) FROM bills";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
     // New Method for Reports
     public Map<String, Double> getSalesBetweenDates(LocalDate start, LocalDate end) {
         Map<String, Double> sales = new LinkedHashMap<>();
-        // SQLite: group by the date part of the timestamp string
-        // Assuming format yyyy-MM-dd HH:mm:ss, date() extracts yyyy-MM-dd
-        String sql = "SELECT date(bill_date) as day, SUM(total_amount) as total " +
-                "FROM bills WHERE date(bill_date) BETWEEN ? AND ? " +
+        // Filter via indexed bill_date range, then aggregate by day.
+        String sql = "SELECT DATE(bill_date) as day, SUM(total_amount) as total " +
+                "FROM bills WHERE bill_date >= ? AND bill_date < ? " +
                 "GROUP BY day ORDER BY day ASC";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setString(1, start.toString());
-            ps.setString(2, end.toString());
+            ps.setString(1, start + " 00:00:00");
+            ps.setString(2, end.plusDays(1) + " 00:00:00");
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -201,18 +233,18 @@ public class BillDAO {
     public Map<String, Integer> getItemizedSales(LocalDate start, LocalDate end) {
         Map<String, Integer> sales = new LinkedHashMap<>();
         String sql = "SELECT m.name, SUM(bi.quantity) as total_qty " +
-                "FROM bill_items bi " +
-                "JOIN bills b ON bi.bill_id = b.bill_id " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON bi.bill_id = b.bill_id " +
                 "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
-                "WHERE date(b.bill_date) BETWEEN ? AND ? " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ? " +
                 "GROUP BY m.name " +
                 "ORDER BY total_qty DESC";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setString(1, start.toString());
-            ps.setString(2, end.toString());
+            ps.setString(1, start + " 00:00:00");
+            ps.setString(2, end.plusDays(1) + " 00:00:00");
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -278,5 +310,12 @@ public class BillDAO {
             System.err.println("Failed to get payment mode for bill " + billId + ": " + e.getMessage());
         }
         return "CASH";
+    }
+
+    private int normalizeHistoryLimit(int limit) {
+        if (limit <= 0) {
+            return DEFAULT_HISTORY_LIMIT;
+        }
+        return Math.min(limit, MAX_HISTORY_LIMIT);
     }
 }

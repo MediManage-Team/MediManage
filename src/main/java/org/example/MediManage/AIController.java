@@ -11,8 +11,8 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.util.Duration;
 import org.example.MediManage.service.ai.AIOrchestrator;
+import org.example.MediManage.service.ai.AIPromptCatalog;
 import org.example.MediManage.service.ai.AIServiceProvider;
-import org.example.MediManage.service.ai.LocalAIService;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -34,14 +34,12 @@ public class AIController {
     private Label modelStatusLabel;
 
     private final AIOrchestrator aiOrchestrator;
-    private final LocalAIService localService;
     private boolean modelAutoLoadTriggered = false;
     private HBox typingIndicator;
     private Timeline typingAnimation;
 
     public AIController() {
         this.aiOrchestrator = AIServiceProvider.get().getOrchestrator();
-        this.localService = AIServiceProvider.get().getLocalService();
     }
 
     @FXML
@@ -64,28 +62,21 @@ public class AIController {
     private void updateModelStatus() {
         CompletableFuture.runAsync(() -> {
             try {
-                if (localService != null && localService.isAvailable()) {
-                    var client = java.net.http.HttpClient.newHttpClient();
-                    var req = java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create("http://127.0.0.1:5000/health"))
-                            .GET().build();
-                    var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-                    if (resp.statusCode() == 200) {
-                        org.json.JSONObject h = new org.json.JSONObject(resp.body());
-                        boolean loaded = h.optBoolean("model_loaded", false);
-                        String provider = h.optString("provider", "none");
-                        Platform.runLater(() -> {
-                            if (modelStatusLabel != null) {
-                                if (loaded) {
-                                    modelStatusLabel.setText("✅ Model: " + provider);
-                                    modelStatusLabel.setStyle("-fx-text-fill: #43e97b; -fx-font-size: 11px;");
-                                } else {
-                                    modelStatusLabel.setText("⏳ Model loading...");
-                                    modelStatusLabel.setStyle("-fx-text-fill: #ffd700; -fx-font-size: 11px;");
-                                }
+                if (aiOrchestrator.isLocalAvailable()) {
+                    org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+                    boolean loaded = health.optBoolean("model_loaded", false);
+                    String provider = health.optString("provider", "none");
+                    Platform.runLater(() -> {
+                        if (modelStatusLabel != null) {
+                            if (loaded) {
+                                modelStatusLabel.setText("✅ Model: " + provider);
+                                modelStatusLabel.setStyle("-fx-text-fill: #43e97b; -fx-font-size: 11px;");
+                            } else {
+                                modelStatusLabel.setText("⏳ Model loading...");
+                                modelStatusLabel.setStyle("-fx-text-fill: #ffd700; -fx-font-size: 11px;");
                             }
-                        });
-                    }
+                        }
+                    });
                 } else {
                     Platform.runLater(() -> {
                         if (modelStatusLabel != null) {
@@ -112,41 +103,31 @@ public class AIController {
 
         CompletableFuture.runAsync(() -> {
             try {
-                if (localService != null && localService.isAvailable()) {
-                    var client = java.net.http.HttpClient.newHttpClient();
-                    var req = java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create("http://127.0.0.1:5000/health"))
-                            .GET().build();
-                    var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-                    if (resp.statusCode() == 200) {
-                        org.json.JSONObject h = new org.json.JSONObject(resp.body());
-                        if (!h.optBoolean("model_loaded", false)) {
-                            Platform.runLater(() -> addSystemMessage("⏳ Loading AI model in background..."));
-                            localService.loadModel();
+                if (aiOrchestrator.isLocalAvailable()) {
+                    org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+                    if (!health.optBoolean("model_loaded", false)) {
+                        Platform.runLater(() -> addSystemMessage("⏳ Loading AI model in background..."));
+                        aiOrchestrator.loadLocalModel();
 
-                            // Poll until model is loaded, then update status
-                            for (int i = 0; i < 60; i++) {
-                                Thread.sleep(2000);
-                                var resp2 = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-                                if (resp2.statusCode() == 200) {
-                                    org.json.JSONObject h2 = new org.json.JSONObject(resp2.body());
-                                    if (h2.optBoolean("model_loaded", false)) {
-                                        String prov = h2.optString("provider", "loaded");
-                                        Platform.runLater(() -> {
-                                            addSystemMessage("✅ AI model ready (" + prov + ")");
-                                            if (modelStatusLabel != null) {
-                                                modelStatusLabel.setText("✅ Model: " + prov);
-                                                modelStatusLabel
-                                                        .setStyle("-fx-text-fill: #43e97b; -fx-font-size: 11px;");
-                                            }
-                                        });
-                                        break;
+                        // Poll until model is loaded, then update status
+                        for (int i = 0; i < 60; i++) {
+                            Thread.sleep(2000);
+                            org.json.JSONObject polled = aiOrchestrator.getLocalHealth();
+                            if (polled.optBoolean("model_loaded", false)) {
+                                String provider = polled.optString("provider", "loaded");
+                                Platform.runLater(() -> {
+                                    addSystemMessage("✅ AI model ready (" + provider + ")");
+                                    if (modelStatusLabel != null) {
+                                        modelStatusLabel.setText("✅ Model: " + provider);
+                                        modelStatusLabel
+                                                .setStyle("-fx-text-fill: #43e97b; -fx-font-size: 11px;");
                                     }
-                                }
+                                });
+                                break;
                             }
-                        } else {
-                            Platform.runLater(() -> updateModelStatus());
                         }
+                    } else {
+                        Platform.runLater(this::updateModelStatus);
                     }
                 }
             } catch (Exception e) {
@@ -204,7 +185,7 @@ public class AIController {
         sendButton.setDisable(true);
         showTypingIndicator();
 
-        localService.queryDatabase(queryPrompt)
+        aiOrchestrator.queryDatabase(queryPrompt)
                 .thenAccept(dbData -> Platform.runLater(() -> {
                     removeTypingIndicator();
                     // Phase 1: Show raw DB data instantly
@@ -213,7 +194,7 @@ public class AIController {
                     // Phase 2: Send to AI for polished analysis
                     showTypingIndicator();
                     String aiPrompt = buildAnalysisPrompt(displayName, dbData);
-                    localService.chatWithContext(aiPrompt, dbData)
+                    aiOrchestrator.localQueryWithContext(aiPrompt, dbData)
                             .thenAccept(aiResponse -> Platform.runLater(() -> {
                                 removeTypingIndicator();
                                 addAIAnalysisMessage(aiResponse);
@@ -243,95 +224,74 @@ public class AIController {
      * Build a focused prompt for AI analysis based on the report type.
      */
     private String buildAnalysisPrompt(String reportType, String dbData) {
-        if (reportType.contains("Inventory")) {
-            return "Analyze this pharmacy inventory data. Summarize the key findings: " +
-                    "total medicines shown, price range, stock levels. " +
-                    "Flag any concerns and give 2-3 actionable recommendations.";
-        } else if (reportType.contains("Low Stock")) {
-            return "Analyze these low stock items. Which medicines need urgent reordering? " +
-                    "Prioritize by criticality. Give specific reorder recommendations.";
-        } else if (reportType.contains("Expiring")) {
-            return "Analyze these expiring medicines. Which should be discounted for quick sale? " +
-                    "Which should be returned to supplier? Prioritize by urgency.";
-        } else if (reportType.contains("Sales")) {
-            return "Analyze this sales data. How is today's performance? " +
-                    "Compare with the 30-day trend. Any insights or suggestions?";
-        } else if (reportType.contains("Customer")) {
-            return "Analyze customer balances. Who are the highest debtors? " +
-                    "Suggest a follow-up strategy for debt recovery.";
-        }
-        return "Analyze this pharmacy data and provide a helpful summary with actionable insights.";
+        return AIPromptCatalog.dbReportAnalysisPrompt(reportType);
     }
 
     // ======================== QUICK REPORT HANDLERS ========================
 
     @FXML
     private void handleInventoryReport() {
-        sendDbQuery("Show inventory summary - list top medicines with stock quantities and prices",
+        sendDbQuery(AIPromptCatalog.inventorySummaryDbQueryPrompt(),
                 "📦 Inventory Summary");
     }
 
     @FXML
     private void handleLowStockReport() {
-        sendDbQuery("Show low stock medicines that are running out",
+        sendDbQuery(AIPromptCatalog.lowStockDbQueryPrompt(),
                 "⚠️ Low Stock Alert");
     }
 
     @FXML
     private void handleExpiryReport() {
-        sendDbQuery("Show medicines expiring soon within the next 90 days",
+        sendDbQuery(AIPromptCatalog.expiryDbQueryPrompt(),
                 "⏰ Expiring Medicines");
     }
 
     @FXML
     private void handleSalesReport() {
-        sendDbQuery("Show today's sales summary and revenue",
+        sendDbQuery(AIPromptCatalog.salesDbQueryPrompt(),
                 "💰 Sales Report");
     }
 
     @FXML
     private void handleCustomerReport() {
-        sendDbQuery("Show customer balances and outstanding debts",
+        sendDbQuery(AIPromptCatalog.customerBalancesDbQueryPrompt(),
                 "👥 Customer Balances");
     }
 
     @FXML
     private void handleTopSellersReport() {
-        sendDbQuery("Show top 20 best-selling medicines by total quantity sold from bill items",
+        sendDbQuery(AIPromptCatalog.topSellersDbQueryPrompt(),
                 "🏆 Top Selling Medicines");
     }
 
     @FXML
     private void handleProfitReport() {
-        sendDbQuery(
-                "Show profit analysis - total revenue, total bills, average bill value, and revenue by payment mode",
+        sendDbQuery(AIPromptCatalog.profitDbQueryPrompt(),
                 "📊 Profit Analysis");
     }
 
     @FXML
     private void handlePrescriptionReport() {
-        sendDbQuery("Show recent prescriptions with patient name, doctor, status, and medicines prescribed",
+        sendDbQuery(AIPromptCatalog.prescriptionOverviewDbQueryPrompt(),
                 "📋 Prescription Overview");
     }
 
     @FXML
     private void handleDrugInteractions() {
-        sendDbQuery(
-                "Show recent bills with multiple medicines to check for potential drug-drug interactions. List patient and all medicines per bill",
+        sendDbQuery(AIPromptCatalog.drugInteractionCheckDbQueryPrompt(),
                 "💊 Drug Interaction Check");
     }
 
     @FXML
     private void handleReorderSuggestions() {
-        sendDbQuery(
-                "Show medicines with stock below 20 units that have been sold recently - suggest reorder quantities based on past sales velocity",
+        sendDbQuery(AIPromptCatalog.reorderSuggestionsDbQueryPrompt(),
                 "🔄 Reorder Suggestions");
     }
 
     @FXML
     private void handleDailySummary() {
-        sendDbQuery(
-                "Give a complete daily summary: total sales today, number of bills, new customers, pending prescriptions, low stock alerts, and expiring medicines count",
+        sendDbQuery(AIPromptCatalog.dailySummaryDbQueryPrompt(),
                 "📅 Daily Summary");
     }
 

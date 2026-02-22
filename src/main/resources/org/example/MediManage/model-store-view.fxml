@@ -21,7 +21,7 @@
             <Tab text="📥 Download Models">
                 <VBox spacing="15" style="-fx-padding: 15;">
                     <HBox spacing="10" alignment="CENTER_LEFT">
-                        <TextField fx:id="searchField" promptText="Search Hugging Face Models..." HBox.hgrow="ALWAYS"/>
+                        <TextField fx:id="searchField" promptText="Search models by name, repo, hardware, or format..." HBox.hgrow="ALWAYS"/>
                         <Button text="Search" onAction="#handleSearch" styleClass="button-primary"/>
                     </HBox>
                     <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">

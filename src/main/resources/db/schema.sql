@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS expenses (
 -- ======================== PERFORMANCE INDEXES ========================
 -- These use IF NOT EXISTS so they are safe to re-run on existing DBs.
 CREATE INDEX IF NOT EXISTS idx_medicines_name ON medicines(name);
+CREATE INDEX IF NOT EXISTS idx_medicines_active_name ON medicines(active, name);
+CREATE INDEX IF NOT EXISTS idx_medicines_company ON medicines(company);
 CREATE INDEX IF NOT EXISTS idx_medicines_expiry ON medicines(expiry_date);
 CREATE INDEX IF NOT EXISTS idx_stock_medicine ON stock(medicine_id);
 CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(bill_date);
@@ -113,3 +115,4 @@ CREATE TABLE IF NOT EXISTS prescriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_prescriptions_customer ON prescriptions(customer_id);
 CREATE INDEX IF NOT EXISTS idx_prescriptions_status ON prescriptions(status);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_status_date ON prescriptions(status, prescribed_date DESC);

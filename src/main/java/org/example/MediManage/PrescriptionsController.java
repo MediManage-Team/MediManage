@@ -6,16 +6,24 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 
 import org.example.MediManage.dao.PrescriptionDAO;
 import org.example.MediManage.model.Prescription;
-import org.example.MediManage.service.ai.AIOrchestrator;
-import org.example.MediManage.service.ai.AIServiceProvider;
+import org.example.MediManage.service.DashboardKpiService;
+import org.example.MediManage.service.ai.AIAssistantService;
+import org.example.MediManage.util.AppExecutors;
+import org.example.MediManage.util.AsyncUiFeedback;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class PrescriptionsController {
+    private static final String AI_VALIDATE_READY_LABEL = "🤖 Validate with AI";
+    private static final String AI_VALIDATE_BUSY_LABEL = "⏳ Validating...";
 
     // ======================== FXML BINDINGS ========================
 
@@ -54,12 +62,18 @@ public class PrescriptionsController {
     private Button btnAdvance;
     @FXML
     private Button btnDelete;
+    @FXML
+    private Button btnAIValidate;
+    @FXML
+    private ProgressIndicator spinnerAIValidation;
 
     // ======================== STATE ========================
 
     private final PrescriptionDAO prescriptionDAO = new PrescriptionDAO();
+    private final AIAssistantService aiService = new AIAssistantService();
     private final ObservableList<Prescription> prescriptionList = FXCollections.observableArrayList();
     private Prescription selectedPrescription = null;
+    private boolean keyboardShortcutsRegistered = false;
 
     // ======================== INIT ========================
 
@@ -78,23 +92,23 @@ public class PrescriptionsController {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
+                getStyleClass().removeAll("status-pending", "status-verified", "status-dispensed");
                 if (empty || item == null) {
                     setText(null);
-                    setStyle("");
                 } else {
                     setText(item);
                     switch (item) {
                         case "PENDING":
-                            setStyle("-fx-text-fill: #f39c12;"); // Orange
+                            getStyleClass().add("status-pending");
                             break;
                         case "VERIFIED":
-                            setStyle("-fx-text-fill: #3498db;"); // Blue
+                            getStyleClass().add("status-verified");
                             break;
                         case "DISPENSED":
-                            setStyle("-fx-text-fill: #2ecc71;"); // Green
+                            getStyleClass().add("status-dispensed");
                             break;
                         default:
-                            setStyle("");
+                            break;
                     }
                 }
             }
@@ -116,6 +130,7 @@ public class PrescriptionsController {
 
         // Load data
         handleRefresh();
+        setupKeyboardShortcuts();
     }
 
     // ======================== DATA ========================
@@ -138,7 +153,43 @@ public class PrescriptionsController {
         task.setOnSucceeded(e -> prescriptionList.setAll(task.getValue()));
         task.setOnFailed(e -> System.err.println("Failed to load prescriptions: " + task.getException().getMessage()));
 
-        new Thread(task).start();
+        AppExecutors.background().execute(task);
+    }
+
+    private void setupKeyboardShortcuts() {
+        Platform.runLater(() -> {
+            Scene scene = txtCustomerName == null ? null : txtCustomerName.getScene();
+            if (keyboardShortcutsRegistered || scene == null) {
+                return;
+            }
+            scene.addEventFilter(KeyEvent.KEY_PRESSED, this::handleKeyboardShortcut);
+            keyboardShortcutsRegistered = true;
+        });
+    }
+
+    private void handleKeyboardShortcut(KeyEvent event) {
+        if (event.isControlDown() && event.getCode() == KeyCode.S) {
+            handleSave();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.R) {
+            handleRefresh();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.ENTER) {
+            handleAIValidate();
+            event.consume();
+            return;
+        }
+
+        if (event.getCode() == KeyCode.ESCAPE) {
+            handleClear();
+            event.consume();
+        }
     }
 
     // ======================== FORM ========================
@@ -201,6 +252,7 @@ public class PrescriptionsController {
             }
 
             prescriptionDAO.addPrescription(p);
+            DashboardKpiService.invalidatePrescriptionMetrics();
             showAlert(Alert.AlertType.INFORMATION, "Prescription saved successfully.");
             handleClear();
             handleRefresh();
@@ -220,6 +272,7 @@ public class PrescriptionsController {
 
         try {
             prescriptionDAO.updateStatus(selectedPrescription.getPrescriptionId(), nextStatus);
+            DashboardKpiService.invalidatePrescriptionMetrics();
             showAlert(Alert.AlertType.INFORMATION, "Status updated to " + nextStatus);
             handleClear();
             handleRefresh();
@@ -236,17 +289,14 @@ public class PrescriptionsController {
             return;
         }
 
-        txtAIValidation.setText("Validating...");
+        AsyncUiFeedback.showLoading(btnAIValidate, spinnerAIValidation, txtAIValidation,
+                AI_VALIDATE_BUSY_LABEL, "⏳ Running prescription safety checks...");
 
         try {
-            AIOrchestrator orchestrator = AIServiceProvider.get().getOrchestrator();
-            String prompt = "Validate the following prescription for drug-drug interactions, dosage safety, and contraindications. "
-                    +
-                    "List any concerns concisely:\n\n" + medicines;
-
-            orchestrator.processQuery(prompt, true, false)
+            aiService.validatePrescription(parseMedicines(medicines))
                     .thenAccept(response -> Platform.runLater(() -> {
-                        txtAIValidation.setText(response);
+                        AsyncUiFeedback.showSuccess(btnAIValidate, spinnerAIValidation, txtAIValidation,
+                                AI_VALIDATE_READY_LABEL, response);
                         if (selectedPrescription != null) {
                             try {
                                 prescriptionDAO.saveAIValidation(selectedPrescription.getPrescriptionId(), response);
@@ -256,12 +306,21 @@ public class PrescriptionsController {
                         }
                     }))
                     .exceptionally(ex -> {
-                        Platform.runLater(() -> txtAIValidation.setText("AI Error: " + ex.getMessage()));
+                        Platform.runLater(() -> AsyncUiFeedback.showError(btnAIValidate, spinnerAIValidation,
+                                txtAIValidation, AI_VALIDATE_READY_LABEL, ex));
                         return null;
                     });
         } catch (Exception ex) {
-            txtAIValidation.setText("AI unavailable: " + ex.getMessage());
+            AsyncUiFeedback.showError(btnAIValidate, spinnerAIValidation, txtAIValidation,
+                    AI_VALIDATE_READY_LABEL, ex);
         }
+    }
+
+    private List<String> parseMedicines(String medicinesText) {
+        return Arrays.stream(medicinesText.split("[,\\n]"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     @FXML
@@ -277,6 +336,7 @@ public class PrescriptionsController {
             if (response == ButtonType.YES) {
                 try {
                     prescriptionDAO.deletePrescription(selectedPrescription.getPrescriptionId());
+                    DashboardKpiService.invalidatePrescriptionMetrics();
                     handleClear();
                     handleRefresh();
                     showAlert(Alert.AlertType.INFORMATION, "Prescription deleted.");
@@ -295,6 +355,14 @@ public class PrescriptionsController {
         txtMedicines.clear();
         txtNotes.clear();
         txtAIValidation.clear();
+        if (btnAIValidate != null) {
+            btnAIValidate.setDisable(false);
+            btnAIValidate.setText(AI_VALIDATE_READY_LABEL);
+        }
+        if (spinnerAIValidation != null) {
+            spinnerAIValidation.setVisible(false);
+            spinnerAIValidation.setManaged(false);
+        }
 
         btnSave.setText("Add Prescription");
         btnAdvance.setDisable(true);

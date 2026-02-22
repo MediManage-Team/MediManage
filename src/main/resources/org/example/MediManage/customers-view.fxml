@@ -58,7 +58,7 @@
 
                     <Separator/>
 
-                    <Label text="Emergency Contact" styleClass="section-title" style="-fx-font-size: 13px;"/>
+                    <Label text="Emergency Contact" styleClass="section-title-compact"/>
                     <HBox spacing="10">
                         <VBox spacing="4" HBox.hgrow="ALWAYS">
                             <Label text="Nominee Name"/>
@@ -72,7 +72,7 @@
 
                     <Separator/>
 
-                    <Label text="Insurance" styleClass="section-title" style="-fx-font-size: 13px;"/>
+                    <Label text="Insurance" styleClass="section-title-compact"/>
                     <HBox spacing="10">
                         <VBox spacing="4" HBox.hgrow="ALWAYS">
                             <Label text="Provider"/>
@@ -101,7 +101,7 @@
 
                     <Separator/>
                     <TitledPane text="🤖 AI Health Analysis" expanded="false" animated="true">
-                        <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
+                        <VBox spacing="10" styleClass="content-pad-10 ai-panel">
                             <HBox spacing="10" alignment="CENTER_LEFT">
                                 <Button fx:id="btnAIAnalysis" text="✨ Analyze Customer Health" onAction="#handleAIAnalysis" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai" disable="true"/>
                                 <ProgressIndicator fx:id="spinnerAnalysis" prefWidth="24" prefHeight="24" visible="false" managed="false"/>

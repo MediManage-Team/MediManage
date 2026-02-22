@@ -80,7 +80,8 @@ public class UsersController {
     private void populateForm(User user) {
         selectedUser = user;
         txtUsername.setText(user.getUsername());
-        txtPassword.setText(user.getPassword()); // In real app, might not show password
+        txtPassword.clear();
+        txtPasswordVisible.clear();
         cmbRole.setValue(user.getRole());
         btnSave.setText("Update User");
         btnDelete.setDisable(false);
@@ -88,22 +89,26 @@ public class UsersController {
 
     @FXML
     private void handleSave() {
-        String username = txtUsername.getText();
+        String username = txtUsername.getText() == null ? "" : txtUsername.getText().trim();
         String password = txtPassword.getText();
         UserRole role = cmbRole.getValue();
 
-        if (username.isEmpty() || password.isEmpty() || role == null) {
-            showAlert(Alert.AlertType.ERROR, "Validation Error", "All fields are required.");
+        if (username.isEmpty() || role == null) {
+            showAlert(Alert.AlertType.ERROR, "Validation Error", "Username and role are required.");
             return;
         }
 
         if (selectedUser == null) {
+            if (password == null || password.isEmpty()) {
+                showAlert(Alert.AlertType.ERROR, "Validation Error", "Password is required for new users.");
+                return;
+            }
             // Create New
             User newUser = new User(0, username, password, role); // ID 0 is ignored on insert
             userDAO.addUser(newUser);
             showAlert(Alert.AlertType.INFORMATION, "Success", "User added successfully.");
         } else {
-            // Update Existing (Create new object with same ID)
+            // If password is empty, DAO keeps the existing stored hash unchanged.
             User updatedUser = new User(selectedUser.getId(), username, password, role);
             userDAO.updateUser(updatedUser);
             showAlert(Alert.AlertType.INFORMATION, "Success", "User updated successfully.");

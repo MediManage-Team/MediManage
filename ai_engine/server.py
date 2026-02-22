@@ -1,6 +1,7 @@
 import logging
 import threading
 import hashlib
+import hmac
 import os
 import signal
 from flask import Flask, request, jsonify
@@ -41,6 +42,23 @@ def _propagate_correlation_id(response):
 @app.teardown_request
 def _clear_request_context(_error):
     clear_correlation_id()
+
+
+@app.before_request
+def _enforce_admin_token():
+    if request.path not in ADMIN_PROTECTED_ROUTES:
+        return None
+
+    if not ADMIN_TOKEN:
+        logger.error("Admin route access denied: %s is not configured.", ADMIN_TOKEN_ENV)
+        return jsonify({"error": "Admin token not configured on server."}), 503
+
+    provided = request.headers.get(ADMIN_TOKEN_HEADER, "")
+    if not provided or not hmac.compare_digest(provided, ADMIN_TOKEN):
+        logger.warning("Unauthorized admin request for %s", request.path)
+        return jsonify({"error": "Unauthorized"}), 401
+
+    return None
 
 
 def _set_progress(data):
@@ -93,6 +111,16 @@ def _sha256_file(filepath, chunk_size=8192):
 
 # Default models directory
 MODELS_DIR = os.path.join(os.path.expanduser("~"), "MediManage", "models")
+ADMIN_TOKEN_ENV = "MEDIMANAGE_LOCAL_API_TOKEN"
+ADMIN_TOKEN_HEADER = "X-MediManage-Admin-Token"
+ADMIN_PROTECTED_ROUTES = {
+    "/load_model",
+    "/download_model",
+    "/stop_download",
+    "/delete_model",
+    "/shutdown",
+}
+ADMIN_TOKEN = (os.getenv(ADMIN_TOKEN_ENV, "") or "").strip()
 
 
 # ======================== HEALTH ========================
@@ -555,5 +583,6 @@ def shutdown():
 if __name__ == '__main__':
     logger.info("Starting AI Engine Server on port 5000...")
     logger.info(f"Models directory: {MODELS_DIR}")
+    logger.info("Admin token protection: %s", "enabled" if ADMIN_TOKEN else "missing")
     os.makedirs(MODELS_DIR, exist_ok=True)
     app.run(host='127.0.0.1', port=5000)

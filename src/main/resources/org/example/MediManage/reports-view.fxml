@@ -26,7 +26,8 @@
             <Label text="Total Revenue (Selected Period)" styleClass="text-muted"/>
             <Label fx:id="lblTotalRevenue" text="₹ 0.00" styleClass="total-value"/>
             <Separator/>
-            <Label text="Top Categories (Coming Soon)" styleClass="text-muted" style="-fx-font-style: italic;"/>
+            <Label text="Top Selling Medicines" styleClass="text-muted"/>
+            <Label fx:id="lblTopCategories" text="No itemized sales in selected range." styleClass="text-muted-italic" wrapText="true"/>
         </VBox>
 
         <!-- Chart -->
@@ -45,7 +46,7 @@
 
     <!-- AI Sales Analysis -->
     <TitledPane text="🤖 AI Sales Analysis" expanded="false" animated="true" styleClass="card">
-        <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
+        <VBox spacing="10" styleClass="content-pad-10 ai-panel">
             <HBox spacing="10" alignment="CENTER_LEFT">
                 <Button fx:id="btnAISummary" text="✨ Analyze Sales with AI" onAction="#handleAISummary" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
                 <ProgressIndicator fx:id="spinnerSummary" prefWidth="24" prefHeight="24" visible="false" managed="false"/>

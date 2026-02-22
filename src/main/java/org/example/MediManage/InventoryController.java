@@ -2,23 +2,33 @@ package org.example.MediManage;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
-import org.example.MediManage.dao.MedicineDAO;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import org.example.MediManage.model.Medicine;
+import org.example.MediManage.service.InventoryService;
+import org.example.MediManage.util.AsyncUiFeedback;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import javafx.application.Platform;
-import org.example.MediManage.service.ai.AIAssistantService;
 
 public class InventoryController {
+    private static final String RESTOCK_READY_LABEL = "✨ Get AI Suggestions";
+    private static final String RESTOCK_BUSY_LABEL = "⏳ Running...";
+
 
     @FXML
     private TextField searchField;
+    @FXML
+    private Label lblPageInfo;
+    @FXML
+    private Button btnPrevPage;
+    @FXML
+    private Button btnNextPage;
     @FXML
     private TableView<Medicine> inventoryTable;
     @FXML
@@ -56,16 +66,21 @@ public class InventoryController {
     @FXML
     private ProgressIndicator spinnerRestock;
 
-    private MedicineDAO medicineDAO = new MedicineDAO();
-    private AIAssistantService aiService = new AIAssistantService();
-    private ObservableList<Medicine> masterData = FXCollections.observableArrayList();
+    private final InventoryService inventoryService = new InventoryService();
+    private final ObservableList<Medicine> masterData = FXCollections.observableArrayList();
     private Medicine selectedMedicine = null;
+    private int currentPage = 0;
+    private int totalItems = 0;
+    private int pageSize = 50;
+    private boolean keyboardShortcutsRegistered = false;
 
     @FXML
     public void initialize() {
+        pageSize = inventoryService.defaultPageSize();
         setupTable();
-        loadData();
         setupSearch();
+        setupKeyboardShortcuts();
+        loadData(0);
     }
 
     private void setupTable() {
@@ -81,12 +96,11 @@ public class InventoryController {
             @Override
             protected void updateItem(Medicine item, boolean empty) {
                 super.updateItem(item, empty);
-                if (item == null || empty) {
-                    setStyle("");
-                } else if (item.getStock() < 10) {
-                    setStyle("-fx-background-color: #ff6b6b20;"); // Low stock (dark red tint)
+                getStyleClass().remove("low-stock-row");
+                if (!empty && item != null && item.getStock() < 10) {
+                    getStyleClass().add("low-stock-row");
                 } else {
-                    setStyle("");
+                    getStyleClass().remove("low-stock-row");
                 }
             }
         });
@@ -99,32 +113,82 @@ public class InventoryController {
     }
 
     private void loadData() {
-        masterData.clear();
-        masterData.addAll(medicineDAO.getAllMedicines());
+        loadData(currentPage);
+    }
+
+    private void loadData(int page) {
+        String query = searchField.getText() == null ? "" : searchField.getText().trim();
+        int safePage = Math.max(0, page);
+
+        totalItems = inventoryService.countInventory(query);
+
+        int totalPages = Math.max(1, (int) Math.ceil(totalItems / (double) pageSize));
+        if (safePage >= totalPages) {
+            safePage = totalPages - 1;
+        }
+        currentPage = safePage;
+
+        masterData.setAll(inventoryService.loadInventoryPage(query, currentPage, pageSize));
         inventoryTable.setItems(masterData);
         inventoryTable.refresh();
+
+        if (selectedMedicine != null) {
+            boolean selectedStillVisible = masterData.stream().anyMatch(m -> m.getId() == selectedMedicine.getId());
+            if (!selectedStillVisible) {
+                handleClear();
+            }
+        }
+
+        updatePaginationControls();
     }
 
     private void setupSearch() {
-        FilteredList<Medicine> filteredData = new FilteredList<>(masterData, p -> true);
+        searchField.textProperty().addListener((observable, oldValue, newValue) -> loadData(0));
+    }
 
-        searchField.textProperty().addListener((observable, oldValue, newValue) -> {
-            filteredData.setPredicate(medicine -> {
-                if (newValue == null || newValue.isEmpty()) {
-                    return true;
-                }
-                String lowerCaseFilter = newValue.toLowerCase();
-
-                if (medicine.getName().toLowerCase().contains(lowerCaseFilter)) {
-                    return true;
-                } else if (medicine.getCompany().toLowerCase().contains(lowerCaseFilter)) {
-                    return true;
-                }
-                return false;
-            });
+    private void setupKeyboardShortcuts() {
+        Platform.runLater(() -> {
+            if (keyboardShortcutsRegistered || searchField == null || searchField.getScene() == null) {
+                return;
+            }
+            searchField.getScene().addEventFilter(KeyEvent.KEY_PRESSED, this::handleGlobalShortcuts);
+            keyboardShortcutsRegistered = true;
         });
+    }
 
-        inventoryTable.setItems(filteredData);
+    private void handleGlobalShortcuts(KeyEvent event) {
+        if (event.isControlDown() && event.getCode() == KeyCode.F) {
+            searchField.requestFocus();
+            searchField.selectAll();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.N) {
+            handleClear();
+            txtName.requestFocus();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.S) {
+            handleSave();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.R) {
+            handleAIRestock();
+            event.consume();
+            return;
+        }
+
+        if (event.getCode() == KeyCode.DELETE
+                && selectedMedicine != null
+                && !(event.getTarget() instanceof TextInputControl)) {
+            handleDelete();
+            event.consume();
+        }
     }
 
     private void populateForm(Medicine med) {
@@ -161,32 +225,16 @@ public class InventoryController {
         try {
             double price = Double.parseDouble(priceStr);
             int stock = Integer.parseInt(stockStr);
-            String expiry = expiryDate.toString();
 
             if (selectedMedicine == null) {
-                // Add New
-                // defaulting generic name to empty string as we don't have a field in UI yet
-                // for InventoryAdd (User requirement didn't specify updating Inventory UI, but
-                // "Substitute Search" implies it should be there. For now, empty to fix build).
-                medicineDAO.addMedicine(name, "", company, expiry, price, stock);
+                inventoryService.addMedicine(name, company, expiryDate, price, stock);
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine added.");
             } else {
-                // Update Existing
-                selectedMedicine.setName(name);
-                selectedMedicine.setCompany(company);
-                selectedMedicine.setExpiry(expiry);
-                selectedMedicine.setPrice(price);
-                // Stock update is separate in DAO but for UX we do it here too via separate
-                // call or assuming updateMedicine usually doesn't update stock count in generic
-                // CRUD but requirement said "updateStock" method exists.
-                // We should call both updateMedicine and updateStock to be safe.
-                medicineDAO.updateMedicine(selectedMedicine);
-                medicineDAO.updateStock(selectedMedicine.getId(), stock);
-
+                inventoryService.updateMedicine(selectedMedicine, name, company, expiryDate, price, stock);
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine updated.");
             }
             handleClear();
-            loadData();
+            loadData(currentPage);
 
         } catch (NumberFormatException e) {
             showAlert(Alert.AlertType.ERROR, "Error", "Price must be a number and Stock must be an integer.");
@@ -204,9 +252,9 @@ public class InventoryController {
 
         Optional<ButtonType> result = alert.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            medicineDAO.deleteMedicine(selectedMedicine.getId());
+            inventoryService.deleteMedicine(selectedMedicine.getId());
             handleClear();
-            loadData();
+            loadData(currentPage);
         }
     }
 
@@ -231,50 +279,61 @@ public class InventoryController {
 
     @FXML
     private void handleAIRestock() {
-        if (masterData.isEmpty()) {
-            txtAIRestock.setText("No inventory data loaded.");
+        List<Medicine> snapshot = inventoryService.loadRestockAnalysisSnapshot();
+        InventoryService.RestockPreparation restock = inventoryService.prepareRestock(snapshot);
+        if (!restock.requiresAi()) {
+            AsyncUiFeedback.showSuccess(btnAIRestock, spinnerRestock, txtAIRestock,
+                    RESTOCK_READY_LABEL, restock.message());
             return;
         }
 
-        // Build inventory snapshot for AI
-        String snapshot = masterData.stream()
-                .filter(m -> m.getStock() < 20) // Focus on low stock items
-                .map(m -> m.getName() + " (" + m.getCompany() + ") — Stock: " + m.getStock() + ", Price: ₹"
-                        + m.getPrice())
-                .collect(Collectors.joining("\n"));
+        AsyncUiFeedback.showLoading(btnAIRestock, spinnerRestock, txtAIRestock,
+                RESTOCK_BUSY_LABEL, "⏳ Running AI restock analysis...");
 
-        if (snapshot.isEmpty()) {
-            txtAIRestock.setText("All items have adequate stock (20+).");
-            return;
-        }
-
-        txtAIRestock.setText("Analyzing inventory with AI...");
-        btnAIRestock.setDisable(true);
-        if (spinnerRestock != null) {
-            spinnerRestock.setVisible(true);
-            spinnerRestock.setManaged(true);
-        }
-
-        aiService.suggestRestock(snapshot)
+        inventoryService.suggestRestock(restock.snapshot())
                 .thenAccept(result -> Platform.runLater(() -> {
-                    txtAIRestock.setText(result);
-                    btnAIRestock.setDisable(false);
-                    if (spinnerRestock != null) {
-                        spinnerRestock.setVisible(false);
-                        spinnerRestock.setManaged(false);
-                    }
+                    AsyncUiFeedback.showSuccess(btnAIRestock, spinnerRestock, txtAIRestock,
+                            RESTOCK_READY_LABEL, result);
                 }))
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
-                        txtAIRestock.setText("Error: " + ex.getMessage());
-                        btnAIRestock.setDisable(false);
-                        if (spinnerRestock != null) {
-                            spinnerRestock.setVisible(false);
-                            spinnerRestock.setManaged(false);
-                        }
+                        AsyncUiFeedback.showError(btnAIRestock, spinnerRestock, txtAIRestock,
+                                RESTOCK_READY_LABEL, ex);
                     });
                     return null;
                 });
+    }
+
+    @FXML
+    private void handlePrevPage() {
+        if (currentPage > 0) {
+            loadData(currentPage - 1);
+        }
+    }
+
+    @FXML
+    private void handleNextPage() {
+        int totalPages = Math.max(1, (int) Math.ceil(totalItems / (double) pageSize));
+        if (currentPage + 1 < totalPages) {
+            loadData(currentPage + 1);
+        }
+    }
+
+    private void updatePaginationControls() {
+        int totalPages = Math.max(1, (int) Math.ceil(totalItems / (double) pageSize));
+        int start = totalItems == 0 ? 0 : (currentPage * pageSize) + 1;
+        int end = totalItems == 0 ? 0 : Math.min(totalItems, (currentPage + 1) * pageSize);
+
+        if (lblPageInfo != null) {
+            lblPageInfo.setText(String.format("Rows %d-%d of %d (Page %d/%d)",
+                    start, end, totalItems, currentPage + 1, totalPages));
+        }
+        if (btnPrevPage != null) {
+            btnPrevPage.setDisable(currentPage <= 0);
+        }
+        if (btnNextPage != null) {
+            btnNextPage.setDisable(currentPage + 1 >= totalPages);
+        }
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

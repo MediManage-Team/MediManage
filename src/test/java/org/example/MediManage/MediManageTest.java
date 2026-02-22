@@ -7,11 +7,49 @@ import org.junit.jupiter.api.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.SQLException;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class MediManageTest {
+
+    private static final String DB_PATH_PROPERTY = "medimanage.db.path";
+    private static Path testDbPath;
+
+    @BeforeAll
+    static void setupIsolatedTestDb() throws Exception {
+        Path tempDir = Files.createTempDirectory("medimanage-tests-");
+        testDbPath = tempDir.resolve("medimanage-test.db");
+        System.setProperty(DB_PATH_PROPERTY, testDbPath.toString());
+        DatabaseUtil.initDB();
+    }
+
+    @AfterAll
+    static void cleanupIsolatedTestDb() {
+        System.clearProperty(DB_PATH_PROPERTY);
+        if (testDbPath == null) {
+            return;
+        }
+
+        String baseName = testDbPath.getFileName().toString();
+        tryDelete(testDbPath.resolveSibling(baseName + "-shm"));
+        tryDelete(testDbPath.resolveSibling(baseName + "-wal"));
+        tryDelete(testDbPath);
+
+        Path parent = testDbPath.getParent();
+        if (parent != null) {
+            tryDelete(parent);
+        }
+    }
+
+    private static void tryDelete(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (Exception ignored) {
+            // Best-effort cleanup; test results should not depend on temp file deletion timing.
+        }
+    }
 
     @Test
     @Order(1)
@@ -84,14 +122,11 @@ public class MediManageTest {
     @Order(4)
     @DisplayName("Database Connection Check")
     void testDBConnection() {
+        assertNotNull(testDbPath, "Test DB path should be initialized");
         try (Connection conn = org.example.MediManage.DatabaseUtil.getConnection()) {
             assertNotNull(conn, "Connection should not be null if DB is running");
-            System.out.println("DB Connection Successful!");
+            assertTrue(Files.exists(testDbPath), "Isolated test DB file should exist");
         } catch (Exception e) {
-            // If DB is not running (CI/CD or env without DB), this might fail.
-            // For this local agent session, it SHOULD pass if DB is local.
-            // If it fails, print but don't fail assertion if we want 'soft' pass.
-            // But user said "The user's OS is windows" and "Active User", likely local DB.
             fail("Database Connection Failed: " + e.getMessage());
         }
     }

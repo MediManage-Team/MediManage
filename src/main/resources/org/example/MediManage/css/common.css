@@ -216,6 +216,19 @@
     -fx-font-weight: bold;
 }
 
+.tab-pane .tab.expiry-alert-tab {
+    -fx-background-color: #ff6b6b18;
+}
+
+.tab-pane .tab.expiry-alert-tab .tab-label {
+    -fx-text-fill: #ff6b6b;
+}
+
+.tab-pane .tab.expiry-alert-tab:selected {
+    -fx-border-color: transparent transparent #ff6b6b transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
 .tab-pane .tab .tab-close-button {
     -fx-background-color: transparent;
 }
@@ -1054,6 +1067,60 @@
     -fx-text-fill: #7aa2f7;
 }
 
+.label-strong {
+    -fx-font-weight: bold;
+}
+
+.section-title-compact {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #e6f0ff;
+}
+
+.content-pad-10 {
+    -fx-padding: 10;
+}
+
+.text-muted-italic {
+    -fx-text-fill: #4e4b6c;
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+}
+
+.button-xl {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.customer-name-selected {
+    -fx-text-fill: #5fe6b3;
+    -fx-font-weight: bold;
+}
+
+.customer-name-muted {
+    -fx-text-fill: #4e4b6c;
+}
+
+.balance-outstanding {
+    -fx-text-fill: #e74c3c;
+}
+
+.balance-clear {
+    -fx-text-fill: #2ecc71;
+}
+
+.status-pending {
+    -fx-text-fill: #f39c12;
+}
+
+.status-verified {
+    -fx-text-fill: #3498db;
+}
+
+.status-dispensed {
+    -fx-text-fill: #2ecc71;
+}
+
 /* Console / log text */
 .console-text {
     -fx-control-inner-background: #0a0e18;
@@ -1177,6 +1244,67 @@
     -fx-text-fill: #00d4ff;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
+}
+
+.care-loading-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #4e4b6c;
+    -fx-padding: 20;
+}
+
+.care-error-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #ff6b6b;
+    -fx-padding: 15;
+}
+
+.care-header-card {
+    -fx-background-color: #1a0f30;
+    -fx-padding: 12;
+    -fx-background-radius: 8;
+    -fx-border-color: #bb9af7;
+    -fx-border-radius: 8;
+    -fx-border-width: 0 0 0 4;
+}
+
+.care-header-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #bb9af7;
+}
+
+.care-header-provider {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9d7cd8;
+}
+
+.care-medicine-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 0 2 0;
+}
+
+.care-section-card {
+    -fx-padding: 10 12;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+    -fx-border-width: 0 0 0 4;
+}
+
+.care-section-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.care-section-body {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #bfc9e6;
+}
+
+.care-footer {
+    -fx-font-size: 10px;
+    -fx-text-fill: #4e4b6c;
+    -fx-padding: 8 0 0 0;
 }
 
 

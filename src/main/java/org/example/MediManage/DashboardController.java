@@ -9,9 +9,10 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.stage.FileChooser;
 import org.example.MediManage.dao.BillDAO;
+import org.example.MediManage.dao.ExpenseDAO;
 import org.example.MediManage.dao.MedicineDAO;
-import org.example.MediManage.dao.PrescriptionDAO;
 import org.example.MediManage.model.BillItem;
+import org.example.MediManage.model.BillHistoryRecord;
 import org.example.MediManage.model.Medicine;
 
 import java.io.File;
@@ -20,11 +21,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.example.MediManage.service.ReportService;
+import org.example.MediManage.service.DashboardKpiService;
 import javafx.scene.layout.VBox;
 import javafx.geometry.Pos;
 import org.example.MediManage.model.Expense;
 import javafx.scene.layout.GridPane;
 import javafx.application.Platform;
+import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.util.UserSession;
 
 import java.sql.SQLException;
@@ -69,17 +72,23 @@ public class DashboardController {
 
     // History Table
     @FXML
-    private TableView<BillHistoryDTO> historyTable;
+    private TableView<BillHistoryRecord> historyTable;
     @FXML
-    private TableColumn<BillHistoryDTO, Integer> histColId;
+    private TableColumn<BillHistoryRecord, Integer> histColId;
     @FXML
-    private TableColumn<BillHistoryDTO, String> histColDate;
+    private TableColumn<BillHistoryRecord, String> histColDate;
     @FXML
-    private TableColumn<BillHistoryDTO, String> histColCustomer;
+    private TableColumn<BillHistoryRecord, String> histColCustomer;
     @FXML
-    private TableColumn<BillHistoryDTO, String> histColPhone;
+    private TableColumn<BillHistoryRecord, String> histColPhone;
     @FXML
-    private TableColumn<BillHistoryDTO, Double> histColAmount;
+    private TableColumn<BillHistoryRecord, Double> histColAmount;
+    @FXML
+    private Label lblHistoryPageInfo;
+    @FXML
+    private Button btnHistoryPrev;
+    @FXML
+    private Button btnHistoryNext;
 
     @FXML
     private TabPane mainTabPane;
@@ -98,13 +107,16 @@ public class DashboardController {
 
     // Data
     private final ObservableList<Medicine> masterInventoryList = FXCollections.observableArrayList();
-    private final ObservableList<BillHistoryDTO> historyList = FXCollections.observableArrayList();
+    private final ObservableList<BillHistoryRecord> historyList = FXCollections.observableArrayList();
+    private static final int HISTORY_PAGE_SIZE = 50;
+    private int historyPageIndex = 0;
+    private int historyTotalCount = 0;
 
     // DAOs
     private final MedicineDAO medicineDAO = new MedicineDAO();
     private final BillDAO billDAO = new BillDAO();
-    private final PrescriptionDAO prescriptionDAO = new PrescriptionDAO();
-    private final org.example.MediManage.dao.ExpenseDAO expenseDAO = new org.example.MediManage.dao.ExpenseDAO();
+    private final ExpenseDAO expenseDAO = new ExpenseDAO();
+    private final DashboardKpiService kpiService = DashboardKpiService.getInstance();
 
     private org.example.MediManage.service.ai.InventoryAIService inventoryAIService;
 
@@ -155,45 +167,31 @@ public class DashboardController {
     }
 
     private void loadInventory() {
-        new Thread(() -> {
+        AppExecutors.runBackground(() -> {
             var inventory = medicineDAO.getAllMedicines();
             Platform.runLater(() -> {
                 masterInventoryList.setAll(inventory);
                 loadKPIs();
                 checkExpiryAlerts();
             });
-        }).start();
+        });
     }
 
     // ======================== KPIs ========================
 
     private void loadKPIs() {
-        new Thread(() -> {
-            double sales = billDAO.getDailySales();
-            double expenses = expenseDAO.getMonthlyExpenses();
-            long lowStockCount = masterInventoryList.stream().filter(m -> m.getStock() < 10).count();
-
-            int pendingCount = 0;
-            try {
-                pendingCount = prescriptionDAO.getByStatus("PENDING").size();
-            } catch (Exception e) {
-                // Prescriptions table may not exist yet — gracefully default to 0
-            }
-
-            double grossProfit = sales * 0.2;
-            double netProfit = grossProfit - expenses;
-
-            final int finalPendingCount = pendingCount;
+        AppExecutors.runBackground(() -> {
+            DashboardKpiService.DashboardKpis kpis = kpiService.getDashboardKpis(masterInventoryList);
             Platform.runLater(() -> {
-                dailySales.setText(String.format("₹%.2f", sales));
+                dailySales.setText(String.format("₹%.2f", kpis.dailySales()));
                 if (lowStock != null)
-                    lowStock.setText(String.valueOf(lowStockCount));
+                    lowStock.setText(String.valueOf(kpis.lowStockCount()));
                 if (totalProfit != null)
-                    totalProfit.setText(String.format("₹%.2f", netProfit));
+                    totalProfit.setText(String.format("₹%.2f", kpis.netProfit()));
                 if (pendingRx != null)
-                    pendingRx.setText(String.valueOf(finalPendingCount));
+                    pendingRx.setText(String.valueOf(kpis.pendingRxCount()));
             });
-        }).start();
+        });
     }
 
     // ======================== EXPIRY ALERTS ========================
@@ -232,7 +230,7 @@ public class DashboardController {
 
         if (!expiring.isEmpty()) {
             expiryTable.setItems(FXCollections.observableArrayList(expiring));
-            expiryTab.setStyle("-fx-background-color: #ff6b6b30;");
+            expiryTab.getStyleClass().add("expiry-alert-tab");
             expiryTab.setContent(expiryTable);
             mainTabPane.getTabs().add(expiryTab);
         }
@@ -257,13 +255,10 @@ public class DashboardController {
     }
 
     private void loadHistory() {
-        new Thread(() -> {
-            var history = billDAO.getBillHistory();
-            Platform.runLater(() -> historyList.setAll(history));
-        }).start();
+        loadHistoryPage(0);
     }
 
-    private void showBillDetails(BillHistoryDTO bill) {
+    private void showBillDetails(BillHistoryRecord bill) {
         if (bill == null)
             return;
 
@@ -458,6 +453,7 @@ public class DashboardController {
         result.ifPresent(exp -> {
             try {
                 expenseDAO.addExpense(exp.getCategory(), exp.getAmount(), exp.getDate(), exp.getDescription());
+                DashboardKpiService.invalidateExpenseMetrics();
                 loadKPIs();
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Expense added.");
             } catch (SQLException e) {
@@ -476,48 +472,54 @@ public class DashboardController {
         alert.showAndWait();
     }
 
-    // ======================== INNER CLASSES ========================
-
-    public static class BillHistoryDTO {
-        private final int billId;
-        private final StringProperty date;
-        private final DoubleProperty total;
-        private final StringProperty customerName;
-        private final StringProperty phone;
-        private final StringProperty username;
-
-        public BillHistoryDTO(int billId, String date, double total, String customerName, String phone,
-                String username) {
-            this.billId = billId;
-            this.date = new SimpleStringProperty(date);
-            this.total = new SimpleDoubleProperty(total);
-            this.customerName = new SimpleStringProperty(customerName != null ? customerName : "N/A");
-            this.phone = new SimpleStringProperty(phone != null ? phone : "N/A");
-            this.username = new SimpleStringProperty(username != null ? username : "N/A");
+    @FXML
+    private void handleHistoryPrevPage() {
+        if (historyPageIndex > 0) {
+            loadHistoryPage(historyPageIndex - 1);
         }
+    }
 
-        public int getBillId() {
-            return billId;
+    @FXML
+    private void handleHistoryNextPage() {
+        int totalPages = Math.max(1, (int) Math.ceil(historyTotalCount / (double) HISTORY_PAGE_SIZE));
+        if (historyPageIndex + 1 < totalPages) {
+            loadHistoryPage(historyPageIndex + 1);
         }
+    }
 
-        public StringProperty dateProperty() {
-            return date;
+    private void loadHistoryPage(int pageIndex) {
+        final int requestedPage = Math.max(0, pageIndex);
+        AppExecutors.runBackground(() -> {
+            int total = billDAO.countBillHistory();
+            int totalPages = Math.max(1, (int) Math.ceil(total / (double) HISTORY_PAGE_SIZE));
+            int resolvedPage = Math.min(requestedPage, totalPages - 1);
+            int offset = resolvedPage * HISTORY_PAGE_SIZE;
+
+            var history = billDAO.getBillHistoryPage(offset, HISTORY_PAGE_SIZE);
+
+            Platform.runLater(() -> {
+                historyPageIndex = resolvedPage;
+                historyTotalCount = total;
+                historyList.setAll(history);
+                updateHistoryPagingControls();
+            });
+        });
+    }
+
+    private void updateHistoryPagingControls() {
+        int totalPages = Math.max(1, (int) Math.ceil(historyTotalCount / (double) HISTORY_PAGE_SIZE));
+        int start = historyTotalCount == 0 ? 0 : (historyPageIndex * HISTORY_PAGE_SIZE) + 1;
+        int end = historyTotalCount == 0 ? 0 : Math.min(historyTotalCount, (historyPageIndex + 1) * HISTORY_PAGE_SIZE);
+
+        if (lblHistoryPageInfo != null) {
+            lblHistoryPageInfo.setText(String.format("Rows %d-%d of %d (Page %d/%d)",
+                    start, end, historyTotalCount, historyPageIndex + 1, totalPages));
         }
-
-        public DoubleProperty totalProperty() {
-            return total;
+        if (btnHistoryPrev != null) {
+            btnHistoryPrev.setDisable(historyPageIndex <= 0);
         }
-
-        public StringProperty customerNameProperty() {
-            return customerName;
-        }
-
-        public StringProperty phoneProperty() {
-            return phone;
-        }
-
-        public StringProperty usernameProperty() {
-            return username;
+        if (btnHistoryNext != null) {
+            btnHistoryNext.setDisable(historyPageIndex + 1 >= totalPages);
         }
     }
 }

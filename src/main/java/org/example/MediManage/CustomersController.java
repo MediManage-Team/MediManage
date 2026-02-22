@@ -7,16 +7,22 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 
-import org.example.MediManage.dao.CustomerDAO;
 import org.example.MediManage.model.Customer;
-import org.example.MediManage.service.ai.AIAssistantService;
+import org.example.MediManage.service.CustomerService;
 import javafx.application.Platform;
+import org.example.MediManage.util.AppExecutors;
+import org.example.MediManage.util.AsyncUiFeedback;
 
 import java.util.List;
 
 public class CustomersController {
+    private static final String ANALYZE_READY_LABEL = "✨ Analyze Customer Health";
+    private static final String ANALYZE_BUSY_LABEL = "⏳ Analyzing...";
 
     // ======================== FXML BINDINGS ========================
 
@@ -69,11 +75,11 @@ public class CustomersController {
 
     // ======================== STATE ========================
 
-    private final CustomerDAO customerDAO = new CustomerDAO();
-    private final AIAssistantService aiService = new AIAssistantService();
+    private final CustomerService customerService = new CustomerService();
     private final ObservableList<Customer> customerList = FXCollections.observableArrayList();
     private FilteredList<Customer> filteredList;
     private Customer selectedCustomer = null;
+    private boolean keyboardShortcutsRegistered = false;
 
     // ======================== INIT ========================
 
@@ -92,15 +98,15 @@ public class CustomersController {
             @Override
             protected void updateItem(Double item, boolean empty) {
                 super.updateItem(item, empty);
+                getStyleClass().removeAll("balance-outstanding", "balance-clear");
                 if (empty || item == null) {
                     setText(null);
-                    setStyle("");
                 } else {
                     setText(String.format("₹ %.2f", item));
                     if (item > 0) {
-                        setStyle("-fx-text-fill: #e74c3c;"); // Red for outstanding balance
+                        getStyleClass().add("balance-outstanding");
                     } else {
-                        setStyle("-fx-text-fill: #2ecc71;"); // Green for clear/credit
+                        getStyleClass().add("balance-clear");
                     }
                 }
             }
@@ -112,14 +118,7 @@ public class CustomersController {
 
         // Search listener
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
-            String lower = newVal == null ? "" : newVal.toLowerCase().trim();
-            filteredList.setPredicate(customer -> {
-                if (lower.isEmpty())
-                    return true;
-                return (customer.getName() != null && customer.getName().toLowerCase().contains(lower)) ||
-                        (customer.getPhoneNumber() != null && customer.getPhoneNumber().contains(lower)) ||
-                        (customer.getEmail() != null && customer.getEmail().toLowerCase().contains(lower));
-            });
+            filteredList.setPredicate(customer -> customerService.matchesSearch(customer, newVal));
         });
 
         // Table selection listener → populate form
@@ -131,6 +130,7 @@ public class CustomersController {
 
         // Load data
         loadCustomers();
+        setupKeyboardShortcuts();
     }
 
     // ======================== DATA ========================
@@ -139,7 +139,7 @@ public class CustomersController {
         javafx.concurrent.Task<List<Customer>> task = new javafx.concurrent.Task<>() {
             @Override
             protected List<Customer> call() {
-                return customerDAO.getAllCustomers();
+                return customerService.getAllCustomers();
             }
         };
 
@@ -150,7 +150,45 @@ public class CustomersController {
             System.err.println("Failed to load customers: " + task.getException().getMessage());
         });
 
-        new Thread(task).start();
+        AppExecutors.background().execute(task);
+    }
+
+    private void setupKeyboardShortcuts() {
+        Platform.runLater(() -> {
+            Scene scene = searchField == null ? null : searchField.getScene();
+            if (keyboardShortcutsRegistered || scene == null) {
+                return;
+            }
+            scene.addEventFilter(KeyEvent.KEY_PRESSED, this::handleKeyboardShortcut);
+            keyboardShortcutsRegistered = true;
+        });
+    }
+
+    private void handleKeyboardShortcut(KeyEvent event) {
+        if (event.isControlDown() && event.getCode() == KeyCode.F) {
+            searchField.requestFocus();
+            searchField.selectAll();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.S) {
+            handleSave();
+            event.consume();
+            return;
+        }
+
+        if (event.isControlDown() && event.getCode() == KeyCode.ENTER && btnAIAnalysis != null
+                && !btnAIAnalysis.isDisable()) {
+            handleAIAnalysis();
+            event.consume();
+            return;
+        }
+
+        if (event.getCode() == KeyCode.ESCAPE) {
+            handleClear();
+            event.consume();
+        }
     }
 
     // ======================== FORM ========================
@@ -194,28 +232,16 @@ public class CustomersController {
         String name = txtName.getText();
         String phone = txtPhone.getText();
 
-        if (name == null || name.trim().isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "Name is required.");
-            return;
-        }
-        if (phone == null || phone.trim().isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "Phone number is required.");
+        String validationError = customerService.validateRequiredFields(name, phone);
+        if (validationError != null) {
+            showAlert(Alert.AlertType.WARNING, validationError);
             return;
         }
 
         try {
-            if (selectedCustomer != null) {
-                // Update
-                Customer c = buildCustomerFromForm();
-                c.setCustomerId(selectedCustomer.getCustomerId());
-                customerDAO.updateCustomer(c);
-                showAlert(Alert.AlertType.INFORMATION, "Customer updated successfully.");
-            } else {
-                // Add new
-                Customer c = buildCustomerFromForm();
-                customerDAO.addCustomer(c);
-                showAlert(Alert.AlertType.INFORMATION, "Customer added successfully.");
-            }
+            Customer c = buildCustomerFromForm();
+            CustomerService.SaveResult saveResult = customerService.saveCustomer(c, selectedCustomer);
+            showAlert(Alert.AlertType.INFORMATION, saveResult.message());
             handleClear();
             loadCustomers();
         } catch (Exception ex) {
@@ -235,7 +261,7 @@ public class CustomersController {
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
                 try {
-                    customerDAO.deleteCustomer(selectedCustomer.getCustomerId());
+                    customerService.deleteCustomer(selectedCustomer);
                     handleClear();
                     loadCustomers();
                     showAlert(Alert.AlertType.INFORMATION, "Customer deleted.");
@@ -270,50 +296,26 @@ public class CustomersController {
 
     @FXML
     private void handleAIAnalysis() {
-        if (selectedCustomer == null) {
-            if (txtAIAnalysis != null)
-                txtAIAnalysis.setText("Please select a customer first.");
-            return;
-        }
-
         String diseases = txtDiseases.getText();
-        if (diseases == null || diseases.trim().isEmpty()) {
+        CustomerService.HealthAnalysisPreparation analysis = customerService.prepareHealthAnalysis(selectedCustomer,
+                diseases);
+        if (!analysis.canProceed()) {
             if (txtAIAnalysis != null)
-                txtAIAnalysis.setText("No known conditions listed. Add conditions to get a health analysis.");
+                txtAIAnalysis.setText(analysis.message());
             return;
         }
 
-        if (txtAIAnalysis != null)
-            txtAIAnalysis.setText("Analyzing health profile with AI...");
-        if (btnAIAnalysis != null)
-            btnAIAnalysis.setDisable(true);
-        if (spinnerAnalysis != null) {
-            spinnerAnalysis.setVisible(true);
-            spinnerAnalysis.setManaged(true);
-        }
+        AsyncUiFeedback.showLoading(btnAIAnalysis, spinnerAnalysis, txtAIAnalysis,
+                ANALYZE_BUSY_LABEL, "⏳ Running AI health analysis...");
 
-        aiService.analyzeCustomerHistory(
-                selectedCustomer.getCustomerId(),
-                selectedCustomer.getName(),
-                diseases).thenAccept(result -> Platform.runLater(() -> {
-                    if (txtAIAnalysis != null)
-                        txtAIAnalysis.setText(result);
-                    if (btnAIAnalysis != null)
-                        btnAIAnalysis.setDisable(false);
-                    if (spinnerAnalysis != null) {
-                        spinnerAnalysis.setVisible(false);
-                        spinnerAnalysis.setManaged(false);
-                    }
+        customerService.analyzeCustomerHealth(selectedCustomer, analysis.diseases())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    AsyncUiFeedback.showSuccess(btnAIAnalysis, spinnerAnalysis, txtAIAnalysis,
+                            ANALYZE_READY_LABEL, result);
                 })).exceptionally(ex -> {
                     Platform.runLater(() -> {
-                        if (txtAIAnalysis != null)
-                            txtAIAnalysis.setText("Error: " + ex.getMessage());
-                        if (btnAIAnalysis != null)
-                            btnAIAnalysis.setDisable(false);
-                        if (spinnerAnalysis != null) {
-                            spinnerAnalysis.setVisible(false);
-                            spinnerAnalysis.setManaged(false);
-                        }
+                        AsyncUiFeedback.showError(btnAIAnalysis, spinnerAnalysis, txtAIAnalysis,
+                                ANALYZE_READY_LABEL, ex);
                     });
                     return null;
                 });

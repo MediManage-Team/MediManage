@@ -22,6 +22,11 @@ The application is organized into distinct layers, each with specific responsibi
 │         Business Logic & Orchestration            │
 │    (AuthService, ReportService, etc.)             │
 └────────────────────┬──────────────────────────────┘
+                     │
+┌────────────────────▼──────────────────────────────┐
+│           Storage Abstraction Layer               │
+│   Backend Interfaces + Runtime Backend Selector   │
+└────────────────────┬──────────────────────────────┘
                      │ Business Operations
                      │
 ┌────────────────────▼──────────────────────────────┐
@@ -96,6 +101,23 @@ The application is organized into distinct layers, each with specific responsibi
 - Transaction coordination
 - Easier testing (mock services)
 - Clear business rules location
+
+### 2.5 Storage Abstraction Layer
+
+**Location:** `src/main/java/org/example/MediManage/storage/`
+
+**Responsibilities:**
+- Define module storage interfaces (for example `MedicineStore`, `CustomerStore`)
+- Select active backend implementation at runtime
+- Decouple service logic from concrete persistence technology
+
+**Current Backends:**
+- `sqlite` (default, DAO-backed)
+- `inmemory` (thread-safe PoC backend for multi-user simulation/testing)
+
+**Backend Switch:**
+- JVM property: `medimanage.storage.backend`
+- Environment variable: `MEDIMANAGE_STORAGE_BACKEND`
 
 ### 3. DAO Layer (Data Access)
 

@@ -6,6 +6,8 @@ Welcome to the MediManage development documentation! This directory contains all
 
 ```
 docs/
+├── adr/                    # Architecture Decision Records
+│   └── 0001-sqlite-vs-hybrid-backend.md
 ├── uml/                    # UML Diagrams and Guides
 │   ├── UML_GUIDE.md       # Comprehensive UML explanation for beginners
 │   └── UML_DIAGRAMS.md    # Mermaid diagram source code
@@ -17,6 +19,7 @@ docs/
 │   └── uploaded_image_4_*.png  # Domain Model Class Diagram
 ├── ARCHITECTURE.md         # System architecture overview
 ├── DATABASE.md            # Database schema and design
+├── MIGRATION_ROLLBACK_RUNBOOK.md  # Backend migration/rollback steps
 └── README.md              # This file
 ```
 
@@ -50,6 +53,16 @@ Start here to understand the project:
    - Relationships
    - Indexes
    - Migration strategy
+
+5. **[adr/0001-sqlite-vs-hybrid-backend.md](./adr/0001-sqlite-vs-hybrid-backend.md)** - Storage strategy decision
+   - Why SQLite remains default
+   - Hybrid backend evolution path
+   - Tradeoffs and follow-up steps
+
+6. **[MIGRATION_ROLLBACK_RUNBOOK.md](./MIGRATION_ROLLBACK_RUNBOOK.md)** - Operational migration guide
+   - Backend switch controls
+   - Cutover checklist
+   - Rollback procedure
 
 ### For Project Reviews & Presentations
 

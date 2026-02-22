@@ -5,8 +5,9 @@ import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import org.example.MediManage.service.ai.AIOrchestrator;
 import org.example.MediManage.service.ai.AIServiceProvider;
-import org.example.MediManage.service.ai.LocalAIService;
+import org.example.MediManage.util.AppExecutors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -39,9 +40,10 @@ public class ModelStoreController {
     @FXML
     private TabPane mainTabPane;
 
-    private final LocalAIService aiService = AIServiceProvider.get().getLocalService();
+    private final AIOrchestrator aiOrchestrator = AIServiceProvider.get().getOrchestrator();
     private Timer progressTimer;
     private Button stopButton;
+    private final List<ModelCard> curatedModels = new ArrayList<>();
     private static final String MODELS_DIR = System.getProperty("user.home") + "/MediManage/models";
 
     @FXML
@@ -162,6 +164,11 @@ public class ModelStoreController {
                 "~1.1 GB", "cpu"));
 
         // Render all sections
+        curatedModels.clear();
+        curatedModels.addAll(gpuModels);
+        curatedModels.addAll(amdModels);
+        curatedModels.addAll(intelModels);
+        curatedModels.addAll(cpuModels);
         renderHardwareSections(gpuModels, amdModels, intelModels, cpuModels);
     }
 
@@ -170,10 +177,49 @@ public class ModelStoreController {
         String query = searchField.getText().trim();
         if (query.isEmpty()) {
             loadCuratedModels();
+            statusLabel.setText("Showing curated model catalog.");
             return;
         }
-        statusLabel.setText("Searching for '" + query + "'...");
-        loadCuratedModels(); // TODO: Implement real HF Search API
+
+        if (curatedModels.isEmpty()) {
+            loadCuratedModels();
+        }
+
+        List<ModelCard> filtered = filterCuratedModels(query);
+        if (filtered.isEmpty()) {
+            modelsContainer.getChildren().clear();
+            Label empty = new Label("No curated models matched \"" + query
+                    + "\".\nTry model name, repository, hardware, format, or badge.");
+            empty.setWrapText(true);
+            empty.getStyleClass().add("text-muted-italic");
+            modelsContainer.getChildren().add(empty);
+            statusLabel.setText("No matches for '" + query + "'.");
+            return;
+        }
+
+        renderDownloadModels(filtered);
+        statusLabel.setText("Found " + filtered.size() + " model(s) for '" + query + "'.");
+    }
+
+    private List<ModelCard> filterCuratedModels(String query) {
+        String lowerQuery = query.toLowerCase();
+        List<ModelCard> filtered = new ArrayList<>();
+        for (ModelCard model : curatedModels) {
+            if (modelMatchesQuery(model, lowerQuery)) {
+                filtered.add(model);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean modelMatchesQuery(ModelCard model, String lowerQuery) {
+        return model.name.toLowerCase().contains(lowerQuery)
+                || model.repoId.toLowerCase().contains(lowerQuery)
+                || model.description.toLowerCase().contains(lowerQuery)
+                || model.badge.toLowerCase().contains(lowerQuery)
+                || model.format.toLowerCase().contains(lowerQuery)
+                || model.hardware.toLowerCase().contains(lowerQuery)
+                || model.source.toLowerCase().contains(lowerQuery);
     }
 
     private void renderHardwareSections(List<ModelCard> gpu, List<ModelCard> amd,
@@ -304,7 +350,7 @@ public class ModelStoreController {
         globalProgressBar.setProgress(-1); // Indeterminate
         showStopButton(true);
 
-        aiService.startDownload(model.repoId, model.filename, model.source);
+        aiOrchestrator.startModelDownload(model.repoId, model.filename, model.source);
         startProgressPolling();
     }
 
@@ -316,7 +362,7 @@ public class ModelStoreController {
         progressTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                JSONObject status = aiService.getDownloadStatus();
+                JSONObject status = aiOrchestrator.getModelDownloadStatus();
                 Platform.runLater(() -> updateProgress(status));
             }
         }, 1000, 1000);
@@ -379,8 +425,8 @@ public class ModelStoreController {
             return;
         installedModelsContainer.getChildren().clear();
 
-        new Thread(() -> {
-            JSONArray models = aiService.listModels();
+        AppExecutors.runBackground(() -> {
+            JSONArray models = aiOrchestrator.listLocalModels();
             Platform.runLater(() -> {
                 if (models.length() == 0) {
                     Label empty = new Label("No models installed yet. Download one from the 'Download Models' tab.");
@@ -394,7 +440,7 @@ public class ModelStoreController {
                     installedModelsContainer.getChildren().add(createInstalledModelCard(model));
                 }
             });
-        }).start();
+        });
     }
 
     private HBox createInstalledModelCard(JSONObject model) {
@@ -476,7 +522,7 @@ public class ModelStoreController {
             return;
 
         statusLabel.setText("Loading model: " + model.optString("name") + "...");
-        aiService.loadModel(path, "auto");
+        aiOrchestrator.loadLocalModel(path, "auto");
         statusLabel.setText("✅ Model load requested: " + model.optString("name"));
     }
 
@@ -491,7 +537,7 @@ public class ModelStoreController {
 
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                boolean deleted = aiService.deleteModel(path);
+                boolean deleted = aiOrchestrator.deleteLocalModel(path);
                 if (deleted) {
                     statusLabel.setText("✅ Deleted: " + name);
                     loadInstalledModels(); // Refresh
@@ -512,7 +558,7 @@ public class ModelStoreController {
     }
 
     private void handleStopDownload() {
-        aiService.stopDownload();
+        aiOrchestrator.stopModelDownload();
         statusLabel.setText("Cancelling download...");
     }
 

@@ -1,6 +1,7 @@
 package org.example.MediManage.dao;
 
 import org.example.MediManage.DatabaseUtil;
+import java.time.LocalDate;
 import java.sql.*;
 
 public class ExpenseDAO {
@@ -18,14 +19,18 @@ public class ExpenseDAO {
     }
 
     public double getMonthlyExpenses() {
-        // SQLite: Calculate total expenses for current month
-        // date('now', 'start of month') -> first day of current month
-        String sql = "SELECT IFNULL(SUM(amount), 0) FROM expenses WHERE date(date) >= date('now', 'start of month')";
+        LocalDate start = LocalDate.now().withDayOfMonth(1);
+        LocalDate end = start.plusMonths(1);
+        String sql = "SELECT COALESCE(SUM(amount), 0) FROM expenses " +
+                "WHERE date >= ? AND date < ?";
         try (Connection conn = DatabaseUtil.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return rs.getDouble(1);
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, start.toString());
+            stmt.setString(2, end.toString());
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getDouble(1);
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();

@@ -81,6 +81,25 @@ public class PrescriptionDAO {
     }
 
     /**
+     * Count prescriptions by status without loading full rows.
+     */
+    public int countByStatus(String status) {
+        String sql = "SELECT COUNT(*) FROM prescriptions WHERE status = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("PrescriptionDAO.countByStatus: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    /**
      * Update prescription status (PENDING → VERIFIED → DISPENSED).
      */
     public void updateStatus(int prescriptionId, String newStatus) throws SQLException {

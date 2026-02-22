@@ -83,6 +83,12 @@
                             <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
                         </columnResizePolicy>
                     </TableView>
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="lblHistoryPageInfo" text="Rows 0-0 of 0 (Page 1/1)"/>
+                        <Button fx:id="btnHistoryPrev" text="Prev" onAction="#handleHistoryPrevPage"/>
+                        <Button fx:id="btnHistoryNext" text="Next" onAction="#handleHistoryNextPage"/>
+                    </HBox>
                 </VBox>
             </Tab>
 

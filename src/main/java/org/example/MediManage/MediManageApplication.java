@@ -12,6 +12,10 @@ import javafx.application.Platform;
 import javafx.scene.text.Font;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.paint.Color;
+import org.example.MediManage.security.LocalAdminTokenManager;
+import org.example.MediManage.util.AppExecutors;
+
+import java.util.concurrent.TimeUnit;
 
 public class MediManageApplication extends Application {
 
@@ -57,7 +61,7 @@ public class MediManageApplication extends Application {
         }
 
         private void startPythonServer() {
-                new Thread(() -> {
+                AppExecutors.runBackground(() -> {
                         try {
                                 // Check if port 5000 is already in use (Server running)
                                 try (java.net.Socket ignored = new java.net.Socket("127.0.0.1", 5000)) {
@@ -149,11 +153,13 @@ public class MediManageApplication extends Application {
                                 System.out.println("🚀 Starting AI Engine (server.py)...");
                                 ProcessBuilder pb = new ProcessBuilder(pythonExe, "ai_engine/server.py");
                                 pb.redirectErrorStream(true);
+                                pb.environment().put(LocalAdminTokenManager.ENV_NAME,
+                                                LocalAdminTokenManager.getOrCreateToken());
 
                                 pythonProcess = pb.start();
 
                                 // Add Shutdown Hook
-                                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                                Runtime.getRuntime().addShutdownHook(AppExecutors.newThread("jvm-shutdown-hook", () -> {
                                         if (pythonProcess != null && pythonProcess.isAlive()) {
                                                 System.out.println("🛑 JVM Shutdown Hook: Killing AI Engine...");
                                                 pythonProcess.destroyForcibly();
@@ -162,7 +168,7 @@ public class MediManageApplication extends Application {
                                                 System.out.println("🛑 JVM Shutdown Hook: Killing MCP Server...");
                                                 mcpProcess.destroyForcibly();
                                         }
-                                }));
+                                }, false));
 
                                 // Consume output — close popup once server is ready
                                 java.io.BufferedReader reader = new java.io.BufferedReader(
@@ -183,13 +189,9 @@ public class MediManageApplication extends Application {
                                                         startupPopup.appendLog(
                                                                         "✅ Setup complete! This window will close shortly.");
                                                         // Auto-close after 2 seconds
-                                                        new Thread(() -> {
-                                                                try {
-                                                                        Thread.sleep(2000);
-                                                                } catch (InterruptedException ignored) {
-                                                                }
-                                                                closeStartupPopup();
-                                                        }).start();
+                                                        AppExecutors.schedule(() -> Platform.runLater(this::closeStartupPopup),
+                                                                        2,
+                                                                        TimeUnit.SECONDS);
                                                 }
                                                 popupClosed = true;
 
@@ -205,7 +207,7 @@ public class MediManageApplication extends Application {
                                         startupPopup.setStatus("❌ Failed to start AI Engine");
                                 }
                         }
-                }).start();
+                });
         }
 
         private void closeStartupPopup() {
@@ -220,13 +222,14 @@ public class MediManageApplication extends Application {
          * Called from SettingsController when user switches environment.
          */
         public void restartServer() {
-                new Thread(() -> {
+                AppExecutors.runBackground(() -> {
                         System.out.println("🔄 Restarting AI Engine...");
                         if (pythonProcess != null && pythonProcess.isAlive()) {
                                 pythonProcess.destroyForcibly();
                                 try {
                                         pythonProcess.waitFor();
                                 } catch (InterruptedException ignored) {
+                                        Thread.currentThread().interrupt();
                                 }
                                 System.out.println("🛑 Old AI Engine stopped.");
                         }
@@ -235,11 +238,12 @@ public class MediManageApplication extends Application {
                                 try {
                                         mcpProcess.waitFor();
                                 } catch (InterruptedException ignored) {
+                                        Thread.currentThread().interrupt();
                                 }
                                 System.out.println("🛑 Old MCP Server stopped.");
                         }
                         startPythonServer();
-                }).start();
+                });
         }
 
         /**
@@ -247,7 +251,7 @@ public class MediManageApplication extends Application {
          * Uses the same Python environment as the AI Engine.
          */
         private void startMcpServer(String pythonExe) {
-                new Thread(() -> {
+                AppExecutors.runBackground(() -> {
                         try {
                                 // Check if port 5001 already in use
                                 try (java.net.Socket ignored = new java.net.Socket("127.0.0.1", 5001)) {
@@ -272,7 +276,7 @@ public class MediManageApplication extends Application {
                         } catch (Exception e) {
                                 System.err.println("⚠️ MCP Server failed to start: " + e.getMessage());
                         }
-                }, "mcp-server-thread").start();
+                });
         }
 
         private void showLoginScreen(Stage stage) {
@@ -337,6 +341,8 @@ public class MediManageApplication extends Application {
                                                 .toURL()
                                                 .openConnection();
                                 conn.setRequestMethod("POST");
+                                conn.setRequestProperty(LocalAdminTokenManager.HEADER_NAME,
+                                                LocalAdminTokenManager.getOrCreateToken());
                                 conn.getInputStream();
                                 System.out.println("🛑 Sent shutdown signal to existing AI Engine.");
                         } catch (Exception e) {
@@ -344,6 +350,7 @@ public class MediManageApplication extends Application {
                         }
                 }
                 org.example.MediManage.service.DatabaseService.shutdown();
+                AppExecutors.shutdown();
                 Platform.exit();
                 System.exit(0);
         }
