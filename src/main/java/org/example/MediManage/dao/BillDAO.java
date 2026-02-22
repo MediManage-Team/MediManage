@@ -18,6 +18,17 @@ public class BillDAO {
     public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
             String paymentMode)
             throws SQLException {
+        return generateInvoice(totalAmount, items, customerId, userId, paymentMode, null);
+    }
+
+    public int generateInvoice(
+            double totalAmount,
+            List<BillItem> items,
+            Integer customerId,
+            Integer userId,
+            String paymentMode,
+            SubscriptionInvoiceContext subscriptionContext)
+            throws SQLException {
         Connection conn = null;
         int billId = -1;
         try {
@@ -35,7 +46,11 @@ public class BillDAO {
                 }
             }
 
-            String billSql = "INSERT INTO bills (total_amount, bill_date, customer_id, user_id, payment_mode) VALUES (?, ?, ?, ?, ?)";
+            String billSql = "INSERT INTO bills (" +
+                    "total_amount, bill_date, customer_id, user_id, payment_mode, " +
+                    "subscription_enrollment_id, subscription_plan_id, subscription_discount_percent, " +
+                    "subscription_savings_amount, subscription_approval_reference" +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
                 String now = java.time.LocalDateTime.now()
@@ -44,6 +59,11 @@ public class BillDAO {
                 psBill.setObject(3, customerId); // setInt can't handle null, setObject can
                 psBill.setObject(4, userId);
                 psBill.setString(5, paymentMode != null ? paymentMode : "CASH");
+                psBill.setObject(6, subscriptionContext != null ? subscriptionContext.subscriptionEnrollmentId() : null);
+                psBill.setObject(7, subscriptionContext != null ? subscriptionContext.subscriptionPlanId() : null);
+                psBill.setDouble(8, subscriptionContext != null ? subscriptionContext.subscriptionDiscountPercent() : 0.0);
+                psBill.setDouble(9, subscriptionContext != null ? subscriptionContext.subscriptionSavingsAmount() : 0.0);
+                psBill.setString(10, subscriptionContext != null ? subscriptionContext.subscriptionApprovalReference() : null);
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -51,7 +71,10 @@ public class BillDAO {
                 }
             }
 
-            String itemSql = "INSERT INTO bill_items (bill_id, medicine_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)";
+            String itemSql = "INSERT INTO bill_items (" +
+                    "bill_id, medicine_id, quantity, price, total, " +
+                    "subscription_discount_percent, subscription_discount_amount, subscription_rule_source" +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
             String stockSql = "UPDATE stock SET quantity = quantity - ? WHERE medicine_id = ?";
 
             try (PreparedStatement psItem = conn.prepareStatement(itemSql);
@@ -63,6 +86,9 @@ public class BillDAO {
                     psItem.setInt(3, item.getQty());
                     psItem.setDouble(4, item.getPrice());
                     psItem.setDouble(5, item.getTotal());
+                    psItem.setDouble(6, item.getSubscriptionDiscountPercent());
+                    psItem.setDouble(7, item.getSubscriptionDiscountAmount());
+                    psItem.setString(8, item.getSubscriptionRuleSource());
                     psItem.addBatch();
 
                     psStock.setInt(1, item.getQty());
@@ -103,6 +129,14 @@ public class BillDAO {
             }
         }
         return billId;
+    }
+
+    public record SubscriptionInvoiceContext(
+            Integer subscriptionEnrollmentId,
+            Integer subscriptionPlanId,
+            double subscriptionDiscountPercent,
+            double subscriptionSavingsAmount,
+            String subscriptionApprovalReference) {
     }
 
     public double getDailySales() {

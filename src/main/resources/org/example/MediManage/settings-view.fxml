@@ -48,7 +48,7 @@
                 </VBox>
 
                 <HBox alignment="CENTER_RIGHT" spacing="10">
-                    <Button text="Migrate SQLite → PostgreSQL" onAction="#handleMigrateSqliteToPostgres" styleClass="button-purple"/>
+                    <Button fx:id="migrateSqliteToPostgresButton" text="Migrate SQLite → PostgreSQL" onAction="#handleMigrateSqliteToPostgres" styleClass="button-purple"/>
                     <Button text="Test Database Connection" onAction="#handleTestDatabaseConnection" styleClass="button-outlined"/>
                 </HBox>
             </VBox>
@@ -122,7 +122,7 @@
                 </GridPane>
 
                 <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
-                    <Button text="Save Settings" onAction="#handleSaveSettings" styleClass="button-success"/>
+                    <Button fx:id="saveSettingsButton" text="Save Settings" onAction="#handleSaveSettings" styleClass="button-success"/>
                 </HBox>
             </VBox>
         </TitledPane>

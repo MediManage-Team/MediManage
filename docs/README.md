@@ -19,6 +19,10 @@ docs/
 │   └── uploaded_image_4_*.png  # Domain Model Class Diagram
 ├── ARCHITECTURE.md         # System architecture overview
 ├── DATABASE.md            # Database schema and design
+├── IMPLEMENTATION_ROADMAP.md # Subscription commerce TODO backlog
+├── PHASE_0_FOUNDATION_GOVERNANCE.md # Active governance baseline and acceptance criteria
+├── SUBSCRIPTION_GOVERNANCE_SPEC.md # Permission matrix and approval workflow draft
+├── SUBSCRIPTION_SCHEMA_MIGRATION_PLAN.md # Subscription DB schema/migration notes
 ├── MIGRATION_ROLLBACK_RUNBOOK.md  # Backend migration/rollback steps
 └── README.md              # This file
 ```
@@ -63,6 +67,27 @@ Start here to understand the project:
    - Backend switch controls
    - Cutover checklist
    - Rollback procedure
+
+7. **[PHASE_0_FOUNDATION_GOVERNANCE.md](./PHASE_0_FOUNDATION_GOVERNANCE.md)** - Active roadmap governance baseline
+   - Phase 0 requirements and acceptance criteria
+   - Central RBAC policy matrix
+   - Feature flag catalog and rollout controls
+   - Exit criteria for foundation completion
+
+8. **[IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md)** - Subscription Commerce delivery TODO
+   - Phase 1 functional backlog and governance gates
+   - AI extension backlog for subscription intelligence
+   - Weekly operations analytics panel implementation checklist
+
+9. **[SUBSCRIPTION_GOVERNANCE_SPEC.md](./SUBSCRIPTION_GOVERNANCE_SPEC.md)** - Draft governance contract for Phase 1
+   - Role permission matrix for subscription operations
+   - Approval flows for policy changes, overrides, backdated enrollment
+   - Open decisions pending stakeholder confirmation
+
+10. **[SUBSCRIPTION_SCHEMA_MIGRATION_PLAN.md](./SUBSCRIPTION_SCHEMA_MIGRATION_PLAN.md)** - DB implementation baseline for subscription module
+   - New tables and extended billing columns
+   - Migration mechanics for existing installs
+   - Rollback approach and integrity notes
 
 ### For Project Reviews & Presentations
 

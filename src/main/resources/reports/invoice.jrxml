@@ -6,6 +6,9 @@
     <parameter name="TotalAmount" class="java.lang.Double"/>
 
     <parameter name="CareProtocol" class="java.lang.String"/>
+    <parameter name="SubscriptionPlanName" class="java.lang.String"/>
+    <parameter name="SubscriptionSavings" class="java.lang.Double"/>
+    <parameter name="SubscriptionDiscountPercent" class="java.lang.Double"/>
 
     <field name="name" class="java.lang.String"/>
     <field name="qty" class="java.lang.Integer"/>
@@ -92,12 +95,33 @@
                 <textFieldExpression><![CDATA["Total: " + String.format("%.2f", $P{TotalAmount})]]></textFieldExpression>
             </textField>
 
+            <textField>
+                <reportElement x="0" y="10" width="340" height="20"/>
+                <textFieldExpression><![CDATA[$P{SubscriptionPlanName} == null || $P{SubscriptionPlanName}.trim().isEmpty()
+? ""
+: "Subscription Plan: " + $P{SubscriptionPlanName}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement x="0" y="30" width="340" height="20"/>
+                <textFieldExpression><![CDATA[$P{SubscriptionSavings} == null || $P{SubscriptionSavings}.doubleValue() <= 0
+? ""
+: "Subscription Savings: " + String.format("%.2f", $P{SubscriptionSavings})]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement x="0" y="50" width="340" height="20"/>
+                <textFieldExpression><![CDATA[$P{SubscriptionDiscountPercent} == null || $P{SubscriptionDiscountPercent}.doubleValue() <= 0
+? ""
+: "Subscription Discount %: " + String.format("%.2f", $P{SubscriptionDiscountPercent})]]></textFieldExpression>
+            </textField>
+
             <line>
-                <reportElement x="0" y="50" width="555" height="1"/>
+                <reportElement x="0" y="75" width="555" height="1"/>
             </line>
 
             <staticText>
-                <reportElement x="0" y="60" width="555" height="20"/>
+                <reportElement x="0" y="85" width="555" height="20"/>
                 <textElement>
                     <font size="12" isBold="true"/>
                 </textElement>
@@ -105,7 +129,7 @@
             </staticText>
 
             <textField textAdjust="StretchHeight">
-                <reportElement x="0" y="85" width="555" height="300"/>
+                <reportElement x="0" y="110" width="555" height="275"/>
                 <textElement>
                     <font size="10"/>
                 </textElement>

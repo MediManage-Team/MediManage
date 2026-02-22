@@ -2,8 +2,8 @@ package org.example.MediManage.dao;
 
 import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.Medicine;
-import org.example.MediManage.model.UserRole;
-import org.example.MediManage.util.UserSession;
+import org.example.MediManage.security.Permission;
+import org.example.MediManage.security.RbacPolicy;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -15,11 +15,7 @@ public class MedicineDAO {
     private static final int MAX_PAGE_SIZE = 200;
 
     private void checkManagerPermission() {
-        if (!UserSession.getInstance().isLoggedIn() ||
-                !(UserSession.getInstance().getUser().getRole() == UserRole.ADMIN ||
-                        UserSession.getInstance().getUser().getRole() == UserRole.MANAGER)) {
-            throw new SecurityException("Access Denied: Only ADMIN or MANAGER can perform this action.");
-        }
+        RbacPolicy.requireCurrentUser(Permission.MANAGE_MEDICINES);
     }
 
     public List<Medicine> getAllMedicines() {

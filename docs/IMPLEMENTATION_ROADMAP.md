@@ -1,123 +1,103 @@
-# MediManage Implementation Roadmap (No Jira Required)
+# TODO - Subscription Discount Module (Current Focus)
 
-This roadmap converts the architecture/security/performance analysis into a direct execution plan.
+Status date: 2026-02-22  
+Scope: Apollo/MedPlus-style subscription discounts with Manager/Admin governance.
 
-## Priority Order
+## 1) Requirements and Governance
+- [ ] Finalize plan rules: duration, price, renewal behavior, grace period, and cancellation/refund policy.
+- [ ] Freeze eligibility rules (medicine/category include/exclude lists, minimum margin floor, max discount caps).
+- [ ] Define exact permission matrix for `Admin`, `Manager`, `Pharmacist`, `Cashier`.
+- [ ] Define approval policy for plan changes, overrides, and backdated enrollment.
+- [ ] Add release feature flag for staged rollout.
 
-1. Phase 0: DevOps Baseline
-2. Phase 1: Security Hardening
-3. Phase 2: Architecture Refactor
-4. Phase 3: Performance Optimization
-5. Phase 4: AI Integration Hardening
-6. Phase 5: UI/UX Consistency
-7. Phase 6: Feature Completion
-8. Phase 7: Scalability Evolution
+## 2) Data Model and Migration
+- [x] Create tables/entities for subscription plans, enrollments, renewals, and membership status history.
+- [x] Create rule tables for category-level and medicine-level discount applicability.
+- [x] Create override and approval tables with reason, approver, timestamp, and checksum.
+- [x] Add immutable audit log table for all policy and discount actions.
+- [x] Write DB migration scripts and rollback plan.
 
-## Phase 0: DevOps Baseline (Sprint 1)
+## 3) Backend Services
+- [x] Implement plan management service (create/update/activate/pause/retire).
+- [x] Implement enrollment service (new, renewal, upgrade/downgrade, freeze/unfreeze, cancel).
+- [x] Implement discount evaluation engine (eligibility + caps + margin protection).
+- [x] Integrate auto-apply discount into billing pipeline.
+- [x] Implement manager/admin override endpoint with mandatory reason capture.
+- [x] Add API validation and error codes for expired/ineligible subscriptions.
 
-Goal: Stable build/test/release loop.
+## 4) RBAC and Security Controls
+- [x] Restrict plan/rule/override admin operations to `Manager` and `Admin`.
+- [x] Add two-step confirmation for sensitive rule updates.
+- [x] Enforce tamper-evident audit logging for all discount policy changes.
+- [ ] Add alerting for unusual override frequency.
 
-- Add CI pipeline for build + tests + lint.
-- Align runtime versions across `README.md`, `pom.xml`, scripts, installer config.
-- Add baseline structured logging for Java and Python services.
-- Add deterministic local test harness (DB + AI stubs where needed).
+## 5) UI/UX Implementation
+- [x] Build Manager/Admin screens for plan catalog and discount rule configuration.
+- [x] Build customer enrollment and renewal workflow screens.
+- [x] Update billing screen to show real-time subscription discount breakdown.
+- [x] Update invoice print/view templates with plan name, discount %, and savings amount.
+- [x] Add override modal with approval capture and reason input.
 
-Definition of Done:
-- Every PR has automated checks.
-- Build is reproducible on a clean machine.
-- Logs are usable for troubleshooting.
+## 6) Reporting and Monitoring
+- [ ] Add dashboard tiles: active subscribers, renewals due, discount value, override count.
+- [ ] Add reports for plan-wise revenue impact and discount leakage.
+- [ ] Add rejected override attempts report for compliance review.
 
-## Phase 1: Security Hardening (Sprint 2)
+## 7) Testing and QA
+- [x] Unit tests for discount engine edge cases (caps, exclusions, margin floor, expiry).
+- [x] Integration tests for end-to-end billing with and without active subscription.
+- [x] Permission tests to verify non-manager/admin roles are blocked.
+- [ ] Regression tests for invoice totals and tax calculations after discount.
+- [ ] UAT checklist with pharmacy operations team.
 
-Goal: Remove major credential/secrets risk.
+## 8) Release and Rollout
+- [ ] Enable feature behind flag for pilot store/users only.
+- [ ] Run pilot with monitoring for pricing errors and override abuse.
+- [ ] Collect feedback and fix issues from pilot.
+- [ ] Roll out to all stores with rollback checklist ready.
 
-- Migrate auth to hashed passwords (bcrypt), with compatibility migration for existing users.
-- Remove plaintext password exposure from UI and DAO flows.
-- Move cloud API keys from plain preferences to secure OS-backed storage.
-- Protect localhost AI admin/destructive endpoints with token-based checks.
+## 9) AI Implementations (Extra)
+- [ ] Add AI plan recommendation engine based on customer purchase history, refill behavior, and expected savings.
+- [ ] Add AI renewal propensity scoring to identify members likely to churn before renewal date.
+- [ ] Add AI discount abuse detection for suspicious enrollment, override, and billing patterns.
+- [ ] Add AI override risk scoring to assist Manager/Admin before approving manual discount exceptions.
+- [ ] Add AI dynamic offer suggestions with guardrails (never exceed configured discount cap and margin floor).
+- [ ] Add AI anomaly alerts for sudden spikes in subscription-linked discount leakage.
+- [ ] Add conversational assistant for staff to explain why a discount was applied or rejected.
+- [ ] Add multilingual AI explanation snippets on invoice/checkout for subscription savings transparency.
+- [ ] Add model monitoring dashboard (precision/recall for abuse detection, recommendation acceptance rate).
+- [ ] Add fallback rules engine path when AI is unavailable to ensure checkout continuity.
 
-Definition of Done:
-- No plaintext credential storage/query path remains.
-- API keys are not stored in plain text in app settings.
-- Local AI service rejects unauthorized admin calls.
+## 10) AI Safety, Compliance, and Quality
+- [ ] Define approved data fields for AI features and block sensitive unnecessary fields from model input.
+- [ ] Add PII masking/tokenization pipeline before AI inference where applicable.
+- [ ] Add human-in-the-loop requirement for high-risk AI suggestions (override approval stays Manager/Admin owned).
+- [ ] Add prompt/version registry with change tracking and rollback support.
+- [ ] Add AI decision logging with clear reason codes for audit and post-incident review.
+- [ ] Create test set for fairness and bias checks across customer groups.
+- [ ] Add offline evaluation benchmarks before enabling each AI feature in production.
+- [ ] Add incident runbook for AI misclassification, drift, or service outage.
 
-## Phase 2: Architecture Refactor (Sprint 3)
+## 11) Week-Wise Data Analysis and Summary Panels
+- [ ] Define weekly reporting window rules (default Monday-Sunday, store timezone aware).
+- [ ] Build weekly analytics aggregation jobs and materialized summary tables.
+- [ ] Add `Expiry Medicines` panel with buckets: already expired, 0-30 days, 31-60 days, 61-90 days.
+- [ ] Add `Out of Stock` panel with SKU count, days out-of-stock, and revenue impact estimate.
+- [ ] Add `Near Stock-Out` panel using reorder threshold and average daily consumption.
+- [ ] Add `Dead Stock` panel (no movement in configurable N days).
+- [ ] Add `Fast-Moving` panel with top SKUs by quantity and revenue.
+- [ ] Add `Return/Damaged` panel with quantity, value, and root-cause tags.
+- [ ] Add `Sales and Margin` weekly summary panel (gross sales, net sales, gross margin, discount burn).
+- [ ] Add `Subscription Impact` weekly panel (members billed, savings given, renewal due, override count).
+- [ ] Add role-based filters for store, date range, medicine category, and supplier.
+- [ ] Add one-click export (PDF/Excel/CSV) and scheduled email/WhatsApp report dispatch.
+- [ ] Add drill-down from each panel to medicine-level and batch-level details.
+- [ ] Add weekly anomaly alerts for sudden expiry spikes, stock-outs, and unusual discount leakage.
+- [ ] Add Manager/Admin action tracker: owner, due date, and closure status for each alert.
 
-Goal: Reduce controller complexity and coupling.
-
-- Introduce application service layer for billing, inventory, customers, prescriptions.
-- Remove DAO-to-UI coupling (DAO must not return controller DTO classes).
-- Replace scattered ad-hoc threads with managed executors.
-- Add integration tests for transactional workflows.
-
-Definition of Done:
-- Controllers are thinner and mostly orchestration/UI.
-- Service boundaries are explicit and testable.
-
-## Phase 3: Performance Optimization (Sprint 4)
-
-Goal: Keep UI responsive for larger datasets.
-
-- Move heavy screens to paginated data loading (inventory/history).
-- Cap and paginate history queries.
-- Tune SQL/indexes based on measured query plans.
-- Add KPI caching with explicit invalidation rules.
-
-Definition of Done:
-- No large full-table UI loads on open.
-- Measurable load-time improvement on dashboard/history/inventory.
-
-## Phase 4: AI Integration Hardening (Sprint 5)
-
-Goal: Reliable and maintainable AI behavior.
-
-- Route all AI calls through one orchestration path.
-- Centralize prompts/templates.
-- Fix MCP schema mismatches and add contract tests.
-- Remove blocking fallback patterns in async AI flows.
-
-Definition of Done:
-- AI behavior is predictable across screens.
-- MCP tools are schema-compatible and test-covered.
-
-## Phase 5: UI/UX Consistency (Sprint 6, part A)
-
-Goal: Improve workflow clarity and reduce UI drift.
-
-- Reduce inline styles; standardize on shared style classes.
-- Standardize loading/error/retry UX patterns across screens.
-- Improve operator speed in frequent flows (billing, customer lookup, inventory edit).
-
-Definition of Done:
-- Core screens follow one UX language.
-- Async operations give consistent feedback.
-
-## Phase 6: Feature Completion (Sprint 6, part B)
-
-Goal: Resolve known partial/placeholder behaviors.
-
-- Complete report/module placeholders.
-- Replace sample/placeholder medicine detail outputs with real data.
-- Close known TODO/Coming Soon gaps tied to user-facing flows.
-
-Definition of Done:
-- No user-facing placeholders remain in core modules.
-
-## Phase 7: Scalability Evolution (Sprint 7+)
-
-Goal: Prepare growth path beyond single-machine SQLite constraints.
-
-- Create architecture decision record: desktop-only vs hybrid server model.
-- Introduce repository abstraction supporting SQLite now and server DB later.
-- Build focused multi-user proof of concept for selected modules.
-- Write migration/rollout/rollback runbook.
-
-Definition of Done:
-- Team can choose and execute a safe scaling path without a full rewrite.
-
-## Release Gates
-
-- Gate A (after Phase 1): Security baseline complete.
-- Gate B (after Phase 4): Architecture/performance/AI reliability baseline complete.
-- Gate C (after Phase 7): Scalability strategy validated.
-
+## Immediate Next 5 Tasks
+- [ ] Confirm permission matrix and approval workflow with stakeholders.
+- [x] Design and review DB schema + migrations.
+- [x] Implement discount evaluation engine in service layer.
+- [x] Integrate auto-discount at checkout and invoice breakdown.
+- [ ] Ship first QA cycle for pilot release.

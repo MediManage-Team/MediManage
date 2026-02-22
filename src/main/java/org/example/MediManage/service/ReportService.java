@@ -20,6 +20,18 @@ public class ReportService {
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
             String careProtocol)
             throws JRException {
+        generateInvoicePDF(items, totalAmount, customerName, filePath, careProtocol, "", 0.0, 0.0);
+    }
+
+    public void generateInvoicePDF(
+            List<BillItem> items,
+            double totalAmount,
+            String customerName,
+            String filePath,
+            String careProtocol,
+            String subscriptionPlanName,
+            double subscriptionSavings,
+            double subscriptionDiscountPercent) throws JRException {
         // Load Template
         InputStream reportStream = getClass().getResourceAsStream("/reports/invoice.jrxml");
         if (reportStream == null) {
@@ -43,6 +55,9 @@ public class ReportService {
         // We will pass it. If the user wants it VISIBLE, they need to update JRXML.
         // However, we can also use a "Summary" band if available.
         parameters.put("CareProtocol", careProtocol);
+        parameters.put("SubscriptionPlanName", subscriptionPlanName == null ? "" : subscriptionPlanName);
+        parameters.put("SubscriptionSavings", subscriptionSavings);
+        parameters.put("SubscriptionDiscountPercent", subscriptionDiscountPercent);
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);

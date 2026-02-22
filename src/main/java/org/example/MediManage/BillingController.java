@@ -8,6 +8,8 @@ import javafx.application.Platform;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
@@ -23,6 +25,9 @@ public class BillingController {
     private static final String CHECKOUT_BUSY_LABEL = "Generating Care Protocol...";
     private static final String CARE_PROTOCOL_READY_LABEL = "✨ Generate Care Protocol";
     private static final String CARE_PROTOCOL_BUSY_LABEL = "⏳ Generating...";
+    private static final String OVERRIDE_REQUEST_READY_LABEL = "Request Discount Override";
+    private static final String OVERRIDE_REQUESTED_BUTTON_LABEL = "Override Requested";
+    private static final String OVERRIDE_DEFAULT_STATUS = "No override requested for current bill.";
 
     @FXML
     private TableView<BillItem> billingTable;
@@ -57,6 +62,10 @@ public class BillingController {
     private javafx.scene.layout.VBox careProtocolContainer;
     @FXML
     private Button btnGenerateCareProtocol;
+    @FXML
+    private Button btnRequestOverride;
+    @FXML
+    private Label lblOverrideStatus;
 
     private final BillingService billingService = new BillingService();
 
@@ -65,6 +74,7 @@ public class BillingController {
     private Customer selectedCustomer = null;
     private Medicine selectedMedicine = null;
     private boolean keyboardShortcutsRegistered = false;
+    private BillingService.OverrideRequestSummary pendingOverrideRequest = null;
 
     @FXML
     public void initialize() {
@@ -82,6 +92,8 @@ public class BillingController {
         setupKeyBindings();
         setupGlobalShortcuts();
         applyCustomerNameStyle(false);
+        applyOverrideFeatureGuards();
+        updateOverrideUiState();
     }
 
     // Auto-complete logic for Medicine Search
@@ -211,6 +223,66 @@ public class BillingController {
         lblCustomerName.getStyleClass().add(selected ? CUSTOMER_NAME_SELECTED_CLASS : CUSTOMER_NAME_MUTED_CLASS);
     }
 
+    private void applyOverrideFeatureGuards() {
+        boolean enabled = billingService.isManualOverrideRequestEnabled();
+        boolean allowedForRole = billingService.canCurrentUserRequestManualOverride();
+        boolean visible = enabled && allowedForRole;
+        if (btnRequestOverride != null) {
+            btnRequestOverride.setManaged(visible);
+            btnRequestOverride.setVisible(visible);
+        }
+        if (lblOverrideStatus != null) {
+            lblOverrideStatus.setManaged(visible || enabled || !allowedForRole);
+            lblOverrideStatus.setVisible(visible || enabled || !allowedForRole);
+            if (!enabled) {
+                lblOverrideStatus.setText("Subscription override requests are disabled.");
+            } else if (!allowedForRole) {
+                lblOverrideStatus.setText("Your role cannot request subscription overrides.");
+            }
+        }
+    }
+
+    private void clearPendingOverrideRequest(String reason) {
+        pendingOverrideRequest = null;
+        if (lblOverrideStatus != null && reason != null && !reason.isBlank()) {
+            lblOverrideStatus.setText(reason);
+        }
+        updateOverrideUiState();
+    }
+
+    private void updateOverrideUiState() {
+        if (btnRequestOverride == null || !btnRequestOverride.isVisible()) {
+            return;
+        }
+        boolean canRequest = selectedCustomer != null && !billList.isEmpty() && pendingOverrideRequest == null;
+        btnRequestOverride.setDisable(!canRequest);
+        if (pendingOverrideRequest == null) {
+            btnRequestOverride.setText(OVERRIDE_REQUEST_READY_LABEL);
+            if (lblOverrideStatus != null
+                    && (lblOverrideStatus.getText() == null
+                            || lblOverrideStatus.getText().isBlank()
+                            || OVERRIDE_REQUESTED_BUTTON_LABEL.equals(lblOverrideStatus.getText()))) {
+                lblOverrideStatus.setText(OVERRIDE_DEFAULT_STATUS);
+            }
+            return;
+        }
+
+        btnRequestOverride.setText(OVERRIDE_REQUESTED_BUTTON_LABEL);
+        if (lblOverrideStatus != null) {
+            String enrollmentText = pendingOverrideRequest.enrollmentId() == null
+                    ? "no active enrollment"
+                    : "enrollment #" + pendingOverrideRequest.enrollmentId();
+            lblOverrideStatus.setText(
+                    "Pending override #"
+                            + pendingOverrideRequest.overrideId()
+                            + " requested at "
+                            + String.format("%.2f", pendingOverrideRequest.requestedDiscountPercent())
+                            + "% ("
+                            + enrollmentText
+                            + ").");
+        }
+    }
+
     @FXML
     private void handleCustomerSearch() {
         String q = txtSearchCustomer.getText();
@@ -230,12 +302,14 @@ public class BillingController {
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText(selectedCustomer.getPhone());
             applyCustomerNameStyle(true);
+            clearPendingOverrideRequest(OVERRIDE_DEFAULT_STATUS);
         } else {
             lblCustomerName.setText("Not Found (Walk-in)");
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText("-");
             applyCustomerNameStyle(false);
             selectedCustomer = null;
+            clearPendingOverrideRequest(OVERRIDE_DEFAULT_STATUS);
         }
     }
 
@@ -264,6 +338,7 @@ public class BillingController {
                             lblCustomerPhone.setText(selectedCustomer.getPhone());
                         applyCustomerNameStyle(true);
                         txtSearchCustomer.setText(phone);
+                        clearPendingOverrideRequest(OVERRIDE_DEFAULT_STATUS);
                     }
                 } catch (Exception e) {
                     showAlert(Alert.AlertType.ERROR, "Error", "Could not add customer: " + e.getMessage());
@@ -301,7 +376,12 @@ public class BillingController {
             billingTable.refresh();
         }
 
+        if (pendingOverrideRequest != null) {
+            clearPendingOverrideRequest("Pending override cleared because bill items changed. Request again if needed.");
+        }
+
         updateTotal();
+        updateOverrideUiState();
 
         // Reset Inputs
         selectedMedicine = null;
@@ -316,9 +396,64 @@ public class BillingController {
     }
 
     @FXML
+    private void handleRequestDiscountOverride() {
+        if (!billingService.isManualOverrideRequestEnabled()) {
+            showAlert(Alert.AlertType.WARNING, "Feature Disabled", "Override requests are disabled by feature flags.");
+            return;
+        }
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add bill items before requesting an override.");
+            return;
+        }
+        if (selectedCustomer == null) {
+            showAlert(Alert.AlertType.WARNING, "Customer Required",
+                    "Select a customer before requesting a discount override.");
+            return;
+        }
+        if (pendingOverrideRequest != null) {
+            showAlert(Alert.AlertType.INFORMATION, "Already Requested",
+                    "An override request is already pending for this bill context.");
+            return;
+        }
+
+        java.util.Optional<OverrideRequestInput> requestInput = showOverrideRequestDialog();
+        if (requestInput.isEmpty()) {
+            return;
+        }
+
+        try {
+            pendingOverrideRequest = billingService.requestManualDiscountOverride(
+                    selectedCustomer,
+                    requestInput.get().requestedPercent(),
+                    requestInput.get().reason());
+            updateOverrideUiState();
+            showAlert(Alert.AlertType.INFORMATION, "Override Requested",
+                    "Override request #" + pendingOverrideRequest.overrideId()
+                            + " submitted and pending Manager/Admin approval.");
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Override Request Failed", e.getMessage());
+        }
+    }
+
+    @FXML
     private void handleCheckout() {
         if (billList.isEmpty())
             return;
+
+        if (pendingOverrideRequest != null) {
+            Alert pending = new Alert(
+                    Alert.AlertType.CONFIRMATION,
+                    "Override request #" + pendingOverrideRequest.overrideId()
+                            + " is still pending approval.\nCheckout will proceed without that override unless already approved.\n\nContinue?",
+                    ButtonType.OK,
+                    ButtonType.CANCEL);
+            pending.setTitle("Pending Override");
+            pending.setHeaderText("Override not yet approved");
+            java.util.Optional<ButtonType> pendingDecision = pending.showAndWait();
+            if (pendingDecision.isEmpty() || pendingDecision.get() != ButtonType.OK) {
+                return;
+            }
+        }
 
         Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
 
@@ -363,7 +498,12 @@ public class BillingController {
 
                             showAlert(Alert.AlertType.INFORMATION, "Success",
                                     "Bill #" + checkoutResult.billId()
-                                            + " & Care Protocol Generated!\nSaved to: " + checkoutResult.pdfPath());
+                                            + " & Care Protocol Generated!\nSaved to: " + checkoutResult.pdfPath()
+                                            + (checkoutResult.subscriptionSavings() > 0.0
+                                                    ? "\nSubscription: " + checkoutResult.subscriptionPlanName()
+                                                            + " | Savings: ₹"
+                                                            + String.format("%.2f", checkoutResult.subscriptionSavings())
+                                                    : ""));
 
                             // Cleanup
                             billList.clear();
@@ -377,6 +517,7 @@ public class BillingController {
                             txtSearchCustomer.clear();
                             allMedicines.clear();
                             allMedicines.addAll(billingService.loadActiveMedicines());
+                            clearPendingOverrideRequest(OVERRIDE_DEFAULT_STATUS);
 
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -518,6 +659,75 @@ public class BillingController {
         careProtocolContainer.getChildren().add(footer);
     }
 
+    private java.util.Optional<OverrideRequestInput> showOverrideRequestDialog() {
+        Dialog<OverrideRequestInput> dialog = new Dialog<>();
+        dialog.setTitle("Request Discount Override");
+        dialog.setHeaderText("Manual override request (Manager/Admin approval required)");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        Label eligibilityLabel = new Label();
+        BillingService.OverrideRequestSummary existing = pendingOverrideRequest;
+        if (existing != null) {
+            eligibilityLabel.setText("Pending override already exists.");
+        } else {
+            org.example.MediManage.service.subscription.SubscriptionEligibilityResult eligibility = billingService
+                    .evaluateSubscriptionEligibility(selectedCustomer);
+            String enrollmentText = eligibility.eligible()
+                    ? "Active enrollment #" + eligibility.enrollmentId()
+                    : "No active enrollment";
+            eligibilityLabel.setText("Eligibility: " + eligibility.code().name() + " | " + enrollmentText);
+        }
+        eligibilityLabel.getStyleClass().add("text-muted");
+
+        TextField requestedPercentField = new TextField("10");
+        requestedPercentField.setPromptText("Requested discount %");
+        TextArea reasonArea = new TextArea();
+        reasonArea.setPromptText("Mandatory reason for override request");
+        reasonArea.setPrefRowCount(3);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(8);
+        grid.add(new Label("Requested %"), 0, 0);
+        grid.add(requestedPercentField, 1, 0);
+        grid.add(new Label("Reason"), 0, 1);
+        grid.add(reasonArea, 1, 1);
+
+        VBox content = new VBox(8, eligibilityLabel, grid);
+        dialog.getDialogPane().setContent(content);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != ButtonType.OK) {
+                return null;
+            }
+            String rawPercent = requestedPercentField.getText() == null ? "" : requestedPercentField.getText().trim();
+            String rawReason = reasonArea.getText() == null ? "" : reasonArea.getText().trim();
+            if (rawPercent.isEmpty()) {
+                throw new IllegalArgumentException("Requested discount percent is required.");
+            }
+            if (rawReason.isEmpty()) {
+                throw new IllegalArgumentException("Reason is mandatory.");
+            }
+            double requestedPercent;
+            try {
+                requestedPercent = Double.parseDouble(rawPercent);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Requested discount percent must be numeric.");
+            }
+            if (requestedPercent <= 0.0 || requestedPercent > 100.0) {
+                throw new IllegalArgumentException("Requested discount percent must be between 0 and 100.");
+            }
+            return new OverrideRequestInput(requestedPercent, rawReason);
+        });
+
+        try {
+            return dialog.showAndWait();
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.WARNING, "Validation Error", e.getMessage());
+            return java.util.Optional.empty();
+        }
+    }
+
     private javafx.scene.layout.VBox createSectionCard(String sectionKey, String content,
             java.util.Map<String, String[]> colorMap) {
         String[] colors = colorMap.getOrDefault(sectionKey, new String[] { "#bfc9e6", "#0f1724", "#2d3555" });
@@ -541,5 +751,8 @@ public class BillingController {
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.show();
+    }
+
+    private record OverrideRequestInput(double requestedPercent, String reason) {
     }
 }

@@ -4,6 +4,8 @@ import javafx.scene.control.Button;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import org.example.MediManage.config.FeatureFlag;
+import org.example.MediManage.config.FeatureFlags;
 import org.example.MediManage.model.UserRole;
 
 public class SidebarManager {
@@ -24,6 +26,10 @@ public class SidebarManager {
                     addButton(container, "👤 Users", "users-view", switcher);
                     addButton(container, "📦 Inventory", "inventory-view", switcher);
                     addButton(container, "📈 Reports", "reports-view", switcher);
+                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                        addButton(container, "🧾 Subscriptions", "subscription-admin-view", switcher);
+                        addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
+                    }
                     addButton(container, "💳 Billing", "billing-view", switcher);
                     addButton(container, "👥 Customers", "customers-view", switcher);
                     addButton(container, "⚙ Settings", "settings-view", switcher);
@@ -31,15 +37,25 @@ public class SidebarManager {
                 case MANAGER:
                     addButton(container, "📦 Inventory", "inventory-view", switcher);
                     addButton(container, "📈 Reports", "reports-view", switcher);
+                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                        addButton(container, "🧾 Subscriptions", "subscription-admin-view", switcher);
+                        addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
+                    }
                     addButton(container, "⚙ Settings", "settings-view", switcher);
                     break;
                 case PHARMACIST:
                     addButton(container, "🔍 Medicine Search", "medicine-search-view", switcher);
                     addButton(container, "📋 Prescriptions", "prescriptions-view", switcher);
+                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                        addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
+                    }
                     break;
                 case CASHIER:
                     addButton(container, "💳 Billing", "billing-view", switcher);
                     addButton(container, "👥 Customers", "customers-view", switcher);
+                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                        addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
+                    }
                     break;
                 case STAFF:
                     addButton(container, "💳 Billing", "billing-view", switcher);
@@ -48,8 +64,10 @@ public class SidebarManager {
             }
         }
 
-        // AI Assistant — available to ALL roles
-        addButton(container, "🤖 AI Assistant", "ai-view", switcher);
+        // AI Assistant — controlled by feature flag for staged rollouts
+        if (FeatureFlags.isEnabled(FeatureFlag.AI_ASSISTANT)) {
+            addButton(container, "🤖 AI Assistant", "ai-view", switcher);
+        }
 
         // Spacer to push Logout to bottom
         Region spacer = new Region();

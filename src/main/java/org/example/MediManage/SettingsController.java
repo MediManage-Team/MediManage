@@ -1,6 +1,7 @@
 package org.example.MediManage;
 
 import javafx.fxml.FXML;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
@@ -17,11 +18,16 @@ import java.util.prefs.Preferences;
 import org.json.JSONObject;
 
 import org.example.MediManage.config.DatabaseConfig;
+import org.example.MediManage.config.FeatureFlag;
+import org.example.MediManage.config.FeatureFlags;
 import org.example.MediManage.security.CloudApiKeyStore;
 import org.example.MediManage.security.LocalAdminTokenManager;
+import org.example.MediManage.security.Permission;
+import org.example.MediManage.security.RbacPolicy;
 import org.example.MediManage.service.DatabaseMigrationService;
 import org.example.MediManage.service.ai.CloudAIService;
 import org.example.MediManage.service.ai.AIServiceProvider;
+import org.example.MediManage.util.UserSession;
 import org.example.MediManage.util.AppExecutors;
 
 public class SettingsController {
@@ -45,6 +51,10 @@ public class SettingsController {
     private TextField postgresUserField;
     @FXML
     private PasswordField postgresPasswordField;
+    @FXML
+    private Button migrateSqliteToPostgresButton;
+    @FXML
+    private Button saveSettingsButton;
 
     // --- Local AI ---
     @FXML
@@ -124,6 +134,7 @@ public class SettingsController {
         // Environment list
         setupLogStreaming();
         loadEnvironmentList();
+        applyPhaseZeroGovernanceGuards();
     }
 
     private void setupDatabaseSettings() {
@@ -175,6 +186,9 @@ public class SettingsController {
 
     @FXML
     private void handleTestDatabaseConnection() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
         try {
             DatabaseConfig.ConnectionSettings dbSettings = buildDatabaseSettingsFromForm();
             DatabaseConfig.testConnection(dbSettings);
@@ -188,6 +202,14 @@ public class SettingsController {
 
     @FXML
     private void handleMigrateSqliteToPostgres() {
+        if (!FeatureFlags.isEnabled(FeatureFlag.POSTGRES_MIGRATION)) {
+            showAlert(Alert.AlertType.WARNING, "Migration Disabled",
+                    "SQLite to PostgreSQL migration is currently disabled by feature flag.");
+            return;
+        }
+        if (!enforcePermission(Permission.EXECUTE_DATABASE_MIGRATION)) {
+            return;
+        }
         try {
             if (!DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue())) {
                 showAlert(Alert.AlertType.WARNING, "Migration Not Available",
@@ -566,6 +588,9 @@ public class SettingsController {
 
     @FXML
     private void handleSaveSettings() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
         DatabaseConfig.ConnectionSettings dbSettings;
         try {
             dbSettings = buildDatabaseSettingsFromForm();
@@ -669,6 +694,36 @@ public class SettingsController {
                     }
                 });
             }
+        }
+    }
+
+    private boolean enforcePermission(Permission permission) {
+        try {
+            RbacPolicy.requireCurrentUser(permission);
+            return true;
+        } catch (SecurityException e) {
+            showAlert(Alert.AlertType.ERROR, "Access Denied", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean canCurrentUser(Permission permission) {
+        org.example.MediManage.model.User currentUser = UserSession.getInstance().getUser();
+        return currentUser != null && RbacPolicy.canAccess(currentUser.getRole(), permission);
+    }
+
+    private void applyPhaseZeroGovernanceGuards() {
+        boolean canManageSettings = canCurrentUser(Permission.MANAGE_SYSTEM_SETTINGS);
+        if (saveSettingsButton != null) {
+            saveSettingsButton.setDisable(!canManageSettings);
+        }
+
+        boolean migrationFlagEnabled = FeatureFlags.isEnabled(FeatureFlag.POSTGRES_MIGRATION);
+        boolean canMigrate = migrationFlagEnabled && canCurrentUser(Permission.EXECUTE_DATABASE_MIGRATION);
+        if (migrateSqliteToPostgresButton != null) {
+            migrateSqliteToPostgresButton.setManaged(migrationFlagEnabled);
+            migrateSqliteToPostgresButton.setVisible(migrationFlagEnabled);
+            migrateSqliteToPostgresButton.setDisable(!canMigrate);
         }
     }
 

@@ -1,72 +1,68 @@
 # MediManage Execution Tracker
 
-Use this file as your local backlog board.  
+Use this file as the active backlog board for the current roadmap in `PRESENT_DEVELOPMENT_PLAN.md`.
 Mark items with `[x]` when done.
 
-## Current Focus
+## Active Program (Roadmap v2)
 
-- [x] Phase 0: DevOps Baseline
-- [x] Phase 1: Security Hardening
-- [x] Phase 2: Architecture Refactor
+- [ ] Phase 0: Foundation and Governance
+- [ ] Phase 1: Subscription Commerce
+- [ ] Phase 2: Smart Billing Upgrade
+- [ ] Phase 3: Supplier and Procurement Core
+- [ ] Phase 4: Advanced Inventory Control
+- [ ] Phase 5: Clinical Safety Layer
+- [ ] Phase 6: Prescription Intelligence
+- [ ] Phase 7: Customer Care and Retention
+- [ ] Phase 8: Finance and Compliance
+- [ ] Phase 9: Analytics and Reporting
+- [ ] Phase 10: Security and Control
+- [ ] Phase 11: Scale and Integrations
+- [ ] Phase 12: AI and Experience Enhancements
 
-## Phase 0: DevOps Baseline
+## Phase 0: Foundation and Governance (In Progress)
 
-- [x] Add CI workflow (build + test + lint)
-- [x] Ensure tests run in clean environment
-- [x] Align version references across docs and build scripts
-- [x] Add structured logging baseline (Java + Python)
-- [x] Define release checklist (build, package, smoke test)
+Reference: `docs/PHASE_0_FOUNDATION_GOVERNANCE.md`
 
-## Phase 1: Security Hardening
+- [x] Define Phase 0 requirements and acceptance criteria
+- [x] Centralize RBAC policy and permission catalog
+- [x] Enforce RBAC in controlled DAO and settings operations
+- [x] Add feature-flag infrastructure and defaults
+- [x] Wire feature flags into migration control and AI sidebar visibility
+- [x] Link migration strategy and release checklist into governance pack
+- [ ] Complete team review/sign-off of Phase 0 governance doc
+- [ ] Confirm Phase 0 CI gate on all new tests
 
-- [x] Add password hashing migration strategy
-- [x] Implement hashed auth verification
-- [x] Remove plaintext password display in UI and DAO flows
-- [x] Move API key storage to secure OS credential store
-- [x] Protect local AI admin endpoints with auth token
+## Phase 1: Subscription Commerce (Backlog Ready)
 
-## Phase 2: Architecture Refactor
+Reference: `docs/IMPLEMENTATION_ROADMAP.md`
 
-- [x] Create app service layer for billing workflows
-- [x] Create app service layer for inventory workflows
-- [x] Create app service layer for customer workflows
-- [x] Remove DAO -> controller DTO coupling
-- [x] Replace ad-hoc `new Thread(...)` with managed executors
+- [x] Draft permission matrix and approval workflow (`docs/SUBSCRIPTION_GOVERNANCE_SPEC.md`)
+- [x] Design schema + migration artifacts (`docs/SUBSCRIPTION_SCHEMA_MIGRATION_PLAN.md`)
+- [x] Implement plan management and enrollment service baseline (`service/SubscriptionService`)
+- [x] Implement discount evaluation engine baseline (`service/subscription/SubscriptionDiscountEngine`)
+- [x] Integrate auto-discount in checkout + invoice metadata persistence
+- [x] Implement approval/override flow service with audit checksum chain (`service/SubscriptionApprovalService`)
+- [x] Add eligibility result codes for subscription validation (`SubscriptionEligibilityCode`)
+- [x] Add automated tests for discount, eligibility, permissions, and override approvals
+- [x] Build Manager/Admin subscription operations screen (plan catalog, medicine rules, pending override approvals)
+- [x] Build customer enrollment/renewal workflow screen (`subscription-enrollment-view`)
+- [x] Add two-step confirmation for sensitive rule updates + policy audit-chain hardening
+- [x] Add billing override request modal with mandatory reason + pending-state UX
+- [ ] Confirm permission matrix and approval workflow with stakeholders
+- [ ] Ship first QA cycle for pilot release
 
-## Phase 3: Performance Optimization
+## Legacy Program (Completed Baseline)
 
-- [x] Add paginated inventory queries to UI flows
-- [x] Add paginated bill history
-- [x] Cap heavy queries and add sensible defaults
-- [x] Tune indexes based on query plans
-- [x] Add KPI cache + invalidation
+Historical phases below were completed under the previous execution plan:
 
-## Phase 4: AI Integration Hardening
-
-- [x] Route all AI calls through one orchestrator path
-- [x] Centralize prompts/templates
-- [x] Fix MCP SQL/schema mismatches
-- [x] Add MCP contract tests
-- [x] Remove blocking async fallback patterns
-
-## Phase 5: UI/UX Consistency
-
-- [x] Reduce inline styles and standardize classes
-- [x] Normalize loading/error/retry UX
-- [x] Improve keyboard-first workflows in frequent screens
-
-## Phase 6: Feature Completion
-
-- [x] Resolve known placeholders in reports and model search
-- [x] Replace placeholder medicine detail data with real fields
-- [x] Close user-visible TODO/Coming Soon paths
-
-## Phase 7: Scalability Evolution
-
-- [x] Write architecture decision record (SQLite vs hybrid backend)
-- [x] Introduce storage abstraction for dual backend path
-- [x] Build multi-user PoC for 1-2 modules
-- [x] Write migration + rollback runbook
+- [x] DevOps Baseline
+- [x] Security Hardening
+- [x] Architecture Refactor
+- [x] Performance Optimization
+- [x] AI Integration Hardening
+- [x] UI/UX Consistency
+- [x] Feature Completion
+- [x] Scalability Evolution
 
 ## Weekly Cadence
 

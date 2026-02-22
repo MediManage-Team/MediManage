@@ -4,7 +4,8 @@ import org.example.MediManage.DatabaseUtil;
 import org.example.MediManage.model.User;
 import org.example.MediManage.model.UserRole;
 import org.example.MediManage.security.PasswordHasher;
-import org.example.MediManage.util.UserSession;
+import org.example.MediManage.security.Permission;
+import org.example.MediManage.security.RbacPolicy;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -135,10 +136,7 @@ public class UserDAO {
     }
 
     private void checkAdmin() {
-        if (!UserSession.getInstance().isLoggedIn()
-                || UserSession.getInstance().getUser().getRole() != UserRole.ADMIN) {
-            throw new SecurityException("Access Denied: Only administrators can perform this action.");
-        }
+        RbacPolicy.requireCurrentUser(Permission.MANAGE_USERS);
     }
 
     private void updatePasswordHash(Connection conn, int userId, String hashedPassword) throws SQLException {

@@ -88,6 +88,12 @@
                 </VBox>
             </TitledPane>
 
+            <VBox spacing="8" styleClass="billing-section">
+                <Label text="Subscription Override Request" styleClass="label-strong"/>
+                <Label fx:id="lblOverrideStatus" text="No override requested for current bill." styleClass="text-muted"/>
+                <Button fx:id="btnRequestOverride" text="Request Discount Override" onAction="#handleRequestDiscountOverride" maxWidth="Infinity" styleClass="button-outlined"/>
+            </VBox>
+
             <!-- Checkout Button -->
             <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success button-xl"/>
         </VBox>
