@@ -16,16 +16,20 @@ import org.example.MediManage.service.ai.AIServiceProvider;
 import org.example.MediManage.service.ai.CloudAIService;
 import org.example.MediManage.security.Permission;
 import org.example.MediManage.security.RbacPolicy;
+import org.example.MediManage.service.subscription.SubscriptionDiscountConversationAssistant;
 import org.example.MediManage.service.subscription.SubscriptionDiscountEngine;
 import org.example.MediManage.service.subscription.SubscriptionEligibilityCode;
 import org.example.MediManage.service.subscription.SubscriptionEligibilityResult;
+import org.example.MediManage.service.subscription.SubscriptionMultilingualExplanationService;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public class BillingService {
@@ -58,6 +62,22 @@ public class BillingService {
             String eligibilityMessage) {
     }
 
+    public record DiscountDecisionExplanation(
+            boolean discountApplied,
+            SubscriptionEligibilityCode eligibilityCode,
+            String summary,
+            List<String> talkingPoints) {
+    }
+
+    public record LocalizedDiscountExplanation(
+            String languageCode,
+            String languageName,
+            String snippet,
+            boolean aiTranslated,
+            boolean discountApplied,
+            SubscriptionEligibilityCode eligibilityCode) {
+    }
+
     private final MedicineDAO medicineDAO;
     private final CustomerDAO customerDAO;
     private final BillDAO billDAO;
@@ -68,6 +88,9 @@ public class BillingService {
     private final CloudAIService cloudService;
     private final SubscriptionDiscountEngine subscriptionDiscountEngine;
     private final SubscriptionApprovalService subscriptionApprovalService;
+    private final SubscriptionDiscountConversationAssistant discountConversationAssistant;
+    private final SubscriptionMultilingualExplanationService multilingualExplanationService;
+    private final BillingCareProtocolFallbackRulesEngine careProtocolFallbackRulesEngine;
 
     public BillingService() {
         this(
@@ -99,7 +122,9 @@ public class BillingService {
                 aiOrchestrator,
                 cloudService,
                 subscriptionDiscountEngine,
-                new SubscriptionApprovalService(subscriptionDAO));
+                new SubscriptionApprovalService(subscriptionDAO),
+                new SubscriptionDiscountConversationAssistant(),
+                new SubscriptionMultilingualExplanationService());
     }
 
     BillingService(
@@ -112,6 +137,60 @@ public class BillingService {
             CloudAIService cloudService,
             SubscriptionDiscountEngine subscriptionDiscountEngine,
             SubscriptionApprovalService subscriptionApprovalService) {
+        this(
+                medicineDAO,
+                customerDAO,
+                billDAO,
+                subscriptionDAO,
+                reportService,
+                aiOrchestrator,
+                cloudService,
+                subscriptionDiscountEngine,
+                subscriptionApprovalService,
+                new SubscriptionDiscountConversationAssistant(),
+                new SubscriptionMultilingualExplanationService());
+    }
+
+    BillingService(
+            MedicineDAO medicineDAO,
+            CustomerDAO customerDAO,
+            BillDAO billDAO,
+            SubscriptionDAO subscriptionDAO,
+            ReportService reportService,
+            AIOrchestrator aiOrchestrator,
+            CloudAIService cloudService,
+            SubscriptionDiscountEngine subscriptionDiscountEngine,
+            SubscriptionApprovalService subscriptionApprovalService,
+            SubscriptionDiscountConversationAssistant discountConversationAssistant,
+            SubscriptionMultilingualExplanationService multilingualExplanationService) {
+        this(
+                medicineDAO,
+                customerDAO,
+                billDAO,
+                subscriptionDAO,
+                reportService,
+                aiOrchestrator,
+                cloudService,
+                subscriptionDiscountEngine,
+                subscriptionApprovalService,
+                discountConversationAssistant,
+                multilingualExplanationService,
+                new BillingCareProtocolFallbackRulesEngine());
+    }
+
+    BillingService(
+            MedicineDAO medicineDAO,
+            CustomerDAO customerDAO,
+            BillDAO billDAO,
+            SubscriptionDAO subscriptionDAO,
+            ReportService reportService,
+            AIOrchestrator aiOrchestrator,
+            CloudAIService cloudService,
+            SubscriptionDiscountEngine subscriptionDiscountEngine,
+            SubscriptionApprovalService subscriptionApprovalService,
+            SubscriptionDiscountConversationAssistant discountConversationAssistant,
+            SubscriptionMultilingualExplanationService multilingualExplanationService,
+            BillingCareProtocolFallbackRulesEngine careProtocolFallbackRulesEngine) {
         this.medicineDAO = medicineDAO;
         this.customerDAO = customerDAO;
         this.billDAO = billDAO;
@@ -122,6 +201,9 @@ public class BillingService {
         this.cloudService = cloudService;
         this.subscriptionDiscountEngine = subscriptionDiscountEngine;
         this.subscriptionApprovalService = subscriptionApprovalService;
+        this.discountConversationAssistant = discountConversationAssistant;
+        this.multilingualExplanationService = multilingualExplanationService;
+        this.careProtocolFallbackRulesEngine = careProtocolFallbackRulesEngine;
     }
 
     public List<Medicine> loadActiveMedicines() {
@@ -181,7 +263,24 @@ public class BillingService {
     }
 
     public CompletableFuture<String> generateCheckoutCareProtocol(List<BillItem> billItems) {
-        return aiOrchestrator.processQuery(AIPromptCatalog.checkoutCareProtocolPrompt(billItems), true, false);
+        String prompt = AIPromptCatalog.checkoutCareProtocolPrompt(billItems);
+        if (aiOrchestrator == null) {
+            return CompletableFuture.completedFuture(
+                    fallbackCheckoutCareProtocol(billItems, "AI orchestrator unavailable"));
+        }
+        try {
+            return aiOrchestrator.processQuery(prompt, true, false)
+                    .handle((response, ex) -> {
+                        if (ex != null || !isUsableCareProtocol(response)) {
+                            String reason = ex == null ? "AI response unusable" : ex.getMessage();
+                            return fallbackCheckoutCareProtocol(billItems, reason);
+                        }
+                        return response.trim();
+                    });
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture(
+                    fallbackCheckoutCareProtocol(billItems, e.getMessage()));
+        }
     }
 
     public CompletableFuture<String> generateDetailedCareProtocol(List<BillItem> billItems) {
@@ -192,12 +291,32 @@ public class BillingService {
         return cloudService.getProviderName() + " — " + cloudService.getActiveModel();
     }
 
+    public Map<String, String> supportedExplanationLanguages() {
+        return multilingualExplanationService.supportedLanguages();
+    }
+
     public CheckoutResult completeCheckout(
             List<BillItem> billItems,
             Customer selectedCustomer,
             int userId,
             String paymentMode,
             String careProtocol) throws SQLException, JRException {
+        return completeCheckout(
+                billItems,
+                selectedCustomer,
+                userId,
+                paymentMode,
+                careProtocol,
+                null);
+    }
+
+    public CheckoutResult completeCheckout(
+            List<BillItem> billItems,
+            Customer selectedCustomer,
+            int userId,
+            String paymentMode,
+            String careProtocol,
+            LocalizedDiscountExplanation localizedExplanation) throws SQLException, JRException {
         if (billItems == null || billItems.isEmpty()) {
             throw new IllegalArgumentException("No bill items found for checkout.");
         }
@@ -214,7 +333,11 @@ public class BillingService {
         BillDAO.SubscriptionInvoiceContext invoiceContext = appliedDiscount.toInvoiceContext();
         int billId = billDAO.generateInvoice(total, billItems, customerId, userId, paymentMode, invoiceContext);
         DashboardKpiService.invalidateSalesMetrics();
+        DashboardKpiService.invalidateSubscriptionMetrics();
         String pdfPath = "Invoice_" + billId + ".pdf";
+        LocalizedDiscountExplanation explanationForInvoice = localizedExplanation == null
+                ? defaultInvoiceExplanation(billItems, selectedCustomer)
+                : localizedExplanation;
         reportService.generateInvoicePDF(
                 billItems,
                 total,
@@ -223,7 +346,9 @@ public class BillingService {
                 careProtocol,
                 appliedDiscount.planName(),
                 appliedDiscount.totalSavings(),
-                appliedDiscount.discountPercent());
+                appliedDiscount.discountPercent(),
+                explanationForInvoice.languageName(),
+                explanationForInvoice.snippet());
 
         return new CheckoutResult(
                 billId,
@@ -232,6 +357,28 @@ public class BillingService {
                 customerName,
                 appliedDiscount.planName(),
                 appliedDiscount.totalSavings());
+    }
+
+    public CompletableFuture<LocalizedDiscountExplanation> generateLocalizedSubscriptionExplanation(
+            List<BillItem> billItems,
+            Customer selectedCustomer,
+            String languageCode) {
+        DiscountDecisionExplanation explanation = explainSubscriptionDiscountDecision(billItems, selectedCustomer);
+        return multilingualExplanationService.localize(
+                languageCode,
+                explanation.discountApplied(),
+                explanation.eligibilityCode(),
+                explanation.summary(),
+                explanation.talkingPoints(),
+                aiOrchestrator)
+                .thenApply(row -> new LocalizedDiscountExplanation(
+                        row.languageCode(),
+                        row.languageName(),
+                        row.snippet(),
+                        row.aiTranslated(),
+                        explanation.discountApplied(),
+                        explanation.eligibilityCode()))
+                .exceptionally(ex -> defaultLocalizedExplanation(explanation));
     }
 
     public List<BillItem> snapshotItems(List<BillItem> billItems) {
@@ -254,9 +401,9 @@ public class BillingService {
     }
 
     public boolean isManualOverrideRequestEnabled() {
-        return FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)
-                && FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_APPROVALS)
-                && FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_DISCOUNT_OVERRIDES);
+        return FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_COMMERCE)
+                && FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_APPROVALS)
+                && FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_DISCOUNT_OVERRIDES);
     }
 
     public boolean canCurrentUserRequestManualOverride() {
@@ -301,47 +448,68 @@ public class BillingService {
                 eligibility.message());
     }
 
+    public DiscountDecisionExplanation explainSubscriptionDiscountDecision(
+            List<BillItem> billItems,
+            Customer selectedCustomer) {
+        DiscountEvaluationContext context = buildDiscountEvaluationContext(billItems, selectedCustomer);
+        SubscriptionDiscountConversationAssistant.AssistantResponse response = discountConversationAssistant.explain(
+                new SubscriptionDiscountConversationAssistant.AssistantInput(
+                        context.featureEnabled(),
+                        selectedCustomer == null ? "the customer" : selectedCustomer.getName(),
+                        context.eligibilityCode(),
+                        context.eligibilityMessage(),
+                        context.enrollmentId(),
+                        context.planName(),
+                        context.evaluation()));
+        return new DiscountDecisionExplanation(
+                response.discountApplied(),
+                response.eligibilityCode(),
+                response.summary(),
+                response.talkingPoints());
+    }
+
+    private LocalizedDiscountExplanation defaultInvoiceExplanation(
+            List<BillItem> billItems,
+            Customer selectedCustomer) {
+        DiscountDecisionExplanation explanation = explainSubscriptionDiscountDecision(billItems, selectedCustomer);
+        return defaultLocalizedExplanation(explanation);
+    }
+
+    private LocalizedDiscountExplanation defaultLocalizedExplanation(DiscountDecisionExplanation explanation) {
+        String snippet = explanation == null || explanation.summary() == null || explanation.summary().isBlank()
+                ? "Subscription discount decision is available in billing context."
+                : explanation.summary().trim();
+        if (explanation != null && explanation.talkingPoints() != null) {
+            for (String point : explanation.talkingPoints()) {
+                if (point == null || point.isBlank()) {
+                    continue;
+                }
+                snippet = snippet + " " + point.trim();
+                break;
+            }
+        }
+        return new LocalizedDiscountExplanation(
+                "en",
+                "English",
+                snippet,
+                false,
+                explanation != null && explanation.discountApplied(),
+                explanation == null ? SubscriptionEligibilityCode.INVALID_SUBSCRIPTION_STATE : explanation.eligibilityCode());
+    }
+
     private AppliedSubscriptionDiscount applySubscriptionDiscountIfEligible(
             List<BillItem> billItems,
             Customer selectedCustomer) {
-        if (!FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
-            return AppliedSubscriptionDiscount.none(SubscriptionEligibilityCode.FEATURE_DISABLED);
+        DiscountEvaluationContext context = buildDiscountEvaluationContext(billItems, selectedCustomer);
+        if (context.eligibilityCode() != SubscriptionEligibilityCode.ELIGIBLE) {
+            return AppliedSubscriptionDiscount.none(context.eligibilityCode());
         }
-        if (selectedCustomer == null) {
-            return AppliedSubscriptionDiscount.none(SubscriptionEligibilityCode.NO_CUSTOMER_SELECTED);
-        }
-        if (billItems == null || billItems.isEmpty()) {
+        if (context.applicable() == null || context.evaluation() == null) {
             return AppliedSubscriptionDiscount.none(SubscriptionEligibilityCode.INVALID_SUBSCRIPTION_STATE);
         }
 
-        SubscriptionEligibilityResult eligibilityResult = subscriptionService
-                .evaluateEligibility(selectedCustomer.getCustomerId());
-        if (!eligibilityResult.eligible()) {
-            return AppliedSubscriptionDiscount.none(eligibilityResult.code());
-        }
-
-        Optional<SubscriptionDAO.ApplicableSubscription> applicableOpt = subscriptionDAO
-                .findApplicableSubscription(selectedCustomer.getCustomerId());
-        if (applicableOpt.isEmpty()) {
-            return AppliedSubscriptionDiscount.none(SubscriptionEligibilityCode.INVALID_SUBSCRIPTION_STATE);
-        }
-
-        SubscriptionDAO.ApplicableSubscription applicable = applicableOpt.get();
-        Map<Integer, SubscriptionDiscountEngine.DiscountRule> medicineRules = subscriptionDAO.loadMedicineRules(
-                applicable.planId());
-
-        SubscriptionDiscountEngine.EvaluationContext context = new SubscriptionDiscountEngine.EvaluationContext(
-                new SubscriptionDiscountEngine.PlanPolicy(
-                        true,
-                        applicable.defaultDiscountPercent(),
-                        applicable.maxDiscountPercent(),
-                        applicable.minimumMarginPercent()),
-                medicineRules,
-                Map.of(),
-                Map.of(),
-                Map.of());
-
-        SubscriptionDiscountEngine.EvaluationResult evaluation = subscriptionDiscountEngine.evaluate(billItems, context);
+        SubscriptionDAO.ApplicableSubscription applicable = context.applicable();
+        SubscriptionDiscountEngine.EvaluationResult evaluation = context.evaluation();
         if (evaluation.totalDiscount() <= 0.0) {
             return AppliedSubscriptionDiscount.none(SubscriptionEligibilityCode.ELIGIBLE);
         }
@@ -379,12 +547,150 @@ public class BillingService {
                 SubscriptionEligibilityCode.ELIGIBLE);
     }
 
+    private DiscountEvaluationContext buildDiscountEvaluationContext(
+            List<BillItem> billItems,
+            Customer selectedCustomer) {
+        boolean featureEnabled = FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_COMMERCE);
+        if (!featureEnabled) {
+            return new DiscountEvaluationContext(
+                    false,
+                    SubscriptionEligibilityCode.FEATURE_DISABLED,
+                    "Subscription discount feature is disabled.",
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+        if (selectedCustomer == null) {
+            return new DiscountEvaluationContext(
+                    true,
+                    SubscriptionEligibilityCode.NO_CUSTOMER_SELECTED,
+                    "No customer selected.",
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+        if (billItems == null || billItems.isEmpty()) {
+            return new DiscountEvaluationContext(
+                    true,
+                    SubscriptionEligibilityCode.INVALID_SUBSCRIPTION_STATE,
+                    "No bill items available for discount evaluation.",
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+
+        SubscriptionEligibilityResult eligibilityResult = subscriptionService
+                .evaluateEligibility(selectedCustomer.getCustomerId());
+        if (!eligibilityResult.eligible()) {
+            return new DiscountEvaluationContext(
+                    true,
+                    eligibilityResult.code(),
+                    eligibilityResult.message(),
+                    eligibilityResult.enrollmentId(),
+                    eligibilityResult.planName(),
+                    null,
+                    null);
+        }
+
+        Optional<SubscriptionDAO.ApplicableSubscription> applicableOpt = subscriptionDAO
+                .findApplicableSubscription(selectedCustomer.getCustomerId());
+        if (applicableOpt.isEmpty()) {
+            return new DiscountEvaluationContext(
+                    true,
+                    SubscriptionEligibilityCode.INVALID_SUBSCRIPTION_STATE,
+                    "Applicable subscription was not found for this customer.",
+                    eligibilityResult.enrollmentId(),
+                    eligibilityResult.planName(),
+                    null,
+                    null);
+        }
+
+        SubscriptionDAO.ApplicableSubscription applicable = applicableOpt.get();
+        SubscriptionDiscountEngine.EvaluationResult evaluation = subscriptionDiscountEngine.evaluate(
+                billItems,
+                buildDiscountEngineContext(applicable, billItems));
+
+        return new DiscountEvaluationContext(
+                true,
+                SubscriptionEligibilityCode.ELIGIBLE,
+                eligibilityResult.message(),
+                applicable.enrollmentId(),
+                applicable.planName(),
+                applicable,
+                evaluation);
+    }
+
+    private SubscriptionDiscountEngine.EvaluationContext buildDiscountEngineContext(
+            SubscriptionDAO.ApplicableSubscription applicable,
+            List<BillItem> billItems) {
+        List<Integer> medicineIds = collectMedicineIds(billItems);
+        Map<Integer, SubscriptionDiscountEngine.DiscountRule> medicineRules = subscriptionDAO.loadMedicineRules(
+                applicable.planId());
+        Map<String, SubscriptionDiscountEngine.DiscountRule> categoryRules = subscriptionDAO.loadCategoryRules(
+                applicable.planId());
+        Map<Integer, String> medicineCategoryById = subscriptionDAO.loadMedicineCategoryById(medicineIds);
+        return new SubscriptionDiscountEngine.EvaluationContext(
+                new SubscriptionDiscountEngine.PlanPolicy(
+                        true,
+                        applicable.defaultDiscountPercent(),
+                        applicable.maxDiscountPercent(),
+                        applicable.minimumMarginPercent()),
+                medicineRules,
+                categoryRules,
+                medicineCategoryById,
+                Map.of());
+    }
+
+    private String fallbackCheckoutCareProtocol(List<BillItem> billItems, String reason) {
+        return careProtocolFallbackRulesEngine.build(billItems, reason);
+    }
+
+    private boolean isUsableCareProtocol(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase();
+        return !(normalized.startsWith("error:")
+                || normalized.contains("ai service unavailable")
+                || normalized.contains("cloud ai required but not available"));
+    }
+
     private static double round2(double value) {
         return Math.round(value * 100.0) / 100.0;
     }
 
     private static double round4(double value) {
         return Math.round(value * 10000.0) / 10000.0;
+    }
+
+    private List<Integer> collectMedicineIds(List<BillItem> billItems) {
+        if (billItems == null || billItems.isEmpty()) {
+            return List.of();
+        }
+        Set<Integer> distinct = new HashSet<>();
+        List<Integer> ids = new ArrayList<>();
+        for (BillItem item : billItems) {
+            if (item == null || item.getMedicineId() <= 0) {
+                continue;
+            }
+            if (distinct.add(item.getMedicineId())) {
+                ids.add(item.getMedicineId());
+            }
+        }
+        return ids;
+    }
+
+    private record DiscountEvaluationContext(
+            boolean featureEnabled,
+            SubscriptionEligibilityCode eligibilityCode,
+            String eligibilityMessage,
+            Integer enrollmentId,
+            String planName,
+            SubscriptionDAO.ApplicableSubscription applicable,
+            SubscriptionDiscountEngine.EvaluationResult evaluation) {
     }
 
     private record AppliedSubscriptionDiscount(

@@ -9,6 +9,8 @@
     <parameter name="SubscriptionPlanName" class="java.lang.String"/>
     <parameter name="SubscriptionSavings" class="java.lang.Double"/>
     <parameter name="SubscriptionDiscountPercent" class="java.lang.Double"/>
+    <parameter name="SubscriptionExplanationLanguage" class="java.lang.String"/>
+    <parameter name="SubscriptionExplanationSnippet" class="java.lang.String"/>
 
     <field name="name" class="java.lang.String"/>
     <field name="qty" class="java.lang.Integer"/>
@@ -116,12 +118,22 @@
 : "Subscription Discount %: " + String.format("%.2f", $P{SubscriptionDiscountPercent})]]></textFieldExpression>
             </textField>
 
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="72" width="555" height="36"/>
+                <textElement>
+                    <font size="10"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{SubscriptionExplanationSnippet} == null || $P{SubscriptionExplanationSnippet}.trim().isEmpty()
+? ""
+: "Savings Explanation (" + ($P{SubscriptionExplanationLanguage} == null || $P{SubscriptionExplanationLanguage}.trim().isEmpty() ? "English" : $P{SubscriptionExplanationLanguage}) + "): " + $P{SubscriptionExplanationSnippet}]]></textFieldExpression>
+            </textField>
+
             <line>
-                <reportElement x="0" y="75" width="555" height="1"/>
+                <reportElement x="0" y="112" width="555" height="1"/>
             </line>
 
             <staticText>
-                <reportElement x="0" y="85" width="555" height="20"/>
+                <reportElement x="0" y="122" width="555" height="20"/>
                 <textElement>
                     <font size="12" isBold="true"/>
                 </textElement>
@@ -129,7 +141,7 @@
             </staticText>
 
             <textField textAdjust="StretchHeight">
-                <reportElement x="0" y="110" width="555" height="275"/>
+                <reportElement x="0" y="147" width="555" height="238"/>
                 <textElement>
                     <font size="10"/>
                 </textElement>

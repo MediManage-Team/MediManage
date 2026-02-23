@@ -1,6 +1,7 @@
 package org.example.MediManage.dao;
 
 import org.example.MediManage.DatabaseUtil;
+import org.example.MediManage.util.ReportingWindowUtils;
 import org.example.MediManage.model.CustomerSubscription;
 import org.example.MediManage.model.SubscriptionApproval;
 import org.example.MediManage.model.SubscriptionApprovalStatus;
@@ -17,16 +18,30 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.StringJoiner;
 
 public class SubscriptionDAO {
     private static final DateTimeFormatter DB_TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int DEFAULT_RECOMMENDATION_LOOKBACK_DAYS = 180;
+    private static final int MIN_RECOMMENDATION_LOOKBACK_DAYS = 30;
+    private static final int MAX_RECOMMENDATION_LOOKBACK_DAYS = 365;
+    private static final int DEFAULT_RENEWAL_WINDOW_DAYS = 21;
+    private static final int MIN_RENEWAL_WINDOW_DAYS = 1;
+    private static final int MAX_RENEWAL_WINDOW_DAYS = 90;
 
     public int createPlan(SubscriptionPlan plan, int actorUserId) throws SQLException {
         String sql = "INSERT INTO subscription_plans (" +
@@ -558,6 +573,48 @@ public class SubscriptionDAO {
         return rows;
     }
 
+    public List<OverrideFrequencySnapshot> getOverrideFrequencySnapshots(String sinceTimestamp, int minRequests) {
+        List<OverrideFrequencySnapshot> rows = new ArrayList<>();
+        if (sinceTimestamp == null || sinceTimestamp.trim().isEmpty()) {
+            return rows;
+        }
+
+        int safeMinRequests = Math.max(1, minRequests);
+        String sql = "SELECT requested_by_user_id, " +
+                "COUNT(*) AS total_requests, " +
+                "SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count, " +
+                "SUM(CASE WHEN status = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count, " +
+                "SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) AS pending_count, " +
+                "MIN(created_at) AS first_request_at, " +
+                "MAX(created_at) AS latest_request_at " +
+                "FROM subscription_discount_overrides " +
+                "WHERE created_at >= ? " +
+                "GROUP BY requested_by_user_id " +
+                "HAVING COUNT(*) >= ? " +
+                "ORDER BY total_requests DESC, latest_request_at DESC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, sinceTimestamp.trim());
+            ps.setInt(2, safeMinRequests);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new OverrideFrequencySnapshot(
+                            rs.getInt("requested_by_user_id"),
+                            rs.getInt("total_requests"),
+                            rs.getInt("approved_count"),
+                            rs.getInt("rejected_count"),
+                            rs.getInt("pending_count"),
+                            rs.getString("first_request_at"),
+                            rs.getString("latest_request_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to list override frequency snapshots: " + e.getMessage());
+        }
+        return rows;
+    }
+
     public List<SubscriptionPlanMedicineRule> getPlanMedicineRules(int planId) {
         List<SubscriptionPlanMedicineRule> rows = new ArrayList<>();
         String sql = "SELECT r.*, m.name AS medicine_name " +
@@ -774,6 +831,147 @@ public class SubscriptionDAO {
         return Optional.empty();
     }
 
+    public List<CustomerPurchaseEvent> getCustomerPurchaseEvents(int customerId, int lookbackDays) {
+        return getCustomerPurchaseEvents(customerId, lookbackDays, LocalDate.now());
+    }
+
+    public List<CustomerPurchaseEvent> getCustomerPurchaseEvents(int customerId, int lookbackDays, LocalDate referenceDate) {
+        List<CustomerPurchaseEvent> events = new ArrayList<>();
+        if (customerId <= 0) {
+            return events;
+        }
+
+        int safeLookbackDays = normalizeRecommendationLookbackDays(lookbackDays);
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String fromTimestamp = safeReferenceDate.plusDays(1L)
+                .atStartOfDay()
+                .minusDays(safeLookbackDays)
+                .format(DB_TIMESTAMP);
+        String toTimestampExclusive = safeReferenceDate.plusDays(1L).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT bill_date, COALESCE(total_amount, 0) AS total_amount " +
+                "FROM bills " +
+                "WHERE customer_id = ? AND bill_date >= ? AND bill_date < ? " +
+                "ORDER BY bill_date ASC, bill_id ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, customerId);
+            ps.setString(2, fromTimestamp);
+            ps.setString(3, toTimestampExclusive);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    events.add(new CustomerPurchaseEvent(
+                            rs.getString("bill_date"),
+                            rs.getDouble("total_amount")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load customer purchase events for recommendations: " + e.getMessage());
+        }
+        return events;
+    }
+
+    public List<CustomerRefillEvent> getCustomerRefillEvents(int customerId, int lookbackDays) {
+        return getCustomerRefillEvents(customerId, lookbackDays, LocalDate.now());
+    }
+
+    public List<CustomerRefillEvent> getCustomerRefillEvents(int customerId, int lookbackDays, LocalDate referenceDate) {
+        List<CustomerRefillEvent> events = new ArrayList<>();
+        if (customerId <= 0) {
+            return events;
+        }
+
+        int safeLookbackDays = normalizeRecommendationLookbackDays(lookbackDays);
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String fromTimestamp = safeReferenceDate.plusDays(1L)
+                .atStartOfDay()
+                .minusDays(safeLookbackDays)
+                .format(DB_TIMESTAMP);
+        String toTimestampExclusive = safeReferenceDate.plusDays(1L).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT b.bill_date, bi.medicine_id, COALESCE(bi.quantity, 0) AS quantity, " +
+                "COALESCE(bi.total, 0) AS line_total " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON bi.bill_id = b.bill_id " +
+                "WHERE b.customer_id = ? AND b.bill_date >= ? AND b.bill_date < ? " +
+                "ORDER BY b.bill_date ASC, bi.item_id ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, customerId);
+            ps.setString(2, fromTimestamp);
+            ps.setString(3, toTimestampExclusive);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    events.add(new CustomerRefillEvent(
+                            rs.getInt("medicine_id"),
+                            rs.getString("bill_date"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("line_total")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load customer refill events for recommendations: " + e.getMessage());
+        }
+        return events;
+    }
+
+    public List<RenewalDueCandidate> getRenewalDueCandidates(int renewalWindowDays) {
+        List<RenewalDueCandidate> rows = new ArrayList<>();
+        int safeRenewalWindowDays = normalizeRenewalWindowDays(renewalWindowDays);
+        String now = LocalDateTime.now().format(DB_TIMESTAMP);
+        String renewalCutoff = LocalDateTime.now().plusDays(safeRenewalWindowDays).format(DB_TIMESTAMP);
+        String sql = "SELECT cs.enrollment_id, cs.customer_id, cs.plan_id, cs.start_date, cs.end_date, " +
+                "sp.plan_code, sp.plan_name, COALESCE(sp.price, 0) AS plan_price, " +
+                "COALESCE(sp.duration_days, 30) AS duration_days " +
+                "FROM customer_subscriptions cs " +
+                "JOIN subscription_plans sp ON sp.plan_id = cs.plan_id " +
+                "WHERE cs.status = 'ACTIVE' " +
+                "AND sp.status = 'ACTIVE' " +
+                "AND cs.end_date >= ? " +
+                "AND cs.end_date <= ? " +
+                "ORDER BY cs.end_date ASC, cs.enrollment_id ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, now);
+            ps.setString(2, renewalCutoff);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new RenewalDueCandidate(
+                            rs.getInt("enrollment_id"),
+                            rs.getInt("customer_id"),
+                            rs.getInt("plan_id"),
+                            rs.getString("plan_code"),
+                            rs.getString("plan_name"),
+                            rs.getString("start_date"),
+                            rs.getString("end_date"),
+                            rs.getDouble("plan_price"),
+                            Math.max(1, rs.getInt("duration_days"))));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load renewal-due candidates for propensity scoring: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public int getEnrollmentRenewalCount(int enrollmentId) {
+        if (enrollmentId <= 0) {
+            return 0;
+        }
+        String sql = "SELECT COUNT(*) AS cnt FROM customer_subscription_events " +
+                "WHERE enrollment_id = ? AND event_type = 'RENEW'";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, enrollmentId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("cnt");
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to read enrollment renewal count for propensity scoring: " + e.getMessage());
+        }
+        return 0;
+    }
+
     public Map<Integer, SubscriptionDiscountEngine.DiscountRule> loadMedicineRules(int planId) {
         Map<Integer, SubscriptionDiscountEngine.DiscountRule> rules = new HashMap<>();
         String sql = "SELECT medicine_id, include_rule, discount_percent, max_discount_amount, min_margin_percent, active " +
@@ -803,6 +1001,1041 @@ public class SubscriptionDAO {
             System.err.println("Failed to load subscription medicine rules for plan " + planId + ": " + e.getMessage());
         }
         return rules;
+    }
+
+    public Map<String, SubscriptionDiscountEngine.DiscountRule> loadCategoryRules(int planId) {
+        Map<String, SubscriptionDiscountEngine.DiscountRule> rules = new LinkedHashMap<>();
+        String sql = "SELECT category_name, include_rule, discount_percent, max_discount_amount, min_margin_percent, active " +
+                "FROM subscription_plan_category_rules " +
+                "WHERE plan_id = ? " +
+                "ORDER BY updated_at DESC, rule_id DESC";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, planId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String categoryName = rs.getString("category_name");
+                    if (categoryName == null || categoryName.isBlank()) {
+                        continue;
+                    }
+                    String normalizedCategory = categoryName.trim().toLowerCase(Locale.ROOT);
+                    if (rules.containsKey(normalizedCategory)) {
+                        continue;
+                    }
+                    boolean includeRule = rs.getBoolean("include_rule");
+                    Double discountPercent = nullableDouble(rs, "discount_percent");
+                    Double maxDiscountAmount = nullableDouble(rs, "max_discount_amount");
+                    Double minMarginPercent = nullableDouble(rs, "min_margin_percent");
+                    boolean active = rs.getBoolean("active");
+                    rules.put(normalizedCategory, new SubscriptionDiscountEngine.DiscountRule(
+                            includeRule,
+                            discountPercent,
+                            maxDiscountAmount,
+                            minMarginPercent,
+                            active));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load subscription category rules for plan " + planId + ": " + e.getMessage());
+        }
+        return rules;
+    }
+
+    public Map<Integer, String> loadMedicineCategoryById(List<Integer> medicineIds) {
+        if (medicineIds == null || medicineIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Set<Integer> distinctIds = new HashSet<>();
+        for (Integer medicineId : medicineIds) {
+            if (medicineId != null && medicineId > 0) {
+                distinctIds.add(medicineId);
+            }
+        }
+        if (distinctIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        StringJoiner placeholders = new StringJoiner(", ");
+        for (int ignored : distinctIds) {
+            placeholders.add("?");
+        }
+
+        String sql = "SELECT medicine_id, generic_name FROM medicines WHERE medicine_id IN (" + placeholders + ")";
+        Map<Integer, String> categories = new HashMap<>();
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            int index = 1;
+            for (Integer medicineId : distinctIds) {
+                ps.setInt(index++, medicineId);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int medicineId = rs.getInt("medicine_id");
+                    String genericName = rs.getString("generic_name");
+                    if (genericName == null || genericName.isBlank()) {
+                        continue;
+                    }
+                    categories.put(medicineId, genericName.trim().toLowerCase(Locale.ROOT));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load medicine categories for subscription rules: " + e.getMessage());
+        }
+        return categories;
+    }
+
+    public SubscriptionDashboardSnapshot getDashboardSnapshot(int renewalWindowDays) {
+        int safeRenewalWindowDays = Math.max(1, renewalWindowDays);
+        LocalDateTime now = LocalDateTime.now();
+        String nowTs = now.format(DB_TIMESTAMP);
+        String renewalDueCutoff = now.plusDays(safeRenewalWindowDays).format(DB_TIMESTAMP);
+        String dayStart = now.toLocalDate().atStartOfDay().format(DB_TIMESTAMP);
+        String dayEndExclusive = now.toLocalDate().plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+
+        String activeSql = "SELECT COUNT(*) AS cnt " +
+                "FROM customer_subscriptions cs " +
+                "JOIN subscription_plans sp ON sp.plan_id = cs.plan_id " +
+                "WHERE cs.status = 'ACTIVE' " +
+                "AND sp.status = 'ACTIVE' " +
+                "AND cs.start_date <= ? " +
+                "AND (cs.end_date >= ? OR (cs.grace_end_date IS NOT NULL AND cs.grace_end_date >= ?))";
+
+        String renewalsSql = "SELECT COUNT(*) AS cnt " +
+                "FROM customer_subscriptions cs " +
+                "JOIN subscription_plans sp ON sp.plan_id = cs.plan_id " +
+                "WHERE cs.status = 'ACTIVE' " +
+                "AND sp.status = 'ACTIVE' " +
+                "AND cs.end_date >= ? " +
+                "AND cs.end_date <= ?";
+
+        String savingsSql = "SELECT COALESCE(SUM(subscription_savings_amount), 0) AS total " +
+                "FROM bills WHERE bill_date >= ? AND bill_date < ?";
+
+        String pendingOverrideSql = "SELECT COUNT(*) AS cnt " +
+                "FROM subscription_discount_overrides WHERE status = 'PENDING'";
+
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            long activeSubscribers = queryLong(
+                    conn,
+                    activeSql,
+                    ps -> {
+                        ps.setString(1, nowTs);
+                        ps.setString(2, nowTs);
+                        ps.setString(3, nowTs);
+                    });
+            long renewalsDueSoon = queryLong(
+                    conn,
+                    renewalsSql,
+                    ps -> {
+                        ps.setString(1, nowTs);
+                        ps.setString(2, renewalDueCutoff);
+                    });
+            double dailySubscriptionSavings = queryDouble(
+                    conn,
+                    savingsSql,
+                    ps -> {
+                        ps.setString(1, dayStart);
+                        ps.setString(2, dayEndExclusive);
+                    });
+            long pendingOverrideCount = queryLong(conn, pendingOverrideSql, null);
+
+            return new SubscriptionDashboardSnapshot(
+                    activeSubscribers,
+                    renewalsDueSoon,
+                    dailySubscriptionSavings,
+                    pendingOverrideCount);
+        } catch (Exception e) {
+            System.err.println("Failed to load subscription dashboard snapshot: " + e.getMessage());
+            return new SubscriptionDashboardSnapshot(0L, 0L, 0.0, 0L);
+        }
+    }
+
+    public Optional<WeeklyAnalyticsSummaryRow> refreshWeeklyAnalyticsSummary(LocalDate referenceDate, String timezoneName) {
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String safeTimezoneName = normalizeTimezoneName(timezoneName);
+        ReportingWindowUtils.WeeklyWindow weeklyWindow = ReportingWindowUtils.mondayToSundayWindow(safeReferenceDate);
+        LocalDate weekStart = weeklyWindow.startDate();
+        LocalDate weekEnd = weeklyWindow.endDate();
+        String weekStartDate = weekStart.toString();
+        String weekEndDate = weekEnd.toString();
+        String rangeStart = weekStart.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = weekEnd.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String weekEndSnapshot = weekEnd.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String renewalsDueCutoff = weekEnd.plusDays(8).atStartOfDay().format(DB_TIMESTAMP);
+
+        String totalBillsSql = "SELECT COUNT(*) AS cnt FROM bills WHERE bill_date >= ? AND bill_date < ?";
+        String subscriptionTotalsSql = "SELECT " +
+                "COUNT(*) AS bill_count, " +
+                "COALESCE(SUM(COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)), 0) AS gross_amount, " +
+                "COALESCE(SUM(COALESCE(b.total_amount, 0)), 0) AS net_amount, " +
+                "COALESCE(SUM(COALESCE(b.subscription_savings_amount, 0)), 0) AS savings_amount " +
+                "FROM bills b " +
+                "WHERE b.bill_date >= ? " +
+                "AND b.bill_date < ? " +
+                "AND b.subscription_plan_id IS NOT NULL";
+        String activeSubscribersSql = "SELECT COUNT(*) AS cnt " +
+                "FROM customer_subscriptions cs " +
+                "JOIN subscription_plans sp ON sp.plan_id = cs.plan_id " +
+                "WHERE cs.status = 'ACTIVE' " +
+                "AND sp.status = 'ACTIVE' " +
+                "AND cs.start_date < ? " +
+                "AND (cs.end_date >= ? OR (cs.grace_end_date IS NOT NULL AND cs.grace_end_date >= ?))";
+        String renewalsDueSql = "SELECT COUNT(*) AS cnt " +
+                "FROM customer_subscriptions cs " +
+                "JOIN subscription_plans sp ON sp.plan_id = cs.plan_id " +
+                "WHERE cs.status = 'ACTIVE' " +
+                "AND sp.status = 'ACTIVE' " +
+                "AND cs.end_date >= ? " +
+                "AND cs.end_date < ?";
+        String pendingOverrideSql = "SELECT COUNT(*) AS cnt " +
+                "FROM subscription_discount_overrides " +
+                "WHERE status = 'PENDING' AND created_at < ?";
+        String highPricingAlertsSql = "SELECT COUNT(*) AS cnt FROM (" +
+                "SELECT CASE " +
+                "WHEN COALESCE(b.subscription_savings_amount, 0) < 0 THEN 'NEGATIVE_SAVINGS' " +
+                "WHEN COALESCE(b.subscription_discount_percent, 0) < 0 OR COALESCE(b.subscription_discount_percent, 0) > 100 THEN 'DISCOUNT_PERCENT_OUT_OF_RANGE' " +
+                "WHEN (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) < 0 THEN 'NEGATIVE_GROSS_BEFORE_DISCOUNT' " +
+                "WHEN COALESCE(b.subscription_savings_amount, 0) > (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) + 0.01 THEN 'SAVINGS_EXCEED_GROSS' " +
+                "WHEN (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) > 0 " +
+                "AND ABS(((COALESCE(b.subscription_savings_amount, 0) / (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0))) * 100.0) - COALESCE(b.subscription_discount_percent, 0)) > 1.0 THEN 'DISCOUNT_PERCENT_MISMATCH' " +
+                "ELSE 'NONE' END AS alert_code " +
+                "FROM bills b " +
+                "WHERE b.bill_date >= ? " +
+                "AND b.bill_date < ? " +
+                "AND b.subscription_plan_id IS NOT NULL" +
+                ") q " +
+                "WHERE q.alert_code IN ('NEGATIVE_SAVINGS', 'DISCOUNT_PERCENT_OUT_OF_RANGE', 'NEGATIVE_GROSS_BEFORE_DISCOUNT', 'SAVINGS_EXCEED_GROSS')";
+        String highOverrideSignalsSql = "SELECT COUNT(*) AS cnt FROM (" +
+                "SELECT o.requested_by_user_id AS requested_by_user_id, " +
+                "COUNT(*) AS total_requests, " +
+                "CASE WHEN COUNT(*) = 0 THEN 0.0 ELSE (SUM(CASE WHEN o.status = 'REJECTED' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) END AS rejection_rate_percent, " +
+                "COALESCE(AVG(o.requested_discount_percent), 0) AS average_requested_percent, " +
+                "COALESCE(MAX(o.requested_discount_percent), 0) AS max_requested_percent " +
+                "FROM subscription_discount_overrides o " +
+                "WHERE o.created_at >= ? " +
+                "AND o.created_at < ? " +
+                "GROUP BY o.requested_by_user_id" +
+                ") q " +
+                "WHERE q.total_requests >= 5 " +
+                "AND (q.rejection_rate_percent >= 60.0 OR q.average_requested_percent >= 25.0 OR q.max_requested_percent >= 35.0)";
+        String openHighCriticalFeedbackSql = "SELECT COUNT(*) AS cnt " +
+                "FROM subscription_pilot_feedback " +
+                "WHERE reported_at < ? " +
+                "AND status <> 'RESOLVED' " +
+                "AND severity IN ('HIGH', 'CRITICAL')";
+
+        List<PlanRevenueImpactRow> planRows = getPlanRevenueImpact(weekStart, weekEnd);
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            long totalBillCount = queryLong(
+                    conn,
+                    totalBillsSql,
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            long subscriptionBillCount = queryLong(
+                    conn,
+                    subscriptionTotalsSql,
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            double grossAmountBeforeDiscount = queryDouble(
+                    conn,
+                    "SELECT COALESCE(SUM(COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)), 0) " +
+                            "FROM bills b " +
+                            "WHERE b.bill_date >= ? " +
+                            "AND b.bill_date < ? " +
+                            "AND b.subscription_plan_id IS NOT NULL",
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            double netBilledAmount = queryDouble(
+                    conn,
+                    "SELECT COALESCE(SUM(COALESCE(b.total_amount, 0)), 0) " +
+                            "FROM bills b " +
+                            "WHERE b.bill_date >= ? " +
+                            "AND b.bill_date < ? " +
+                            "AND b.subscription_plan_id IS NOT NULL",
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            double totalSavings = queryDouble(
+                    conn,
+                    "SELECT COALESCE(SUM(COALESCE(b.subscription_savings_amount, 0)), 0) " +
+                            "FROM bills b " +
+                            "WHERE b.bill_date >= ? " +
+                            "AND b.bill_date < ? " +
+                            "AND b.subscription_plan_id IS NOT NULL",
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            long activeSubscribersSnapshot = queryLong(
+                    conn,
+                    activeSubscribersSql,
+                    ps -> {
+                        ps.setString(1, weekEndSnapshot);
+                        ps.setString(2, weekEndSnapshot);
+                        ps.setString(3, weekEndSnapshot);
+                    });
+            long renewalsDueNext7Days = queryLong(
+                    conn,
+                    renewalsDueSql,
+                    ps -> {
+                        ps.setString(1, weekEndSnapshot);
+                        ps.setString(2, renewalsDueCutoff);
+                    });
+            long pendingOverrideCount = queryLong(
+                    conn,
+                    pendingOverrideSql,
+                    ps -> ps.setString(1, weekEndSnapshot));
+            long highPricingAlertCount = queryLong(
+                    conn,
+                    highPricingAlertsSql,
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            long highOverrideAbuseSignalCount = queryLong(
+                    conn,
+                    highOverrideSignalsSql,
+                    ps -> {
+                        ps.setString(1, rangeStart);
+                        ps.setString(2, rangeEndExclusive);
+                    });
+            long openHighCriticalFeedbackCount = queryLong(
+                    conn,
+                    openHighCriticalFeedbackSql,
+                    ps -> ps.setString(1, weekEndSnapshot));
+
+            grossAmountBeforeDiscount = round2(grossAmountBeforeDiscount);
+            netBilledAmount = round2(netBilledAmount);
+            totalSavings = round2(totalSavings);
+            double leakagePercent = grossAmountBeforeDiscount <= 0.0
+                    ? 0.0
+                    : round4((totalSavings / grossAmountBeforeDiscount) * 100.0);
+
+            upsertWeeklyAnalyticsSummary(
+                    conn,
+                    weekStartDate,
+                    weekEndDate,
+                    safeTimezoneName,
+                    totalBillCount,
+                    subscriptionBillCount,
+                    grossAmountBeforeDiscount,
+                    netBilledAmount,
+                    totalSavings,
+                    leakagePercent,
+                    activeSubscribersSnapshot,
+                    renewalsDueNext7Days,
+                    pendingOverrideCount,
+                    highPricingAlertCount,
+                    highOverrideAbuseSignalCount,
+                    openHighCriticalFeedbackCount);
+            replaceWeeklyPlanRevenueSummary(
+                    conn,
+                    weekStartDate,
+                    weekEndDate,
+                    safeTimezoneName,
+                    planRows);
+
+            return getWeeklyAnalyticsSummary(weekStart, safeTimezoneName);
+        } catch (Exception e) {
+            System.err.println("Failed to refresh weekly analytics summary for " + weekStartDate + ": " + e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public Optional<WeeklyAnalyticsSummaryRow> getWeeklyAnalyticsSummary(LocalDate referenceDate, String timezoneName) {
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String safeTimezoneName = normalizeTimezoneName(timezoneName);
+        ReportingWindowUtils.WeeklyWindow weeklyWindow = ReportingWindowUtils.mondayToSundayWindow(safeReferenceDate);
+        String weekStartDate = weeklyWindow.startDate().toString();
+
+        String sql = "SELECT week_start_date, week_end_date, timezone_name, " +
+                "total_bill_count, subscription_bill_count, gross_amount_before_discount, net_billed_amount, " +
+                "total_savings, leakage_percent, active_subscribers_snapshot, renewals_due_next_7_days, " +
+                "pending_override_count, high_pricing_alert_count, high_override_abuse_signal_count, " +
+                "open_high_critical_feedback_count, generated_at " +
+                "FROM subscription_weekly_summary " +
+                "WHERE week_start_date = ? AND timezone_name = ? " +
+                "LIMIT 1";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, weekStartDate);
+            ps.setString(2, safeTimezoneName);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(new WeeklyAnalyticsSummaryRow(
+                            rs.getString("week_start_date"),
+                            rs.getString("week_end_date"),
+                            rs.getString("timezone_name"),
+                            rs.getLong("total_bill_count"),
+                            rs.getLong("subscription_bill_count"),
+                            rs.getDouble("gross_amount_before_discount"),
+                            rs.getDouble("net_billed_amount"),
+                            rs.getDouble("total_savings"),
+                            rs.getDouble("leakage_percent"),
+                            rs.getLong("active_subscribers_snapshot"),
+                            rs.getLong("renewals_due_next_7_days"),
+                            rs.getLong("pending_override_count"),
+                            rs.getLong("high_pricing_alert_count"),
+                            rs.getLong("high_override_abuse_signal_count"),
+                            rs.getLong("open_high_critical_feedback_count"),
+                            rs.getString("generated_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch weekly analytics summary for " + weekStartDate + ": " + e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public List<WeeklyLeakageHistoryRow> getRecentWeeklyLeakageHistory(
+            LocalDate referenceDate,
+            String timezoneName,
+            int weekLimit) {
+        List<WeeklyLeakageHistoryRow> rows = new ArrayList<>();
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String safeTimezoneName = normalizeTimezoneName(timezoneName);
+        int safeWeekLimit = weekLimit <= 0 ? 8 : Math.min(weekLimit, 52);
+        ReportingWindowUtils.WeeklyWindow currentWeek = ReportingWindowUtils.mondayToSundayWindow(safeReferenceDate);
+        String currentWeekStartDate = currentWeek.startDate().toString();
+
+        String sql = "SELECT week_start_date, week_end_date, timezone_name, leakage_percent, " +
+                "total_savings, gross_amount_before_discount, generated_at " +
+                "FROM subscription_weekly_summary " +
+                "WHERE timezone_name = ? AND week_start_date < ? " +
+                "ORDER BY week_start_date DESC " +
+                "LIMIT ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, safeTimezoneName);
+            ps.setString(2, currentWeekStartDate);
+            ps.setInt(3, safeWeekLimit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new WeeklyLeakageHistoryRow(
+                            rs.getString("week_start_date"),
+                            rs.getString("week_end_date"),
+                            rs.getString("timezone_name"),
+                            rs.getDouble("leakage_percent"),
+                            rs.getDouble("total_savings"),
+                            rs.getDouble("gross_amount_before_discount"),
+                            rs.getString("generated_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch weekly leakage history before " + currentWeekStartDate + ": " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<WeeklyPlanRevenueSummaryRow> getWeeklyPlanRevenueSummary(LocalDate referenceDate, String timezoneName) {
+        List<WeeklyPlanRevenueSummaryRow> rows = new ArrayList<>();
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String safeTimezoneName = normalizeTimezoneName(timezoneName);
+        ReportingWindowUtils.WeeklyWindow weeklyWindow = ReportingWindowUtils.mondayToSundayWindow(safeReferenceDate);
+        String weekStartDate = weeklyWindow.startDate().toString();
+
+        String sql = "SELECT week_start_date, week_end_date, timezone_name, plan_id, plan_code, plan_name, " +
+                "bill_count, gross_amount_before_discount, net_billed_amount, total_savings, average_savings_per_bill, leakage_percent, generated_at " +
+                "FROM subscription_weekly_plan_summary " +
+                "WHERE week_start_date = ? AND timezone_name = ? " +
+                "ORDER BY total_savings DESC, bill_count DESC, plan_id ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, weekStartDate);
+            ps.setString(2, safeTimezoneName);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new WeeklyPlanRevenueSummaryRow(
+                            rs.getString("week_start_date"),
+                            rs.getString("week_end_date"),
+                            rs.getString("timezone_name"),
+                            rs.getInt("plan_id"),
+                            rs.getString("plan_code"),
+                            rs.getString("plan_name"),
+                            rs.getLong("bill_count"),
+                            rs.getDouble("gross_amount_before_discount"),
+                            rs.getDouble("net_billed_amount"),
+                            rs.getDouble("total_savings"),
+                            rs.getDouble("average_savings_per_bill"),
+                            rs.getDouble("leakage_percent"),
+                            rs.getString("generated_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch weekly plan revenue summary for " + weekStartDate + ": " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<PlanRevenueImpactRow> getPlanRevenueImpact(LocalDate start, LocalDate end) {
+        List<PlanRevenueImpactRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT b.subscription_plan_id AS plan_id, " +
+                "COALESCE(sp.plan_code, 'PLAN-' || b.subscription_plan_id) AS plan_code, " +
+                "COALESCE(sp.plan_name, 'Unknown Plan') AS plan_name, " +
+                "COUNT(*) AS bill_count, " +
+                "COALESCE(SUM(b.total_amount), 0) AS net_amount, " +
+                "COALESCE(SUM(b.subscription_savings_amount), 0) AS savings_amount " +
+                "FROM bills b " +
+                "LEFT JOIN subscription_plans sp ON sp.plan_id = b.subscription_plan_id " +
+                "WHERE b.bill_date >= ? " +
+                "AND b.bill_date < ? " +
+                "AND b.subscription_plan_id IS NOT NULL " +
+                "GROUP BY b.subscription_plan_id, sp.plan_code, sp.plan_name " +
+                "ORDER BY (COALESCE(SUM(b.total_amount), 0) + COALESCE(SUM(b.subscription_savings_amount), 0)) DESC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int planId = rs.getInt("plan_id");
+                    long billCount = rs.getLong("bill_count");
+                    double netAmount = round2(rs.getDouble("net_amount"));
+                    double savings = round2(rs.getDouble("savings_amount"));
+                    double grossBeforeDiscount = round2(netAmount + savings);
+                    double averageSavings = billCount <= 0 ? 0.0 : round2(savings / billCount);
+                    double leakagePercent = grossBeforeDiscount <= 0.0
+                            ? 0.0
+                            : round4((savings / grossBeforeDiscount) * 100.0);
+
+                    rows.add(new PlanRevenueImpactRow(
+                            planId,
+                            rs.getString("plan_code"),
+                            rs.getString("plan_name"),
+                            billCount,
+                            grossBeforeDiscount,
+                            netAmount,
+                            savings,
+                            averageSavings,
+                            leakagePercent));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch plan revenue impact report: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<DiscountLeakageRow> getDiscountLeakageByDay(LocalDate start, LocalDate end) {
+        List<DiscountLeakageRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT DATE(b.bill_date) AS bill_day, " +
+                "COUNT(*) AS bill_count, " +
+                "COALESCE(SUM(b.total_amount), 0) AS net_amount, " +
+                "COALESCE(SUM(b.subscription_savings_amount), 0) AS savings_amount " +
+                "FROM bills b " +
+                "WHERE b.bill_date >= ? " +
+                "AND b.bill_date < ? " +
+                "AND b.subscription_plan_id IS NOT NULL " +
+                "GROUP BY DATE(b.bill_date) " +
+                "ORDER BY bill_day ASC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    long billCount = rs.getLong("bill_count");
+                    double netAmount = round2(rs.getDouble("net_amount"));
+                    double savings = round2(rs.getDouble("savings_amount"));
+                    double grossBeforeDiscount = round2(netAmount + savings);
+                    double leakagePercent = grossBeforeDiscount <= 0.0
+                            ? 0.0
+                            : round4((savings / grossBeforeDiscount) * 100.0);
+
+                    rows.add(new DiscountLeakageRow(
+                            rs.getString("bill_day"),
+                            billCount,
+                            grossBeforeDiscount,
+                            netAmount,
+                            savings,
+                            leakagePercent));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch discount leakage report: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<RejectedOverrideReportRow> getRejectedOverrideAttempts(LocalDate start, LocalDate end, int limit) {
+        List<RejectedOverrideReportRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        int safeLimit = Math.max(1, limit);
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT o.override_id, o.customer_id, o.enrollment_id, " +
+                "o.requested_discount_percent, o.reason AS request_reason, " +
+                "o.requested_by_user_id, req.username AS requested_by_username, " +
+                "o.approved_by_user_id AS rejected_by_user_id, rej.username AS rejected_by_username, " +
+                "o.created_at AS requested_at, o.approved_at AS rejected_at " +
+                "FROM subscription_discount_overrides o " +
+                "LEFT JOIN users req ON req.user_id = o.requested_by_user_id " +
+                "LEFT JOIN users rej ON rej.user_id = o.approved_by_user_id " +
+                "WHERE o.status = 'REJECTED' " +
+                "AND COALESCE(o.approved_at, o.created_at) >= ? " +
+                "AND COALESCE(o.approved_at, o.created_at) < ? " +
+                "ORDER BY COALESCE(o.approved_at, o.created_at) DESC, o.override_id DESC " +
+                "LIMIT ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            ps.setInt(3, safeLimit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new RejectedOverrideReportRow(
+                            rs.getInt("override_id"),
+                            nullableInt(rs, "customer_id"),
+                            nullableInt(rs, "enrollment_id"),
+                            round4(rs.getDouble("requested_discount_percent")),
+                            rs.getString("request_reason"),
+                            rs.getInt("requested_by_user_id"),
+                            rs.getString("requested_by_username"),
+                            nullableInt(rs, "rejected_by_user_id"),
+                            rs.getString("rejected_by_username"),
+                            rs.getString("requested_at"),
+                            rs.getString("rejected_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch rejected override attempts report: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<PricingIntegrityAlertRow> getPricingIntegrityAlerts(LocalDate start, LocalDate end, int limit) {
+        List<PricingIntegrityAlertRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        int safeLimit = Math.max(1, limit);
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+
+        String sql = "SELECT q.bill_id, q.bill_date, q.plan_id, q.plan_code, q.plan_name, " +
+                "q.net_amount, q.savings_amount, q.configured_discount_percent, q.gross_before_discount, q.alert_code " +
+                "FROM (" +
+                "SELECT b.bill_id AS bill_id, b.bill_date AS bill_date, " +
+                "b.subscription_plan_id AS plan_id, " +
+                "COALESCE(sp.plan_code, 'PLAN-' || b.subscription_plan_id) AS plan_code, " +
+                "COALESCE(sp.plan_name, 'Unknown Plan') AS plan_name, " +
+                "COALESCE(b.total_amount, 0) AS net_amount, " +
+                "COALESCE(b.subscription_savings_amount, 0) AS savings_amount, " +
+                "COALESCE(b.subscription_discount_percent, 0) AS configured_discount_percent, " +
+                "(COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) AS gross_before_discount, " +
+                "CASE " +
+                "WHEN COALESCE(b.subscription_savings_amount, 0) < 0 THEN 'NEGATIVE_SAVINGS' " +
+                "WHEN COALESCE(b.subscription_discount_percent, 0) < 0 OR COALESCE(b.subscription_discount_percent, 0) > 100 THEN 'DISCOUNT_PERCENT_OUT_OF_RANGE' " +
+                "WHEN (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) < 0 THEN 'NEGATIVE_GROSS_BEFORE_DISCOUNT' " +
+                "WHEN COALESCE(b.subscription_savings_amount, 0) > (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) + 0.01 THEN 'SAVINGS_EXCEED_GROSS' " +
+                "WHEN (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0)) > 0 " +
+                "AND ABS(((COALESCE(b.subscription_savings_amount, 0) / (COALESCE(b.total_amount, 0) + COALESCE(b.subscription_savings_amount, 0))) * 100.0) - COALESCE(b.subscription_discount_percent, 0)) > 1.0 THEN 'DISCOUNT_PERCENT_MISMATCH' " +
+                "ELSE 'NONE' END AS alert_code " +
+                "FROM bills b " +
+                "LEFT JOIN subscription_plans sp ON sp.plan_id = b.subscription_plan_id " +
+                "WHERE b.bill_date >= ? " +
+                "AND b.bill_date < ? " +
+                "AND b.subscription_plan_id IS NOT NULL" +
+                ") q " +
+                "WHERE q.alert_code <> 'NONE' " +
+                "ORDER BY q.bill_date DESC, q.bill_id DESC " +
+                "LIMIT ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            ps.setInt(3, safeLimit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    double netAmount = round2(rs.getDouble("net_amount"));
+                    double savings = round2(rs.getDouble("savings_amount"));
+                    double grossBeforeDiscount = round2(rs.getDouble("gross_before_discount"));
+                    double configuredPercent = round4(rs.getDouble("configured_discount_percent"));
+                    double computedPercent = grossBeforeDiscount <= 0.0
+                            ? 0.0
+                            : round4((savings / grossBeforeDiscount) * 100.0);
+                    String alertCode = rs.getString("alert_code");
+                    rows.add(new PricingIntegrityAlertRow(
+                            rs.getInt("bill_id"),
+                            rs.getString("bill_date"),
+                            rs.getInt("plan_id"),
+                            rs.getString("plan_code"),
+                            rs.getString("plan_name"),
+                            grossBeforeDiscount,
+                            netAmount,
+                            savings,
+                            configuredPercent,
+                            computedPercent,
+                            alertCode,
+                            classifyPricingAlertSeverity(alertCode)));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch pricing integrity alerts: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<OverrideAbuseSignalRow> getOverrideAbuseSignals(LocalDate start, LocalDate end, int minRequests) {
+        List<OverrideAbuseSignalRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        int safeMinRequests = Math.max(1, minRequests);
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT o.requested_by_user_id, req.username AS requested_by_username, " +
+                "COUNT(*) AS total_requests, " +
+                "SUM(CASE WHEN o.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count, " +
+                "SUM(CASE WHEN o.status = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count, " +
+                "SUM(CASE WHEN o.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_count, " +
+                "COALESCE(AVG(o.requested_discount_percent), 0) AS avg_requested_percent, " +
+                "COALESCE(MAX(o.requested_discount_percent), 0) AS max_requested_percent, " +
+                "MIN(o.created_at) AS first_request_at, " +
+                "MAX(o.created_at) AS latest_request_at " +
+                "FROM subscription_discount_overrides o " +
+                "LEFT JOIN users req ON req.user_id = o.requested_by_user_id " +
+                "WHERE o.created_at >= ? " +
+                "AND o.created_at < ? " +
+                "GROUP BY o.requested_by_user_id, req.username " +
+                "HAVING COUNT(*) >= ? " +
+                "ORDER BY COUNT(*) DESC, COALESCE(AVG(o.requested_discount_percent), 0) DESC, o.requested_by_user_id ASC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            ps.setInt(3, safeMinRequests);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int totalRequests = rs.getInt("total_requests");
+                    int approvedCount = rs.getInt("approved_count");
+                    int rejectedCount = rs.getInt("rejected_count");
+                    int pendingCount = rs.getInt("pending_count");
+                    double approvalRatePercent = totalRequests <= 0
+                            ? 0.0
+                            : round4((approvedCount * 100.0) / totalRequests);
+                    double rejectionRatePercent = totalRequests <= 0
+                            ? 0.0
+                            : round4((rejectedCount * 100.0) / totalRequests);
+                    double averageRequestedPercent = round4(rs.getDouble("avg_requested_percent"));
+                    double maxRequestedPercent = round4(rs.getDouble("max_requested_percent"));
+                    String severity = classifyOverrideAbuseSeverity(
+                            totalRequests,
+                            rejectionRatePercent,
+                            averageRequestedPercent,
+                            maxRequestedPercent);
+
+                    rows.add(new OverrideAbuseSignalRow(
+                            rs.getInt("requested_by_user_id"),
+                            rs.getString("requested_by_username"),
+                            totalRequests,
+                            approvedCount,
+                            rejectedCount,
+                            pendingCount,
+                            approvalRatePercent,
+                            rejectionRatePercent,
+                            averageRequestedPercent,
+                            maxRequestedPercent,
+                            rs.getString("first_request_at"),
+                            rs.getString("latest_request_at"),
+                            severity));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch override abuse signals: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<EnrollmentAbuseSignalRow> getEnrollmentAbuseSignals(LocalDate start, LocalDate end, int minEvents) {
+        List<EnrollmentAbuseSignalRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        int safeMinEvents = Math.max(1, minEvents);
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT cs.customer_id AS customer_id, " +
+                "COUNT(*) AS total_events, " +
+                "SUM(CASE WHEN e.event_type = 'PLAN_CHANGE' THEN 1 ELSE 0 END) AS plan_change_count, " +
+                "SUM(CASE WHEN e.event_type = 'CANCEL' THEN 1 ELSE 0 END) AS cancellation_count, " +
+                "SUM(CASE WHEN e.event_type = 'FREEZE' THEN 1 ELSE 0 END) AS freeze_count, " +
+                "SUM(CASE WHEN e.event_type = 'ENROLL' AND cs.start_date < cs.created_at THEN 1 ELSE 0 END) AS backdated_enroll_count, " +
+                "COUNT(DISTINCT COALESCE(e.new_plan_id, e.old_plan_id, cs.plan_id)) AS distinct_plan_count, " +
+                "MIN(e.effective_at) AS first_event_at, " +
+                "MAX(e.effective_at) AS latest_event_at " +
+                "FROM customer_subscription_events e " +
+                "JOIN customer_subscriptions cs ON cs.enrollment_id = e.enrollment_id " +
+                "WHERE e.effective_at >= ? " +
+                "AND e.effective_at < ? " +
+                "GROUP BY cs.customer_id " +
+                "HAVING COUNT(*) >= ? " +
+                "ORDER BY COUNT(*) DESC, SUM(CASE WHEN e.event_type = 'PLAN_CHANGE' THEN 1 ELSE 0 END) DESC, cs.customer_id ASC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            ps.setInt(3, safeMinEvents);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new EnrollmentAbuseSignalRow(
+                            rs.getInt("customer_id"),
+                            rs.getInt("total_events"),
+                            rs.getInt("plan_change_count"),
+                            rs.getInt("cancellation_count"),
+                            rs.getInt("freeze_count"),
+                            rs.getInt("backdated_enroll_count"),
+                            rs.getInt("distinct_plan_count"),
+                            rs.getString("first_event_at"),
+                            rs.getString("latest_event_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch enrollment abuse signals: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public int createPilotFeedback(
+            String category,
+            String severity,
+            String title,
+            String details,
+            int reportedByUserId,
+            Integer ownerUserId,
+            Integer linkedBillId,
+            Integer linkedOverrideId) throws SQLException {
+        String safeTitle = title == null ? "" : title.trim();
+        if (safeTitle.isEmpty()) {
+            throw new IllegalArgumentException("Pilot feedback title is required.");
+        }
+
+        String sql = "INSERT INTO subscription_pilot_feedback (" +
+                "category, severity, status, title, details, reported_by_user_id, owner_user_id, linked_bill_id, linked_override_id" +
+                ") VALUES (?, ?, 'OPEN', ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, normalizeFeedbackCategory(category));
+            ps.setString(2, normalizeFeedbackSeverity(severity));
+            ps.setString(3, safeTitle);
+            ps.setString(4, normalizeOptionalText(details));
+            ps.setInt(5, reportedByUserId);
+            ps.setObject(6, ownerUserId);
+            ps.setObject(7, linkedBillId);
+            ps.setObject(8, linkedOverrideId);
+            ps.executeUpdate();
+
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        throw new SQLException("Failed to create pilot feedback.");
+    }
+
+    public void updatePilotFeedbackStatus(
+            int feedbackId,
+            String status,
+            Integer ownerUserId,
+            String resolutionNotes) throws SQLException {
+        String normalizedStatus = normalizeFeedbackStatus(status);
+        String normalizedNotes = normalizeOptionalText(resolutionNotes);
+        String resolvedAt = "RESOLVED".equals(normalizedStatus) ? LocalDateTime.now().format(DB_TIMESTAMP) : null;
+        String sql = "UPDATE subscription_pilot_feedback SET " +
+                "status = ?, owner_user_id = COALESCE(?, owner_user_id), resolution_notes = ?, " +
+                "resolved_at = ?, updated_at = CURRENT_TIMESTAMP " +
+                "WHERE feedback_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, normalizedStatus);
+            ps.setObject(2, ownerUserId);
+            ps.setString(3, normalizedNotes);
+            ps.setString(4, resolvedAt);
+            ps.setInt(5, feedbackId);
+            ps.executeUpdate();
+        }
+    }
+
+    public List<PilotFeedbackRow> getPilotFeedback(LocalDate start, LocalDate end, String statusFilter, int limit) {
+        List<PilotFeedbackRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        int safeLimit = Math.max(1, limit);
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String normalizedStatusFilter = normalizeFeedbackStatusFilter(statusFilter);
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT f.feedback_id, f.category, f.severity, f.status, f.title, f.details, ")
+                .append("f.reported_by_user_id, reporter.username AS reported_by_username, ")
+                .append("f.owner_user_id, owner.username AS owner_username, ")
+                .append("f.linked_bill_id, f.linked_override_id, f.resolution_notes, ")
+                .append("f.reported_at, f.updated_at, f.resolved_at ")
+                .append("FROM subscription_pilot_feedback f ")
+                .append("LEFT JOIN users reporter ON reporter.user_id = f.reported_by_user_id ")
+                .append("LEFT JOIN users owner ON owner.user_id = f.owner_user_id ")
+                .append("WHERE f.reported_at >= ? AND f.reported_at < ? ");
+        if (!"ALL".equals(normalizedStatusFilter)) {
+            sql.append("AND f.status = ? ");
+        }
+        sql.append("ORDER BY CASE f.status WHEN 'OPEN' THEN 0 WHEN 'IN_PROGRESS' THEN 1 ELSE 2 END, ")
+                .append("f.reported_at DESC, f.feedback_id DESC ")
+                .append("LIMIT ?");
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            int paramIndex = 1;
+            ps.setString(paramIndex++, rangeStart);
+            ps.setString(paramIndex++, rangeEndExclusive);
+            if (!"ALL".equals(normalizedStatusFilter)) {
+                ps.setString(paramIndex++, normalizedStatusFilter);
+            }
+            ps.setInt(paramIndex, safeLimit);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new PilotFeedbackRow(
+                            rs.getInt("feedback_id"),
+                            rs.getString("category"),
+                            rs.getString("severity"),
+                            rs.getString("status"),
+                            rs.getString("title"),
+                            rs.getString("details"),
+                            rs.getInt("reported_by_user_id"),
+                            rs.getString("reported_by_username"),
+                            nullableInt(rs, "owner_user_id"),
+                            rs.getString("owner_username"),
+                            nullableInt(rs, "linked_bill_id"),
+                            nullableInt(rs, "linked_override_id"),
+                            rs.getString("resolution_notes"),
+                            rs.getString("reported_at"),
+                            rs.getString("updated_at"),
+                            rs.getString("resolved_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch pilot feedback tracker rows: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<String> getConfirmedAbuseMonitoringSubjects(LocalDate start, LocalDate end) {
+        List<String> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT DISTINCT subject_reference " +
+                "FROM (" +
+                "SELECT LOWER('user:' || COALESCE(u.username, 'user-' || o.requested_by_user_id)) AS subject_reference " +
+                "FROM subscription_pilot_feedback f " +
+                "JOIN subscription_discount_overrides o ON o.override_id = f.linked_override_id " +
+                "LEFT JOIN users u ON u.user_id = o.requested_by_user_id " +
+                "WHERE f.reported_at >= ? AND f.reported_at < ? " +
+                "AND UPPER(f.severity) IN ('HIGH', 'CRITICAL') " +
+                "AND UPPER(f.status) = 'RESOLVED' " +
+                "UNION " +
+                "SELECT LOWER('plan:' || COALESCE(sp.plan_code, CAST(b.subscription_plan_id AS TEXT))) AS subject_reference " +
+                "FROM subscription_pilot_feedback f " +
+                "JOIN bills b ON b.bill_id = f.linked_bill_id " +
+                "LEFT JOIN subscription_plans sp ON sp.plan_id = b.subscription_plan_id " +
+                "WHERE f.reported_at >= ? AND f.reported_at < ? " +
+                "AND UPPER(f.severity) IN ('HIGH', 'CRITICAL') " +
+                "AND UPPER(f.status) = 'RESOLVED' " +
+                "AND b.subscription_plan_id IS NOT NULL" +
+                ") monitoring_subjects " +
+                "WHERE subject_reference IS NOT NULL AND subject_reference <> ''";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            ps.setString(3, rangeStart);
+            ps.setString(4, rangeEndExclusive);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(rs.getString("subject_reference"));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch confirmed abuse monitoring subjects: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<EnrollmentMonitoringDecisionRow> getEnrollmentMonitoringDecisions(
+            LocalDate start,
+            LocalDate end,
+            int limit) {
+        List<EnrollmentMonitoringDecisionRow> rows = new ArrayList<>();
+        if (start == null || end == null || start.isAfter(end)) {
+            return rows;
+        }
+
+        int safeLimit = normalizeMonitoringLimit(limit);
+        String rangeStart = start.atStartOfDay().format(DB_TIMESTAMP);
+        String rangeEndExclusive = end.plusDays(1).atStartOfDay().format(DB_TIMESTAMP);
+        String sql = "SELECT enrollment_id, customer_id, plan_id, start_date, created_at " +
+                "FROM customer_subscriptions " +
+                "WHERE created_at >= ? AND created_at < ? " +
+                "ORDER BY created_at DESC, enrollment_id DESC " +
+                "LIMIT ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, rangeStart);
+            ps.setString(2, rangeEndExclusive);
+            ps.setInt(3, safeLimit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new EnrollmentMonitoringDecisionRow(
+                            rs.getInt("enrollment_id"),
+                            rs.getInt("customer_id"),
+                            rs.getInt("plan_id"),
+                            rs.getString("start_date"),
+                            rs.getString("created_at")));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch enrollment monitoring decisions: " + e.getMessage());
+        }
+        return rows;
     }
 
     private void recordEnrollmentEvent(
@@ -940,6 +2173,263 @@ public class SubscriptionDAO {
         return status == null ? SubscriptionEnrollmentStatus.ACTIVE : status;
     }
 
+    private String classifyPricingAlertSeverity(String alertCode) {
+        if (alertCode == null) {
+            return "LOW";
+        }
+        return switch (alertCode) {
+            case "NEGATIVE_SAVINGS",
+                    "DISCOUNT_PERCENT_OUT_OF_RANGE",
+                    "NEGATIVE_GROSS_BEFORE_DISCOUNT",
+                    "SAVINGS_EXCEED_GROSS" -> "HIGH";
+            case "DISCOUNT_PERCENT_MISMATCH" -> "MEDIUM";
+            default -> "LOW";
+        };
+    }
+
+    private String classifyOverrideAbuseSeverity(
+            int totalRequests,
+            double rejectionRatePercent,
+            double averageRequestedPercent,
+            double maxRequestedPercent) {
+        boolean highRiskSignal = rejectionRatePercent >= 60.0
+                || averageRequestedPercent >= 25.0
+                || maxRequestedPercent >= 35.0;
+        if (totalRequests >= 5 && highRiskSignal) {
+            return "HIGH";
+        }
+
+        boolean mediumRiskSignal = rejectionRatePercent >= 40.0
+                || averageRequestedPercent >= 20.0
+                || maxRequestedPercent >= 30.0;
+        if (totalRequests >= 3 && mediumRiskSignal) {
+            return "MEDIUM";
+        }
+        return "LOW";
+    }
+
+    private String normalizeFeedbackCategory(String category) {
+        if (category == null || category.isBlank()) {
+            return "GENERAL";
+        }
+        String normalized = category.trim().toUpperCase(Locale.US).replaceAll("[^A-Z0-9_\\- ]", "");
+        return normalized.isBlank() ? "GENERAL" : normalized;
+    }
+
+    private void upsertWeeklyAnalyticsSummary(
+            Connection conn,
+            String weekStartDate,
+            String weekEndDate,
+            String timezoneName,
+            long totalBillCount,
+            long subscriptionBillCount,
+            double grossAmountBeforeDiscount,
+            double netBilledAmount,
+            double totalSavings,
+            double leakagePercent,
+            long activeSubscribersSnapshot,
+            long renewalsDueNext7Days,
+            long pendingOverrideCount,
+            long highPricingAlertCount,
+            long highOverrideAbuseSignalCount,
+            long openHighCriticalFeedbackCount) throws SQLException {
+        String sql = "INSERT INTO subscription_weekly_summary (" +
+                "week_start_date, week_end_date, timezone_name, total_bill_count, subscription_bill_count, " +
+                "gross_amount_before_discount, net_billed_amount, total_savings, leakage_percent, " +
+                "active_subscribers_snapshot, renewals_due_next_7_days, pending_override_count, " +
+                "high_pricing_alert_count, high_override_abuse_signal_count, open_high_critical_feedback_count" +
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (week_start_date, timezone_name) DO UPDATE SET " +
+                "week_end_date = excluded.week_end_date, " +
+                "total_bill_count = excluded.total_bill_count, " +
+                "subscription_bill_count = excluded.subscription_bill_count, " +
+                "gross_amount_before_discount = excluded.gross_amount_before_discount, " +
+                "net_billed_amount = excluded.net_billed_amount, " +
+                "total_savings = excluded.total_savings, " +
+                "leakage_percent = excluded.leakage_percent, " +
+                "active_subscribers_snapshot = excluded.active_subscribers_snapshot, " +
+                "renewals_due_next_7_days = excluded.renewals_due_next_7_days, " +
+                "pending_override_count = excluded.pending_override_count, " +
+                "high_pricing_alert_count = excluded.high_pricing_alert_count, " +
+                "high_override_abuse_signal_count = excluded.high_override_abuse_signal_count, " +
+                "open_high_critical_feedback_count = excluded.open_high_critical_feedback_count, " +
+                "generated_at = CURRENT_TIMESTAMP";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, weekStartDate);
+            ps.setString(2, weekEndDate);
+            ps.setString(3, timezoneName);
+            ps.setLong(4, totalBillCount);
+            ps.setLong(5, subscriptionBillCount);
+            ps.setDouble(6, grossAmountBeforeDiscount);
+            ps.setDouble(7, netBilledAmount);
+            ps.setDouble(8, totalSavings);
+            ps.setDouble(9, leakagePercent);
+            ps.setLong(10, activeSubscribersSnapshot);
+            ps.setLong(11, renewalsDueNext7Days);
+            ps.setLong(12, pendingOverrideCount);
+            ps.setLong(13, highPricingAlertCount);
+            ps.setLong(14, highOverrideAbuseSignalCount);
+            ps.setLong(15, openHighCriticalFeedbackCount);
+            ps.executeUpdate();
+        }
+    }
+
+    private void replaceWeeklyPlanRevenueSummary(
+            Connection conn,
+            String weekStartDate,
+            String weekEndDate,
+            String timezoneName,
+            List<PlanRevenueImpactRow> planRows) throws SQLException {
+        String deleteSql = "DELETE FROM subscription_weekly_plan_summary WHERE week_start_date = ? AND timezone_name = ?";
+        String insertSql = "INSERT INTO subscription_weekly_plan_summary (" +
+                "week_start_date, week_end_date, timezone_name, plan_id, plan_code, plan_name, bill_count, " +
+                "gross_amount_before_discount, net_billed_amount, total_savings, average_savings_per_bill, leakage_percent" +
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (PreparedStatement deletePs = conn.prepareStatement(deleteSql)) {
+            deletePs.setString(1, weekStartDate);
+            deletePs.setString(2, timezoneName);
+            deletePs.executeUpdate();
+        }
+
+        if (planRows == null || planRows.isEmpty()) {
+            return;
+        }
+
+        try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
+            for (PlanRevenueImpactRow row : planRows) {
+                insertPs.setString(1, weekStartDate);
+                insertPs.setString(2, weekEndDate);
+                insertPs.setString(3, timezoneName);
+                insertPs.setInt(4, row.planId());
+                insertPs.setString(5, row.planCode());
+                insertPs.setString(6, row.planName());
+                insertPs.setLong(7, row.billCount());
+                insertPs.setDouble(8, row.grossAmountBeforeDiscount());
+                insertPs.setDouble(9, row.netBilledAmount());
+                insertPs.setDouble(10, row.totalSavings());
+                insertPs.setDouble(11, row.averageSavingsPerBill());
+                insertPs.setDouble(12, row.leakagePercent());
+                insertPs.addBatch();
+            }
+            insertPs.executeBatch();
+        }
+    }
+
+    private String normalizeFeedbackSeverity(String severity) {
+        if (severity == null || severity.isBlank()) {
+            return "MEDIUM";
+        }
+        String normalized = severity.trim().toUpperCase(Locale.US);
+        return switch (normalized) {
+            case "LOW", "MEDIUM", "HIGH", "CRITICAL" -> normalized;
+            default -> "MEDIUM";
+        };
+    }
+
+    private String normalizeFeedbackStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "OPEN";
+        }
+        String normalized = status.trim().toUpperCase(Locale.US);
+        return switch (normalized) {
+            case "OPEN", "IN_PROGRESS", "RESOLVED" -> normalized;
+            default -> "OPEN";
+        };
+    }
+
+    private String normalizeFeedbackStatusFilter(String statusFilter) {
+        if (statusFilter == null || statusFilter.isBlank()) {
+            return "ALL";
+        }
+        String normalized = statusFilter.trim().toUpperCase(Locale.US);
+        return switch (normalized) {
+            case "OPEN", "IN_PROGRESS", "RESOLVED", "ALL" -> normalized;
+            default -> "ALL";
+        };
+    }
+
+    private String normalizeOptionalText(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private String normalizeTimezoneName(String timezoneName) {
+        if (timezoneName == null || timezoneName.isBlank()) {
+            return ZoneId.systemDefault().getId();
+        }
+        String candidate = timezoneName.trim();
+        try {
+            return ZoneId.of(candidate).getId();
+        } catch (Exception ignored) {
+            return ZoneId.systemDefault().getId();
+        }
+    }
+
+    private int normalizeRecommendationLookbackDays(int lookbackDays) {
+        if (lookbackDays <= 0) {
+            return DEFAULT_RECOMMENDATION_LOOKBACK_DAYS;
+        }
+        return Math.max(MIN_RECOMMENDATION_LOOKBACK_DAYS, Math.min(MAX_RECOMMENDATION_LOOKBACK_DAYS, lookbackDays));
+    }
+
+    private int normalizeRenewalWindowDays(int renewalWindowDays) {
+        if (renewalWindowDays <= 0) {
+            return DEFAULT_RENEWAL_WINDOW_DAYS;
+        }
+        return Math.max(MIN_RENEWAL_WINDOW_DAYS, Math.min(MAX_RENEWAL_WINDOW_DAYS, renewalWindowDays));
+    }
+
+    private int normalizeMonitoringLimit(int limit) {
+        if (limit <= 0) {
+            return 200;
+        }
+        return Math.max(1, Math.min(1000, limit));
+    }
+
+    private long queryLong(Connection conn, String sql, SqlBinder binder) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (binder != null) {
+                binder.bind(ps);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        }
+        return 0L;
+    }
+
+    private double queryDouble(Connection conn, String sql, SqlBinder binder) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (binder != null) {
+                binder.bind(ps);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getDouble(1);
+                }
+            }
+        }
+        return 0.0;
+    }
+
+    @FunctionalInterface
+    private interface SqlBinder {
+        void bind(PreparedStatement ps) throws SQLException;
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private double round4(double value) {
+        return Math.round(value * 10000.0) / 10000.0;
+    }
+
     public record ApplicableSubscription(
             int enrollmentId,
             int planId,
@@ -951,9 +2441,200 @@ public class SubscriptionDAO {
             String approvalReference) {
     }
 
+    public record CustomerPurchaseEvent(
+            String billDate,
+            double billedAmount) {
+    }
+
+    public record CustomerRefillEvent(
+            int medicineId,
+            String billDate,
+            int quantity,
+            double lineAmount) {
+    }
+
+    public record RenewalDueCandidate(
+            int enrollmentId,
+            int customerId,
+            int planId,
+            String planCode,
+            String planName,
+            String startDate,
+            String endDate,
+            double planPrice,
+            int durationDays) {
+    }
+
     public record EligibilityContext(
             CustomerSubscription enrollment,
             SubscriptionPlanStatus planStatus,
             String planName) {
+    }
+
+    public record OverrideFrequencySnapshot(
+            int requestedByUserId,
+            int totalRequests,
+            int approvedCount,
+            int rejectedCount,
+            int pendingCount,
+            String firstRequestAt,
+            String latestRequestAt) {
+    }
+
+    public record SubscriptionDashboardSnapshot(
+            long activeSubscribers,
+            long renewalsDueSoon,
+            double dailySubscriptionSavings,
+            long pendingOverrideCount) {
+    }
+
+    public record PlanRevenueImpactRow(
+            int planId,
+            String planCode,
+            String planName,
+            long billCount,
+            double grossAmountBeforeDiscount,
+            double netBilledAmount,
+            double totalSavings,
+            double averageSavingsPerBill,
+            double leakagePercent) {
+    }
+
+    public record DiscountLeakageRow(
+            String billDay,
+            long billCount,
+            double grossAmountBeforeDiscount,
+            double netBilledAmount,
+            double totalSavings,
+            double leakagePercent) {
+    }
+
+    public record WeeklyAnalyticsSummaryRow(
+            String weekStartDate,
+            String weekEndDate,
+            String timezoneName,
+            long totalBillCount,
+            long subscriptionBillCount,
+            double grossAmountBeforeDiscount,
+            double netBilledAmount,
+            double totalSavings,
+            double leakagePercent,
+            long activeSubscribersSnapshot,
+            long renewalsDueNext7Days,
+            long pendingOverrideCount,
+            long highPricingAlertCount,
+            long highOverrideAbuseSignalCount,
+            long openHighCriticalFeedbackCount,
+            String generatedAt) {
+    }
+
+    public record WeeklyLeakageHistoryRow(
+            String weekStartDate,
+            String weekEndDate,
+            String timezoneName,
+            double leakagePercent,
+            double totalSavings,
+            double grossAmountBeforeDiscount,
+            String generatedAt) {
+    }
+
+    public record WeeklyPlanRevenueSummaryRow(
+            String weekStartDate,
+            String weekEndDate,
+            String timezoneName,
+            int planId,
+            String planCode,
+            String planName,
+            long billCount,
+            double grossAmountBeforeDiscount,
+            double netBilledAmount,
+            double totalSavings,
+            double averageSavingsPerBill,
+            double leakagePercent,
+            String generatedAt) {
+    }
+
+    public record RejectedOverrideReportRow(
+            int overrideId,
+            Integer customerId,
+            Integer enrollmentId,
+            double requestedDiscountPercent,
+            String requestReason,
+            int requestedByUserId,
+            String requestedByUsername,
+            Integer rejectedByUserId,
+            String rejectedByUsername,
+            String requestedAt,
+            String rejectedAt) {
+    }
+
+    public record PricingIntegrityAlertRow(
+            int billId,
+            String billDate,
+            int planId,
+            String planCode,
+            String planName,
+            double grossAmountBeforeDiscount,
+            double netBilledAmount,
+            double savingsAmount,
+            double configuredDiscountPercent,
+            double computedDiscountPercent,
+            String alertCode,
+            String severity) {
+    }
+
+    public record OverrideAbuseSignalRow(
+            int requestedByUserId,
+            String requestedByUsername,
+            int totalRequests,
+            int approvedCount,
+            int rejectedCount,
+            int pendingCount,
+            double approvalRatePercent,
+            double rejectionRatePercent,
+            double averageRequestedPercent,
+            double maxRequestedPercent,
+            String firstRequestAt,
+            String latestRequestAt,
+            String severity) {
+    }
+
+    public record EnrollmentAbuseSignalRow(
+            int customerId,
+            int totalEvents,
+            int planChangeCount,
+            int cancellationCount,
+            int freezeCount,
+            int backdatedEnrollmentCount,
+            int distinctPlanCount,
+            String firstEventAt,
+            String latestEventAt) {
+    }
+
+    public record EnrollmentMonitoringDecisionRow(
+            int enrollmentId,
+            int customerId,
+            int enrolledPlanId,
+            String enrollmentStartDate,
+            String enrollmentCreatedAt) {
+    }
+
+    public record PilotFeedbackRow(
+            int feedbackId,
+            String category,
+            String severity,
+            String status,
+            String title,
+            String details,
+            int reportedByUserId,
+            String reportedByUsername,
+            Integer ownerUserId,
+            String ownerUsername,
+            Integer linkedBillId,
+            Integer linkedOverrideId,
+            String resolutionNotes,
+            String reportedAt,
+            String updatedAt,
+            String resolvedAt) {
     }
 }

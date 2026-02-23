@@ -1,68 +1,85 @@
-# Subscription Governance Spec (Draft for Stakeholder Sign-Off)
+# Subscription Governance Spec (v2)
 
 Status date: 2026-02-23  
-Scope: Apollo/MedPlus-style subscription discounts with Manager/Admin governance.
+Scope: Subscription commerce governance for plan policy, enrollments, and overrides.
 
-## 1) Permission Matrix (Proposed)
+Related policy baseline:
 
-| Capability | Admin | Manager | Pharmacist | Cashier | Staff |
-|---|---|---|---|---|---|
-| Create/update/pause/retire plans | Allow | Allow | Deny | Deny | Deny |
-| Change discount policy (caps, margin floor, include/exclude) | Allow | Allow | Deny | Deny | Deny |
-| Approve backdated enrollments | Allow | Allow | Deny | Deny | Deny |
-| Approve manual discount overrides | Allow | Allow | Deny | Deny | Deny |
-| Enroll customer in active plan | Allow | Allow | Allow | Allow | Deny |
-| Renew/freeze/unfreeze/cancel enrollment | Allow | Allow | Allow | Allow | Deny |
-| Apply automatic subscription discount at checkout | Allow | Allow | Allow | Allow | Deny |
-| Request manual override at checkout | Allow | Allow | Allow | Allow | Deny |
-| View override/audit reports | Allow | Allow | Read-only | Read-only | Deny |
+- `docs/SUBSCRIPTION_PLAN_RULES_BASELINE.md`
+- `docs/SUBSCRIPTION_ELIGIBILITY_RULES_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_PLAN_RECOMMENDATION_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_RENEWAL_PROPENSITY_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_DISCOUNT_ABUSE_DETECTION_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_OVERRIDE_RISK_SCORING_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_DYNAMIC_OFFER_SUGGESTIONS_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_CONVERSATIONAL_ASSISTANT_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_MULTILINGUAL_EXPLANATION_SNIPPETS_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_MODEL_MONITORING_DASHBOARD_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_FALLBACK_RULES_ENGINE_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_INPUT_SAFETY_PII_MASKING_BASELINE.md`
+- `docs/SUBSCRIPTION_AI_PROMPT_VERSION_REGISTRY_BASELINE.md`
 
-Notes:
+## 1) Exact Permission Matrix
 
-1. Approval actions are restricted to Manager/Admin only.
-2. Non-approver users may request override, but cannot self-approve.
-3. RBAC in code currently enforces Manager/Admin for subscription policy and override approvals.
+Source of truth in code:
 
-## 2) Approval Workflow (Proposed)
+- `src/main/java/org/example/MediManage/security/Permission.java`
+- `src/main/java/org/example/MediManage/security/RbacPolicy.java`
 
-## 2.1 Plan Create/Update/Rule Change
+| Capability | Permission | Admin | Manager | Pharmacist | Cashier | Staff |
+|---|---|---|---|---|---|---|
+| Create/update/pause/retire plans | `MANAGE_SUBSCRIPTION_POLICY` | Allow | Allow | Deny | Deny | Deny |
+| Change plan rules (include/exclude, caps, margin floor) | `MANAGE_SUBSCRIPTION_POLICY` | Allow | Allow | Deny | Deny | Deny |
+| Backdated enrollment initiation | `MANAGE_SUBSCRIPTION_POLICY` + `MANAGE_SUBSCRIPTION_ENROLLMENTS` | Allow | Allow | Deny | Deny | Deny |
+| Enroll/renew/freeze/unfreeze/cancel customer subscription | `MANAGE_SUBSCRIPTION_ENROLLMENTS` | Allow | Allow | Allow | Allow | Deny |
+| Request manual override at checkout | `MANAGE_SUBSCRIPTION_ENROLLMENTS` | Allow | Allow | Allow | Allow | Deny |
+| Approve/reject manual override | `APPROVE_SUBSCRIPTION_OVERRIDES` | Allow | Allow | Deny | Deny | Deny |
+| View/operate override frequency alerts | `APPROVE_SUBSCRIPTION_OVERRIDES` | Allow | Allow | Deny | Deny | Deny |
 
-1. Requester submits plan/rule change with reason and effective date.
-2. System creates a `subscription_approvals` row in `PENDING`.
-3. Manager/Admin reviewer approves or rejects.
-4. On approval:
-   - policy change is persisted,
-   - `subscription_audit_log` row is written with checksum chaining.
-5. On rejection:
-   - status is set `REJECTED`,
-   - reason remains immutable.
+## 2) Approval Workflow Policy
 
-## 2.2 Backdated Enrollment
+### 2.1 Plan and Rule Policy Changes
 
-1. Request includes customer, plan, requested start date, and reason.
-2. Request is blocked from direct write until approval exists.
-3. Manager/Admin approval sets `APPROVED` with approver ID and timestamp.
-4. Enrollment and event history rows are written with approval reference.
+1. Only `Admin`/`Manager` can create or modify plans/rules.
+2. Every policy mutation is written to tamper-evident `subscription_audit_log` with checksum chain.
+3. If governance requires dual-control for specific store operations, enforce at process level until code-level dual-approval is introduced.
 
-## 2.3 Manual Discount Override
+### 2.2 Backdated Enrollment
 
-1. Cashier/Pharmacist/Manager/Admin can request override with mandatory reason.
-2. If requester is Cashier/Pharmacist, approver must be Manager/Admin (different user).
-3. System stores both requested and approved discount values.
-4. Approved override reference is attached to bill for invoice transparency.
-5. All actions are logged into audit chain.
+1. Enrollment operations require `MANAGE_SUBSCRIPTION_ENROLLMENTS`.
+2. If `start_date < today`, service enforces `MANAGE_SUBSCRIPTION_POLICY` authority.
+3. Enrollment history stores approver metadata (`approved_by_user_id`, `approval_reference`) when provided.
 
-## 3) Policy Guardrails (Proposed)
+### 2.3 Manual Discount Override
 
-1. Max discount cap per plan and per rule.
-2. Minimum margin floor per plan/rule.
-3. Optional include/exclude by category and specific medicine.
-4. Expired or frozen enrollments cannot auto-discount.
-5. Override cannot bypass hard cap without explicit `APPROVED` record.
+1. Request step:
+   - Actor must have `MANAGE_SUBSCRIPTION_ENROLLMENTS`.
+   - Reason is mandatory.
+   - Request is persisted as `PENDING` with linked `subscription_approvals` record.
+2. Decision step:
+   - Actor must have `APPROVE_SUBSCRIPTION_OVERRIDES`.
+   - Decision reason is mandatory.
+   - **Self-approval is blocked**: requester cannot approve/reject their own request.
+   - If AI risk assessment marks request as `escalationRecommended=true`, approval requires explicit human-review confirmation by the approver.
+3. On decision:
+   - Approval status and override status are updated atomically through service flow.
+   - Audit chain is appended with before/after state snapshots and AI risk metadata.
+   - Dashboard subscription KPIs are invalidated/refreshed.
 
-## 4) Open Decisions for Stakeholders
+## 3) Guardrails
 
-1. Whether Pharmacist can perform enrollment freeze/unfreeze or only request it.
-2. Whether Manager can approve self-created policy changes or must be dual-control.
-3. Grace-period default (0 vs 7 days) and treatment at checkout.
-4. Whether cancellation supports pro-rated refund and how it is computed.
+1. Discount percent validations remain bounded (`0 < percent <= 100`) for requested and approved values.
+2. Eligibility and policy checks in discount engine continue to enforce caps, exclusions, and margin-floor behavior.
+3. Override transparency is maintained via bill-level approval linkage.
+
+## 4) Stakeholder Confirmation Record
+
+This document is the governance baseline to review in change-control meeting for operational sign-off:
+
+1. Pharmacy operations owner.
+2. Engineering owner.
+3. Business approver.
+
+Sign-off artifact attached for current window:
+
+- `docs/pilot-logs/2026-02-23-subscription-governance-stakeholder-confirmation.md`

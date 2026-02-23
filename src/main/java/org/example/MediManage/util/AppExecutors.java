@@ -34,6 +34,14 @@ public final class AppExecutors {
         return SCHEDULER.schedule(task, delay, unit);
     }
 
+    public static ScheduledFuture<?> scheduleAtFixedRate(
+            Runnable task,
+            long initialDelay,
+            long period,
+            TimeUnit unit) {
+        return SCHEDULER.scheduleAtFixedRate(task, initialDelay, period, unit);
+    }
+
     public static Thread newThread(String name, Runnable task, boolean daemon) {
         Thread thread = new Thread(task, name);
         thread.setDaemon(daemon);

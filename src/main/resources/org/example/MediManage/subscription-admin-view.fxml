@@ -188,6 +188,7 @@
                         <Region HBox.hgrow="ALWAYS"/>
                         <Button text="Refresh Pending" onAction="#handleRefreshOverrides" styleClass="button-outlined"/>
                     </HBox>
+                    <Label fx:id="lblOverrideAlerts" text="No unusual override frequency detected in the last 24 hours." styleClass="text-muted"/>
 
                     <TableView fx:id="overrideTable" VBox.vgrow="ALWAYS">
                         <columns>
@@ -216,6 +217,18 @@
                             <Label text="Decision Reason*"/>
                             <TextArea fx:id="txtOverrideDecisionReason" promptText="Reason is mandatory for approve/reject actions." prefRowCount="3"/>
                         </VBox>
+                        <Label
+                            fx:id="lblHighRiskHumanReviewHint"
+                            text=""
+                            visible="false"
+                            managed="false"
+                            wrapText="true"
+                            styleClass="text-warning"/>
+                        <CheckBox
+                            fx:id="chkHighRiskHumanReview"
+                            text="I completed manual review of this high-risk AI advisory before approval."
+                            visible="false"
+                            managed="false"/>
                         <HBox spacing="10">
                             <Button fx:id="btnApproveOverride" text="Approve Override" onAction="#handleApproveOverride" styleClass="button-success" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
                             <Button fx:id="btnRejectOverride" text="Reject Override" onAction="#handleRejectOverride" styleClass="button-danger" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>

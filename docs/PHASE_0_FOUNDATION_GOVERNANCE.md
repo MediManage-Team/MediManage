@@ -68,6 +68,7 @@ Defaults are in `src/main/resources/feature-flags.properties`.
 |---|---|---|
 | `ai.assistant.enabled` | `true` | Allows AI assistant menu visibility. |
 | `database.postgres.migration.enabled` | `true` | Enables/disables SQLite->PostgreSQL migration action. |
+| `subscription.release.enabled` | `false` | Master release gate for staged subscription rollout. |
 | `subscription.commerce.enabled` | `false` | Phase 1 gate. |
 | `subscription.approvals.enabled` | `false` | Phase 1 approval workflow gate. |
 | `subscription.discount.overrides.enabled` | `false` | Phase 1 override workflow gate. |

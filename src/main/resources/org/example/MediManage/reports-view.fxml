@@ -5,9 +5,15 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox spacing="20"
+<ScrollPane
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.ReportsController" styleClass="dark-panel">
+    xmlns:fx="http://javafx.com/fxml/1"
+    fx:controller="org.example.MediManage.ReportsController"
+    fitToWidth="true"
+    fitToHeight="true"
+    pannable="true">
+    <content>
+        <VBox spacing="20" styleClass="dark-panel">
 
     <!-- Header -->
     <HBox spacing="15" alignment="CENTER_LEFT" styleClass="card">
@@ -54,4 +60,164 @@
             <TextArea fx:id="txtAISummary" editable="false" wrapText="true" prefHeight="120" promptText="AI-generated sales insights will appear here..." styleClass="ai-panel-text"/>
         </VBox>
     </TitledPane>
-</VBox>
+
+    <TitledPane fx:id="subscriptionReportsPane" text="Subscription Revenue Impact and Discount Leakage" expanded="false" animated="true" styleClass="card">
+        <VBox spacing="10" styleClass="content-pad-10">
+            <Label fx:id="lblLeakageSummary" text="No subscription report data in selected range." styleClass="text-muted"/>
+            <SplitPane dividerPositions="0.56" VBox.vgrow="ALWAYS">
+                <items>
+                    <VBox spacing="8">
+                        <Label text="Plan-wise Revenue Impact" styleClass="section-title"/>
+                        <TableView fx:id="planImpactTable" prefHeight="220" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="colImpactPlan" text="Plan" prefWidth="180"/>
+                                <TableColumn fx:id="colImpactBills" text="Bills" prefWidth="70"/>
+                                <TableColumn fx:id="colImpactGross" text="Gross (₹)" prefWidth="100"/>
+                                <TableColumn fx:id="colImpactSavings" text="Savings (₹)" prefWidth="100"/>
+                                <TableColumn fx:id="colImpactNet" text="Net (₹)" prefWidth="100"/>
+                                <TableColumn fx:id="colImpactLeakage" text="Leakage %" prefWidth="90"/>
+                            </columns>
+                            <columnResizePolicy>
+                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                            </columnResizePolicy>
+                        </TableView>
+                    </VBox>
+                    <VBox spacing="8">
+                        <Label text="Daily Discount Leakage" styleClass="section-title"/>
+                        <TableView fx:id="leakageTable" prefHeight="220" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="colLeakageDay" text="Day" prefWidth="100"/>
+                                <TableColumn fx:id="colLeakageBills" text="Bills" prefWidth="70"/>
+                                <TableColumn fx:id="colLeakageGross" text="Gross (₹)" prefWidth="100"/>
+                                <TableColumn fx:id="colLeakageSavings" text="Savings (₹)" prefWidth="100"/>
+                                <TableColumn fx:id="colLeakagePercent" text="Leakage %" prefWidth="90"/>
+                            </columns>
+                            <columnResizePolicy>
+                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                            </columnResizePolicy>
+                        </TableView>
+                    </VBox>
+                </items>
+            </SplitPane>
+
+            <Separator/>
+            <Label fx:id="lblRejectedSummary" text="No rejected override attempts in selected range." styleClass="text-muted"/>
+            <VBox spacing="8">
+                <Label text="Rejected Override Attempts (Compliance)" styleClass="section-title"/>
+                <TableView fx:id="rejectedOverridesTable" prefHeight="220" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="colRejectedOverrideId" text="Override ID" prefWidth="88"/>
+                        <TableColumn fx:id="colRejectedCustomer" text="Customer" prefWidth="82"/>
+                        <TableColumn fx:id="colRejectedEnrollment" text="Enrollment" prefWidth="92"/>
+                        <TableColumn fx:id="colRejectedRequestedPercent" text="Requested %" prefWidth="92"/>
+                        <TableColumn fx:id="colRejectedRequestedBy" text="Requested By" prefWidth="120"/>
+                        <TableColumn fx:id="colRejectedRejectedBy" text="Rejected By" prefWidth="120"/>
+                        <TableColumn fx:id="colRejectedAt" text="Rejected At" prefWidth="140"/>
+                        <TableColumn fx:id="colRejectedReason" text="Request Reason" prefWidth="240"/>
+                    </columns>
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                    </columnResizePolicy>
+                </TableView>
+            </VBox>
+
+            <Separator/>
+            <Label fx:id="lblPilotMonitoringSummary" text="Pilot monitors -> Pricing alerts: 0 | Override abuse signals: 0" styleClass="text-muted"/>
+            <Label fx:id="lblPilotGateStatus" text="Pilot gate: PASS" styleClass="label-strong text-muted"/>
+            <VBox spacing="6">
+                <Label text="AI Model Monitoring" styleClass="section-title"/>
+                <Label fx:id="lblModelMonitoringSummary" text="No model monitoring data in selected range." styleClass="text-muted" wrapText="true"/>
+                <Label fx:id="lblAbuseDetectionMetrics" text="Abuse precision: 0.00% | recall: 0.00% | TP: 0 | FP: 0 | FN: 0" styleClass="text-muted" wrapText="true"/>
+                <Label fx:id="lblRecommendationAcceptanceMetrics" text="Recommendation acceptance: 0.00% | Accepted: 0/0 | Enrollments in window: 0" styleClass="text-muted" wrapText="true"/>
+            </VBox>
+
+            <SplitPane dividerPositions="0.5" VBox.vgrow="ALWAYS">
+                <items>
+                    <VBox spacing="8">
+                        <Label text="Pricing Integrity Alerts" styleClass="section-title"/>
+                        <Label fx:id="lblPricingAlertsSummary" text="No pricing integrity alerts in selected range." styleClass="text-muted"/>
+                        <TableView fx:id="pricingAlertsTable" prefHeight="220" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="colPricingBillId" text="Bill ID" prefWidth="80"/>
+                                <TableColumn fx:id="colPricingBillDate" text="Bill Date" prefWidth="140"/>
+                                <TableColumn fx:id="colPricingPlan" text="Plan" prefWidth="140"/>
+                                <TableColumn fx:id="colPricingNet" text="Net (₹)" prefWidth="90"/>
+                                <TableColumn fx:id="colPricingSavings" text="Savings (₹)" prefWidth="100"/>
+                                <TableColumn fx:id="colPricingConfiguredPercent" text="Configured %" prefWidth="100"/>
+                                <TableColumn fx:id="colPricingComputedPercent" text="Computed %" prefWidth="95"/>
+                                <TableColumn fx:id="colPricingAlertCode" text="Alert" prefWidth="150"/>
+                                <TableColumn fx:id="colPricingSeverity" text="Severity" prefWidth="80"/>
+                            </columns>
+                            <columnResizePolicy>
+                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                            </columnResizePolicy>
+                        </TableView>
+                    </VBox>
+                    <VBox spacing="8">
+                        <Label text="Override Abuse Signals" styleClass="section-title"/>
+                        <Label fx:id="lblOverrideAbuseSummary" text="No override abuse signals found for selected range." styleClass="text-muted"/>
+                        <TableView fx:id="overrideAbuseTable" prefHeight="220" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="colAbuseRequester" text="Requester" prefWidth="130"/>
+                                <TableColumn fx:id="colAbuseRequests" text="Requests" prefWidth="80"/>
+                                <TableColumn fx:id="colAbuseApproved" text="Approved" prefWidth="85"/>
+                                <TableColumn fx:id="colAbuseRejected" text="Rejected" prefWidth="85"/>
+                                <TableColumn fx:id="colAbusePending" text="Pending" prefWidth="80"/>
+                                <TableColumn fx:id="colAbuseAverageRequested" text="Avg Requested %" prefWidth="120"/>
+                                <TableColumn fx:id="colAbuseRejectionRate" text="Rejected %" prefWidth="95"/>
+                                <TableColumn fx:id="colAbuseSeverity" text="Severity" prefWidth="80"/>
+                                <TableColumn fx:id="colAbuseLatest" text="Latest Request" prefWidth="140"/>
+                            </columns>
+                            <columnResizePolicy>
+                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                            </columnResizePolicy>
+                        </TableView>
+                    </VBox>
+                </items>
+            </SplitPane>
+
+            <Separator/>
+            <Label fx:id="lblPilotFeedbackSummary" text="No pilot feedback logged in selected range." styleClass="text-muted"/>
+            <VBox spacing="8">
+                <Label text="Pilot Feedback and Issue Tracker" styleClass="section-title"/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Severity"/>
+                    <ComboBox fx:id="cmbFeedbackSeverity" prefWidth="120"/>
+                    <Label text="Title"/>
+                    <TextField fx:id="txtFeedbackTitle" promptText="Issue summary" HBox.hgrow="ALWAYS"/>
+                    <Button text="Log Feedback" onAction="#handleLogPilotFeedback" styleClass="button-primary"/>
+                </HBox>
+                <TextArea fx:id="txtFeedbackDetails" prefRowCount="3" wrapText="true" promptText="Describe observed issue, impact, and reproduction notes (optional)."/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Owner User ID"/>
+                    <TextField fx:id="txtFeedbackOwnerUserId" prefWidth="100" promptText="optional"/>
+                    <Label text="Bill ID"/>
+                    <TextField fx:id="txtFeedbackLinkedBillId" prefWidth="100" promptText="optional"/>
+                    <Label text="Override ID"/>
+                    <TextField fx:id="txtFeedbackLinkedOverrideId" prefWidth="110" promptText="optional"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Refresh" onAction="#handleRefreshPilotFeedback"/>
+                    <Button text="Mark In Progress" onAction="#handleMarkFeedbackInProgress"/>
+                    <Button text="Mark Resolved" onAction="#handleMarkFeedbackResolved"/>
+                </HBox>
+                <TableView fx:id="pilotFeedbackTable" prefHeight="220" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="colFeedbackId" text="ID" prefWidth="56"/>
+                        <TableColumn fx:id="colFeedbackReportedAt" text="Reported At" prefWidth="140"/>
+                        <TableColumn fx:id="colFeedbackSeverity" text="Severity" prefWidth="80"/>
+                        <TableColumn fx:id="colFeedbackStatus" text="Status" prefWidth="100"/>
+                        <TableColumn fx:id="colFeedbackTitle" text="Title" prefWidth="220"/>
+                        <TableColumn fx:id="colFeedbackReportedBy" text="Reported By" prefWidth="130"/>
+                        <TableColumn fx:id="colFeedbackOwner" text="Owner" prefWidth="120"/>
+                        <TableColumn fx:id="colFeedbackResolvedAt" text="Resolved At" prefWidth="140"/>
+                    </columns>
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                    </columnResizePolicy>
+                </TableView>
+            </VBox>
+        </VBox>
+    </TitledPane>
+        </VBox>
+    </content>
+</ScrollPane>

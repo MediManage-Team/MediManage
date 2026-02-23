@@ -14,6 +14,8 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import org.example.MediManage.config.FeatureFlag;
+import org.example.MediManage.config.FeatureFlags;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.CustomerSubscription;
 import org.example.MediManage.model.SubscriptionPlan;
@@ -22,10 +24,14 @@ import org.example.MediManage.security.Permission;
 import org.example.MediManage.security.RbacPolicy;
 import org.example.MediManage.service.CustomerService;
 import org.example.MediManage.service.SubscriptionService;
+import org.example.MediManage.service.subscription.SubscriptionPlanRecommendationEngine;
+import org.example.MediManage.service.subscription.SubscriptionRenewalPropensityEngine;
+import org.example.MediManage.service.subscription.SubscriptionDynamicOfferSuggestionEngine;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -104,6 +110,9 @@ public class SubscriptionEnrollmentController {
     @FXML
     public void initialize() {
         RbacPolicy.requireCurrentUser(Permission.MANAGE_SUBSCRIPTION_ENROLLMENTS);
+        if (!FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+            throw new SecurityException("Subscription enrollments are disabled for this user.");
+        }
         configureCustomerTable();
         configurePlanTable();
         configureEnrollmentTable();
@@ -284,8 +293,8 @@ public class SubscriptionEnrollmentController {
                 clearSelectionContext();
                 return;
             }
-            updateSelectionContext(newValue);
             loadEnrollments(newValue.getCustomerId());
+            updateSelectionContext(newValue);
         });
     }
 
@@ -403,7 +412,83 @@ public class SubscriptionEnrollmentController {
     }
 
     private void updateSelectionContext(Customer customer) {
-        lblEnrollmentContext.setText("Customer: " + customer.getName() + " (ID " + customer.getCustomerId() + ")");
+        String base = "Customer: " + customer.getName() + " (ID " + customer.getCustomerId() + ")";
+        try {
+            SubscriptionPlanRecommendationEngine.RecommendationResult recommendation = subscriptionService
+                    .recommendPlansForCustomer(customer.getCustomerId());
+            String summary = summarizeRecommendation(recommendation);
+            String renewalRisk = summarizeRenewalRisk(customer.getCustomerId());
+            String offerSummary = summarizeDynamicOffer(customer.getCustomerId());
+
+            String withRecommendation = summary.isBlank() ? base : base + " | AI Recommendation: " + summary;
+            String withRisk = renewalRisk.isBlank()
+                    ? withRecommendation
+                    : withRecommendation + " | Renewal Risk: " + renewalRisk;
+            lblEnrollmentContext.setText(offerSummary.isBlank()
+                    ? withRisk
+                    : withRisk + " | Offer: " + offerSummary);
+        } catch (Exception ignored) {
+            lblEnrollmentContext.setText(base);
+        }
+    }
+
+    private String summarizeRecommendation(SubscriptionPlanRecommendationEngine.RecommendationResult recommendation) {
+        if (recommendation == null) {
+            return "";
+        }
+        List<SubscriptionPlanRecommendationEngine.PlanRecommendation> rows = recommendation.recommendations();
+        if (rows == null || rows.isEmpty()) {
+            return recommendation.statusMessage() == null ? "" : recommendation.statusMessage();
+        }
+        SubscriptionPlanRecommendationEngine.PlanRecommendation top = rows.get(0);
+        return String.format(
+                Locale.US,
+                "%s (%s), score %.1f, savings Rs %.2f/mo, net %+,.2f/mo",
+                top.planName(),
+                top.planCode(),
+                top.recommendationScore(),
+                top.expectedMonthlySavings(),
+                top.expectedNetMonthlyBenefit());
+    }
+
+    private String summarizeRenewalRisk(int customerId) {
+        try {
+            List<SubscriptionRenewalPropensityEngine.RenewalPropensityScore> scores = subscriptionService
+                    .scoreRenewalChurnRisk(30, 200);
+            for (SubscriptionRenewalPropensityEngine.RenewalPropensityScore score : scores) {
+                if (score == null || score.customerId() != customerId) {
+                    continue;
+                }
+                return String.format(
+                        Locale.US,
+                        "%s %.1f (renewal in %d days)",
+                        score.riskBand(),
+                        score.churnRiskScore(),
+                        score.daysUntilRenewal());
+            }
+        } catch (Exception ignored) {
+            // Keep enrollment workflow responsive even if scoring data is unavailable.
+        }
+        return "";
+    }
+
+    private String summarizeDynamicOffer(int customerId) {
+        try {
+            List<SubscriptionDynamicOfferSuggestionEngine.DynamicOfferSuggestion> offers = subscriptionService
+                    .suggestDynamicOffersForCustomer(customerId, 1);
+            if (offers == null || offers.isEmpty()) {
+                return "";
+            }
+            SubscriptionDynamicOfferSuggestionEngine.DynamicOfferSuggestion offer = offers.get(0);
+            return String.format(
+                    Locale.US,
+                    "%s %.1f%% (%s)",
+                    offer.planCode(),
+                    offer.offerDiscountPercent(),
+                    offer.guardrailCapApplied() ? "guardrailed" : "within limits");
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private String planName(int planId) {

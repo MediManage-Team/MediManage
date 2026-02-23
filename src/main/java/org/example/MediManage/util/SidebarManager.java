@@ -13,6 +13,8 @@ public class SidebarManager {
     public static void generateSidebar(VBox container, UserRole role, Runnable onLogout, ViewSwitcher switcher) {
         container.getChildren().clear();
         container.setSpacing(4);
+        boolean subscriptionCommerceEnabledForUser = FeatureFlags
+                .isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_COMMERCE);
 
         // Add Common Dashboard Button (Admin, Manager, and Pharmacist)
         if (role == UserRole.ADMIN || role == UserRole.MANAGER || role == UserRole.PHARMACIST) {
@@ -26,7 +28,7 @@ public class SidebarManager {
                     addButton(container, "👤 Users", "users-view", switcher);
                     addButton(container, "📦 Inventory", "inventory-view", switcher);
                     addButton(container, "📈 Reports", "reports-view", switcher);
-                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                    if (subscriptionCommerceEnabledForUser) {
                         addButton(container, "🧾 Subscriptions", "subscription-admin-view", switcher);
                         addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
                     }
@@ -37,7 +39,7 @@ public class SidebarManager {
                 case MANAGER:
                     addButton(container, "📦 Inventory", "inventory-view", switcher);
                     addButton(container, "📈 Reports", "reports-view", switcher);
-                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                    if (subscriptionCommerceEnabledForUser) {
                         addButton(container, "🧾 Subscriptions", "subscription-admin-view", switcher);
                         addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
                     }
@@ -46,14 +48,14 @@ public class SidebarManager {
                 case PHARMACIST:
                     addButton(container, "🔍 Medicine Search", "medicine-search-view", switcher);
                     addButton(container, "📋 Prescriptions", "prescriptions-view", switcher);
-                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                    if (subscriptionCommerceEnabledForUser) {
                         addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
                     }
                     break;
                 case CASHIER:
                     addButton(container, "💳 Billing", "billing-view", switcher);
                     addButton(container, "👥 Customers", "customers-view", switcher);
-                    if (FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+                    if (subscriptionCommerceEnabledForUser) {
                         addButton(container, "📇 Memberships", "subscription-enrollment-view", switcher);
                     }
                     break;

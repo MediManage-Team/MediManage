@@ -15,7 +15,11 @@ import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.service.BillingService;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.prefs.Preferences;
 
 public class BillingController {
     private static final String CUSTOMER_NAME_SELECTED_CLASS = "customer-name-selected";
@@ -28,6 +32,8 @@ public class BillingController {
     private static final String OVERRIDE_REQUEST_READY_LABEL = "Request Discount Override";
     private static final String OVERRIDE_REQUESTED_BUTTON_LABEL = "Override Requested";
     private static final String OVERRIDE_DEFAULT_STATUS = "No override requested for current bill.";
+    private static final String PREF_EXPLANATION_LANGUAGE_CODE = "billing.subscription.explanation.language";
+    private static final String DEFAULT_EXPLANATION_LANGUAGE_CODE = "en";
 
     @FXML
     private TableView<BillItem> billingTable;
@@ -66,8 +72,14 @@ public class BillingController {
     private Button btnRequestOverride;
     @FXML
     private Label lblOverrideStatus;
+    @FXML
+    private Button btnExplainDiscountDecision;
+    @FXML
+    private ComboBox<String> cmbDiscountExplanationLanguage;
 
     private final BillingService billingService = new BillingService();
+    private final Preferences prefs = Preferences.userNodeForPackage(BillingController.class);
+    private final Map<String, String> explanationLanguageCodeByLabel = new LinkedHashMap<>();
 
     private ObservableList<BillItem> billList = FXCollections.observableArrayList();
     private ObservableList<Medicine> allMedicines = FXCollections.observableArrayList();
@@ -92,6 +104,7 @@ public class BillingController {
         setupKeyBindings();
         setupGlobalShortcuts();
         applyCustomerNameStyle(false);
+        setupExplanationLanguageSelector();
         applyOverrideFeatureGuards();
         updateOverrideUiState();
     }
@@ -223,6 +236,45 @@ public class BillingController {
         lblCustomerName.getStyleClass().add(selected ? CUSTOMER_NAME_SELECTED_CLASS : CUSTOMER_NAME_MUTED_CLASS);
     }
 
+    private void setupExplanationLanguageSelector() {
+        if (cmbDiscountExplanationLanguage == null) {
+            return;
+        }
+        explanationLanguageCodeByLabel.clear();
+        explanationLanguageCodeByLabel.putAll(billingService.supportedExplanationLanguages());
+        cmbDiscountExplanationLanguage.getItems().setAll(explanationLanguageCodeByLabel.keySet());
+
+        String savedCode = prefs.get(PREF_EXPLANATION_LANGUAGE_CODE, DEFAULT_EXPLANATION_LANGUAGE_CODE);
+        String selectedLabel = labelForExplanationLanguageCode(savedCode);
+        if (selectedLabel == null && !cmbDiscountExplanationLanguage.getItems().isEmpty()) {
+            selectedLabel = cmbDiscountExplanationLanguage.getItems().get(0);
+        }
+        cmbDiscountExplanationLanguage.setValue(selectedLabel);
+        cmbDiscountExplanationLanguage.setOnAction(event ->
+                prefs.put(PREF_EXPLANATION_LANGUAGE_CODE, selectedExplanationLanguageCode()));
+    }
+
+    private String selectedExplanationLanguageCode() {
+        if (cmbDiscountExplanationLanguage == null) {
+            return DEFAULT_EXPLANATION_LANGUAGE_CODE;
+        }
+        String selectedLabel = cmbDiscountExplanationLanguage.getValue();
+        if (selectedLabel == null || selectedLabel.isBlank()) {
+            return DEFAULT_EXPLANATION_LANGUAGE_CODE;
+        }
+        return explanationLanguageCodeByLabel.getOrDefault(selectedLabel, DEFAULT_EXPLANATION_LANGUAGE_CODE);
+    }
+
+    private String labelForExplanationLanguageCode(String languageCode) {
+        String normalized = languageCode == null ? DEFAULT_EXPLANATION_LANGUAGE_CODE : languageCode.trim().toLowerCase();
+        for (Map.Entry<String, String> entry : explanationLanguageCodeByLabel.entrySet()) {
+            if (entry.getValue().equalsIgnoreCase(normalized)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
     private void applyOverrideFeatureGuards() {
         boolean enabled = billingService.isManualOverrideRequestEnabled();
         boolean allowedForRole = billingService.canCurrentUserRequestManualOverride();
@@ -251,6 +303,9 @@ public class BillingController {
     }
 
     private void updateOverrideUiState() {
+        if (btnExplainDiscountDecision != null) {
+            btnExplainDiscountDecision.setDisable(billList == null || billList.isEmpty());
+        }
         if (btnRequestOverride == null || !btnRequestOverride.isVisible()) {
             return;
         }
@@ -436,6 +491,39 @@ public class BillingController {
     }
 
     @FXML
+    private void handleExplainDiscountDecision() {
+        if (billList == null || billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add bill items before requesting an explanation.");
+            return;
+        }
+
+        BillingService.DiscountDecisionExplanation explanation = billingService.explainSubscriptionDiscountDecision(
+                billingService.snapshotItems(billList),
+                selectedCustomer);
+
+        StringBuilder body = new StringBuilder(explanation.summary());
+        List<String> points = explanation.talkingPoints();
+        if (points != null) {
+            for (String point : points) {
+                if (point == null || point.isBlank()) {
+                    continue;
+                }
+                body.append("\n- ").append(point.trim());
+            }
+        }
+        if (pendingOverrideRequest != null) {
+            body.append("\n- Pending manual override #")
+                    .append(pendingOverrideRequest.overrideId())
+                    .append(" may still change the final discount after approval.");
+        }
+
+        showAlert(
+                Alert.AlertType.INFORMATION,
+                explanation.discountApplied() ? "Discount Applied Explanation" : "Discount Rejection Explanation",
+                body.toString());
+    }
+
+    @FXML
     private void handleCheckout() {
         if (billList.isEmpty())
             return;
@@ -455,7 +543,8 @@ public class BillingController {
             }
         }
 
-        Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
+        Customer checkoutCustomer = selectedCustomer;
+        Integer cid = checkoutCustomer != null ? checkoutCustomer.getCustomerId() : null;
 
         // Payment Mode Dialog
         java.util.List<String> choices = new java.util.ArrayList<>();
@@ -483,19 +572,32 @@ public class BillingController {
         btnCheckout.setText(CHECKOUT_BUSY_LABEL);
 
         List<BillItem> checkoutItems = billingService.snapshotItems(billList);
-        billingService.generateCheckoutCareProtocol(checkoutItems)
-                .thenAccept(careProtocol -> {
+        String explanationLanguageCode = selectedExplanationLanguageCode();
+        CompletableFuture<String> careProtocolFuture = billingService.generateCheckoutCareProtocol(checkoutItems);
+        CompletableFuture<BillingService.LocalizedDiscountExplanation> explanationFuture = billingService
+                .generateLocalizedSubscriptionExplanation(checkoutItems, checkoutCustomer, explanationLanguageCode);
+
+        careProtocolFuture
+                .thenCombine(explanationFuture, CheckoutAiContext::new)
+                .thenAccept(aiContext -> {
                     // Return to FX Thread for UI & PDF generation
                     Platform.runLater(() -> {
                         try {
                             int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
                             BillingService.CheckoutResult checkoutResult = billingService.completeCheckout(
                                     checkoutItems,
-                                    selectedCustomer,
+                                    checkoutCustomer,
                                     userId,
                                     paymentMode,
-                                    careProtocol);
+                                    aiContext.careProtocol(),
+                                    aiContext.localizedExplanation());
 
+                            String localizedSnippet = aiContext.localizedExplanation() == null
+                                    ? ""
+                                    : aiContext.localizedExplanation().snippet();
+                            String localizedLanguage = aiContext.localizedExplanation() == null
+                                    ? "English"
+                                    : aiContext.localizedExplanation().languageName();
                             showAlert(Alert.AlertType.INFORMATION, "Success",
                                     "Bill #" + checkoutResult.billId()
                                             + " & Care Protocol Generated!\nSaved to: " + checkoutResult.pdfPath()
@@ -503,7 +605,11 @@ public class BillingController {
                                                     ? "\nSubscription: " + checkoutResult.subscriptionPlanName()
                                                             + " | Savings: ₹"
                                                             + String.format("%.2f", checkoutResult.subscriptionSavings())
-                                                    : ""));
+                                                    : "")
+                                            + (localizedSnippet == null || localizedSnippet.isBlank()
+                                                    ? ""
+                                                    : "\nSavings Explanation (" + localizedLanguage + "): "
+                                                            + localizedSnippet));
 
                             // Cleanup
                             billList.clear();
@@ -531,7 +637,7 @@ public class BillingController {
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
                         showAlert(Alert.AlertType.ERROR, "AI Error",
-                                "Failed to generate Care Protocol: " + ex.getMessage());
+                                "Failed to generate AI checkout context: " + ex.getMessage());
                         btnCheckout.setDisable(false);
                         btnCheckout.setText(CHECKOUT_READY_LABEL);
                     });
@@ -754,5 +860,10 @@ public class BillingController {
     }
 
     private record OverrideRequestInput(double requestedPercent, String reason) {
+    }
+
+    private record CheckoutAiContext(
+            String careProtocol,
+            BillingService.LocalizedDiscountExplanation localizedExplanation) {
     }
 }

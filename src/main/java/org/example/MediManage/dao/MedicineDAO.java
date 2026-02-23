@@ -7,8 +7,11 @@ import org.example.MediManage.security.RbacPolicy;
 
 import java.sql.*;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public class MedicineDAO {
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -44,6 +47,38 @@ public class MedicineDAO {
             e.printStackTrace();
         }
         return list;
+    }
+
+    public Medicine getMedicineById(int medicineId) {
+        if (medicineId <= 0) {
+            return null;
+        }
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 AND m.medicine_id = ? " +
+                "LIMIT 1";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, medicineId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new Medicine(
+                        rs.getInt("medicine_id"),
+                        rs.getString("name"),
+                        rs.getString("generic_name"),
+                        rs.getString("company"),
+                        rs.getString("expiry_date"),
+                        rs.getInt("quantity"),
+                        rs.getDouble("price"));
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getMedicineById: " + e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -360,10 +395,586 @@ public class MedicineDAO {
         return list;
     }
 
+    public List<OutOfStockInsightRow> getOutOfStockInsights(int lookbackDays, int limit) {
+        int safeLookbackDays = Math.max(1, lookbackDays);
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(safeLookbackDays - 1);
+        return getOutOfStockInsights(startDate, endDate, null, null, limit);
+    }
+
+    public List<OutOfStockInsightRow> getOutOfStockInsights(
+            LocalDate rangeStartDate,
+            LocalDate rangeEndDate,
+            String supplierFilter,
+            String categoryFilter,
+            int limit) {
+        List<OutOfStockInsightRow> rows = new ArrayList<>();
+        int safeLimit = normalizeLimit(limit);
+        LocalDate safeEndDate = rangeEndDate == null ? LocalDate.now() : rangeEndDate;
+        LocalDate safeStartDate = rangeStartDate == null ? safeEndDate.minusDays(29) : rangeStartDate;
+        if (safeStartDate.isAfter(safeEndDate)) {
+            LocalDate temp = safeStartDate;
+            safeStartDate = safeEndDate;
+            safeEndDate = temp;
+        }
+        long safeLookbackDays = Math.max(1L, ChronoUnit.DAYS.between(safeStartDate, safeEndDate) + 1L);
+        String safeSupplierFilter = normalizeFilterValue(supplierFilter);
+        String safeCategoryFilter = normalizeFilterValue(categoryFilter);
+        String rangeStart = safeStartDate + " 00:00:00";
+        String rangeEndExclusive = safeEndDate.plusDays(1) + " 00:00:00";
+
+        String sql = "SELECT m.medicine_id, m.name, m.company, COALESCE(s.quantity, 0) AS current_stock, " +
+                "(SELECT MAX(b.bill_date) " +
+                " FROM bill_items bi " +
+                " JOIN bills b ON b.bill_id = bi.bill_id " +
+                " WHERE bi.medicine_id = m.medicine_id) AS last_sale_at, " +
+                "(SELECT COALESCE(SUM(bi.total), 0) " +
+                " FROM bill_items bi " +
+                " JOIN bills b ON b.bill_id = bi.bill_id " +
+                " WHERE bi.medicine_id = m.medicine_id " +
+                " AND b.bill_date >= ? " +
+                " AND b.bill_date < ?) AS lookback_revenue " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON s.medicine_id = m.medicine_id " +
+                "WHERE m.active = 1 " +
+                "AND COALESCE(s.quantity, 0) <= 0 " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.company, '')) = LOWER(?)) " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.generic_name, '')) = LOWER(?)) " +
+                "ORDER BY lookback_revenue DESC, m.name ASC " +
+                "LIMIT ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, rangeStart);
+            pstmt.setString(2, rangeEndExclusive);
+            pstmt.setString(3, safeSupplierFilter);
+            pstmt.setString(4, safeSupplierFilter);
+            pstmt.setString(5, safeCategoryFilter);
+            pstmt.setString(6, safeCategoryFilter);
+            pstmt.setInt(7, safeLimit);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    String lastSaleAt = rs.getString("last_sale_at");
+                    LocalDate lastSaleDate = parseDateFromTimestamp(lastSaleAt);
+                    long daysOutOfStock = lastSaleDate == null
+                            ? safeLookbackDays
+                            : Math.max(1L, ChronoUnit.DAYS.between(lastSaleDate, safeEndDate));
+                    double lookbackRevenue = round2(rs.getDouble("lookback_revenue"));
+                    double averageDailyRevenue = round2(lookbackRevenue / safeLookbackDays);
+                    long impactDays = Math.max(1L, Math.min(daysOutOfStock, safeLookbackDays));
+                    double estimatedImpact = round2(averageDailyRevenue * impactDays);
+
+                    rows.add(new OutOfStockInsightRow(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name") == null ? "" : rs.getString("name"),
+                            rs.getString("company") == null ? "" : rs.getString("company"),
+                            rs.getInt("current_stock"),
+                            lastSaleAt,
+                            daysOutOfStock,
+                            lookbackRevenue,
+                            averageDailyRevenue,
+                            estimatedImpact));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getOutOfStockInsights: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public List<NearStockOutInsightRow> getNearStockOutInsights(int lookbackDays, int reorderCoverageDays, int limit) {
+        int safeLookbackDays = Math.max(1, lookbackDays);
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(safeLookbackDays - 1);
+        return getNearStockOutInsights(startDate, endDate, reorderCoverageDays, null, null, limit);
+    }
+
+    public List<NearStockOutInsightRow> getNearStockOutInsights(
+            LocalDate rangeStartDate,
+            LocalDate rangeEndDate,
+            int reorderCoverageDays,
+            String supplierFilter,
+            String categoryFilter,
+            int limit) {
+        List<NearStockOutInsightRow> rows = new ArrayList<>();
+        int safeReorderCoverageDays = Math.max(1, reorderCoverageDays);
+        int safeLimit = normalizeLimit(limit);
+        LocalDate safeEndDate = rangeEndDate == null ? LocalDate.now() : rangeEndDate;
+        LocalDate safeStartDate = rangeStartDate == null ? safeEndDate.minusDays(29) : rangeStartDate;
+        if (safeStartDate.isAfter(safeEndDate)) {
+            LocalDate temp = safeStartDate;
+            safeStartDate = safeEndDate;
+            safeEndDate = temp;
+        }
+        int safeLookbackDays = (int) Math.max(1L, ChronoUnit.DAYS.between(safeStartDate, safeEndDate) + 1L);
+        String safeSupplierFilter = normalizeFilterValue(supplierFilter);
+        String safeCategoryFilter = normalizeFilterValue(categoryFilter);
+        String rangeStart = safeStartDate + " 00:00:00";
+        String rangeEndExclusive = safeEndDate.plusDays(1) + " 00:00:00";
+
+        String sql = "SELECT m.medicine_id, m.name, m.company, COALESCE(s.quantity, 0) AS current_stock, " +
+                "COALESCE(SUM(CASE WHEN b.bill_date >= ? AND b.bill_date < ? THEN bi.quantity ELSE 0 END), 0) AS lookback_units_sold, " +
+                "COALESCE(SUM(CASE WHEN b.bill_date >= ? AND b.bill_date < ? THEN bi.total ELSE 0 END), 0) AS lookback_revenue, " +
+                "MAX(b.bill_date) AS last_sale_at " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON s.medicine_id = m.medicine_id " +
+                "LEFT JOIN bill_items bi ON bi.medicine_id = m.medicine_id " +
+                "LEFT JOIN bills b ON b.bill_id = bi.bill_id " +
+                "WHERE m.active = 1 " +
+                "AND COALESCE(s.quantity, 0) > 0 " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.company, '')) = LOWER(?)) " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.generic_name, '')) = LOWER(?)) " +
+                "GROUP BY m.medicine_id, m.name, m.company, s.quantity";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, rangeStart);
+            pstmt.setString(2, rangeEndExclusive);
+            pstmt.setString(3, rangeStart);
+            pstmt.setString(4, rangeEndExclusive);
+            pstmt.setString(5, safeSupplierFilter);
+            pstmt.setString(6, safeSupplierFilter);
+            pstmt.setString(7, safeCategoryFilter);
+            pstmt.setString(8, safeCategoryFilter);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    int currentStock = rs.getInt("current_stock");
+                    double lookbackUnitsSold = rs.getDouble("lookback_units_sold");
+                    if (lookbackUnitsSold <= 0.0) {
+                        continue;
+                    }
+
+                    double averageDailyConsumptionRaw = lookbackUnitsSold / safeLookbackDays;
+                    if (averageDailyConsumptionRaw <= 0.0) {
+                        continue;
+                    }
+
+                    int reorderThresholdQty = Math.max(1, (int) Math.ceil(averageDailyConsumptionRaw * safeReorderCoverageDays));
+                    if (currentStock > reorderThresholdQty) {
+                        continue;
+                    }
+
+                    double lookbackRevenue = round2(rs.getDouble("lookback_revenue"));
+                    double averageDailyConsumption = round2(averageDailyConsumptionRaw);
+                    double daysToStockOut = round2(currentStock / averageDailyConsumptionRaw);
+                    double averageUnitRevenue = lookbackUnitsSold <= 0.0 ? 0.0 : lookbackRevenue / lookbackUnitsSold;
+                    int atRiskUnits = Math.max(0, reorderThresholdQty - currentStock);
+                    double estimatedRevenueAtRisk = round2(atRiskUnits * averageUnitRevenue);
+
+                    rows.add(new NearStockOutInsightRow(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name") == null ? "" : rs.getString("name"),
+                            rs.getString("company") == null ? "" : rs.getString("company"),
+                            currentStock,
+                            round2(lookbackUnitsSold),
+                            lookbackRevenue,
+                            averageDailyConsumption,
+                            reorderThresholdQty,
+                            daysToStockOut,
+                            rs.getString("last_sale_at"),
+                            estimatedRevenueAtRisk));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getNearStockOutInsights: " + e.getMessage());
+        }
+
+        rows.sort((a, b) -> {
+            int riskCompare = Double.compare(b.estimatedRevenueAtRisk(), a.estimatedRevenueAtRisk());
+            if (riskCompare != 0) {
+                return riskCompare;
+            }
+            int daysCompare = Double.compare(a.daysToStockOut(), b.daysToStockOut());
+            if (daysCompare != 0) {
+                return daysCompare;
+            }
+            return a.medicineName().compareToIgnoreCase(b.medicineName());
+        });
+
+        if (rows.size() > safeLimit) {
+            return new ArrayList<>(rows.subList(0, safeLimit));
+        }
+        return rows;
+    }
+
+    public List<DeadStockInsightRow> getDeadStockInsights(int noMovementDays, int limit) {
+        return getDeadStockInsights(LocalDate.now(), noMovementDays, null, null, limit);
+    }
+
+    public List<DeadStockInsightRow> getDeadStockInsights(
+            LocalDate referenceDate,
+            int noMovementDays,
+            String supplierFilter,
+            String categoryFilter,
+            int limit) {
+        List<DeadStockInsightRow> rows = new ArrayList<>();
+        int safeNoMovementDays = Math.max(1, noMovementDays);
+        int safeLimit = normalizeLimit(limit);
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        String safeSupplierFilter = normalizeFilterValue(supplierFilter);
+        String safeCategoryFilter = normalizeFilterValue(categoryFilter);
+
+        String sql = "SELECT m.medicine_id, m.name, m.company, m.price, COALESCE(s.quantity, 0) AS current_stock, " +
+                "(SELECT MAX(b.bill_date) " +
+                " FROM bill_items bi " +
+                " JOIN bills b ON b.bill_id = bi.bill_id " +
+                " WHERE bi.medicine_id = m.medicine_id) AS last_sale_at " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON s.medicine_id = m.medicine_id " +
+                "WHERE m.active = 1 " +
+                "AND COALESCE(s.quantity, 0) > 0 " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.company, '')) = LOWER(?)) " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.generic_name, '')) = LOWER(?))";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, safeSupplierFilter);
+            pstmt.setString(2, safeSupplierFilter);
+            pstmt.setString(3, safeCategoryFilter);
+            pstmt.setString(4, safeCategoryFilter);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    int currentStock = rs.getInt("current_stock");
+                    String lastSaleAt = rs.getString("last_sale_at");
+                    LocalDate lastSaleDate = parseDateFromTimestamp(lastSaleAt);
+                    long daysSinceLastMovement = lastSaleDate == null
+                            ? safeNoMovementDays
+                            : Math.max(0L, ChronoUnit.DAYS.between(lastSaleDate, safeReferenceDate));
+                    if (daysSinceLastMovement < safeNoMovementDays) {
+                        continue;
+                    }
+
+                    double unitPrice = round2(rs.getDouble("price"));
+                    double deadStockValue = round2(currentStock * unitPrice);
+                    rows.add(new DeadStockInsightRow(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name") == null ? "" : rs.getString("name"),
+                            rs.getString("company") == null ? "" : rs.getString("company"),
+                            currentStock,
+                            unitPrice,
+                            lastSaleAt,
+                            daysSinceLastMovement,
+                            deadStockValue));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getDeadStockInsights: " + e.getMessage());
+        }
+
+        rows.sort((a, b) -> {
+            int valueCompare = Double.compare(b.deadStockValue(), a.deadStockValue());
+            if (valueCompare != 0) {
+                return valueCompare;
+            }
+            int daysCompare = Long.compare(b.daysSinceLastMovement(), a.daysSinceLastMovement());
+            if (daysCompare != 0) {
+                return daysCompare;
+            }
+            return a.medicineName().compareToIgnoreCase(b.medicineName());
+        });
+
+        if (rows.size() > safeLimit) {
+            return new ArrayList<>(rows.subList(0, safeLimit));
+        }
+        return rows;
+    }
+
+    public List<FastMovingInsightRow> getFastMovingInsights(int lookbackDays, int limit) {
+        int safeLookbackDays = Math.max(1, lookbackDays);
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(safeLookbackDays - 1);
+        return getFastMovingInsights(startDate, endDate, null, null, limit);
+    }
+
+    public List<FastMovingInsightRow> getFastMovingInsights(
+            LocalDate rangeStartDate,
+            LocalDate rangeEndDate,
+            String supplierFilter,
+            String categoryFilter,
+            int limit) {
+        List<FastMovingInsightRow> rows = new ArrayList<>();
+        int safeLimit = normalizeLimit(limit);
+        LocalDate safeEndDate = rangeEndDate == null ? LocalDate.now() : rangeEndDate;
+        LocalDate safeStartDate = rangeStartDate == null ? safeEndDate.minusDays(29) : rangeStartDate;
+        if (safeStartDate.isAfter(safeEndDate)) {
+            LocalDate temp = safeStartDate;
+            safeStartDate = safeEndDate;
+            safeEndDate = temp;
+        }
+        long safeLookbackDays = Math.max(1L, ChronoUnit.DAYS.between(safeStartDate, safeEndDate) + 1L);
+        String safeSupplierFilter = normalizeFilterValue(supplierFilter);
+        String safeCategoryFilter = normalizeFilterValue(categoryFilter);
+        String rangeStart = safeStartDate + " 00:00:00";
+        String rangeEndExclusive = safeEndDate.plusDays(1) + " 00:00:00";
+
+        String sql = "SELECT m.medicine_id, m.name, m.company, " +
+                "COALESCE(SUM(bi.quantity), 0) AS lookback_units_sold, " +
+                "COALESCE(SUM(bi.total), 0) AS lookback_revenue, " +
+                "MAX(b.bill_date) AS last_sale_at " +
+                "FROM medicines m " +
+                "JOIN bill_items bi ON bi.medicine_id = m.medicine_id " +
+                "JOIN bills b ON b.bill_id = bi.bill_id " +
+                "WHERE m.active = 1 " +
+                "AND b.bill_date >= ? " +
+                "AND b.bill_date < ? " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.company, '')) = LOWER(?)) " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.generic_name, '')) = LOWER(?)) " +
+                "GROUP BY m.medicine_id, m.name, m.company " +
+                "ORDER BY lookback_units_sold DESC, lookback_revenue DESC, m.name ASC " +
+                "LIMIT ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, rangeStart);
+            pstmt.setString(2, rangeEndExclusive);
+            pstmt.setString(3, safeSupplierFilter);
+            pstmt.setString(4, safeSupplierFilter);
+            pstmt.setString(5, safeCategoryFilter);
+            pstmt.setString(6, safeCategoryFilter);
+            pstmt.setInt(7, safeLimit);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    double lookbackUnitsSold = round2(rs.getDouble("lookback_units_sold"));
+                    double lookbackRevenue = round2(rs.getDouble("lookback_revenue"));
+                    rows.add(new FastMovingInsightRow(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name") == null ? "" : rs.getString("name"),
+                            rs.getString("company") == null ? "" : rs.getString("company"),
+                            lookbackUnitsSold,
+                            lookbackRevenue,
+                            round2(lookbackUnitsSold / safeLookbackDays),
+                            round2(lookbackRevenue / safeLookbackDays),
+                            rs.getString("last_sale_at")));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getFastMovingInsights: " + e.getMessage());
+        }
+
+        return rows;
+    }
+
+    public List<ReturnDamagedInsightRow> getReturnDamagedInsights(int lookbackDays, int limit) {
+        int safeLookbackDays = Math.max(1, lookbackDays);
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(safeLookbackDays - 1);
+        return getReturnDamagedInsights(startDate, endDate, null, null, limit);
+    }
+
+    public List<ReturnDamagedInsightRow> getReturnDamagedInsights(
+            LocalDate rangeStartDate,
+            LocalDate rangeEndDate,
+            String supplierFilter,
+            String categoryFilter,
+            int limit) {
+        List<ReturnDamagedInsightRow> rows = new ArrayList<>();
+        int safeLimit = normalizeLimit(limit);
+        LocalDate safeEndDate = rangeEndDate == null ? LocalDate.now() : rangeEndDate;
+        LocalDate safeStartDate = rangeStartDate == null ? safeEndDate.minusDays(29) : rangeStartDate;
+        if (safeStartDate.isAfter(safeEndDate)) {
+            LocalDate temp = safeStartDate;
+            safeStartDate = safeEndDate;
+            safeEndDate = temp;
+        }
+        String safeSupplierFilter = normalizeFilterValue(supplierFilter);
+        String safeCategoryFilter = normalizeFilterValue(categoryFilter);
+        String rangeStart = safeStartDate + " 00:00:00";
+        String rangeEndExclusive = safeEndDate.plusDays(1) + " 00:00:00";
+
+        String sql = "SELECT m.medicine_id, m.name, m.company, " +
+                "COALESCE(SUM(CASE WHEN ia.adjustment_type = 'RETURN' THEN ia.quantity ELSE 0 END), 0) AS returned_qty, " +
+                "COALESCE(SUM(CASE WHEN ia.adjustment_type = 'DAMAGED' THEN ia.quantity ELSE 0 END), 0) AS damaged_qty, " +
+                "COALESCE(SUM(CASE WHEN ia.adjustment_type = 'RETURN' THEN ia.quantity * ia.unit_price ELSE 0 END), 0) AS return_value, " +
+                "COALESCE(SUM(CASE WHEN ia.adjustment_type = 'DAMAGED' THEN ia.quantity * ia.unit_price ELSE 0 END), 0) AS damaged_value " +
+                "FROM inventory_adjustments ia " +
+                "JOIN medicines m ON m.medicine_id = ia.medicine_id " +
+                "WHERE m.active = 1 " +
+                "AND ia.occurred_at >= ? " +
+                "AND ia.occurred_at < ? " +
+                "AND ia.adjustment_type IN ('RETURN', 'DAMAGED') " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.company, '')) = LOWER(?)) " +
+                "AND (? IS NULL OR LOWER(COALESCE(m.generic_name, '')) = LOWER(?)) " +
+                "GROUP BY m.medicine_id, m.name, m.company " +
+                "ORDER BY " +
+                "(COALESCE(SUM(CASE WHEN ia.adjustment_type = 'RETURN' THEN ia.quantity * ia.unit_price ELSE 0 END), 0) + " +
+                " COALESCE(SUM(CASE WHEN ia.adjustment_type = 'DAMAGED' THEN ia.quantity * ia.unit_price ELSE 0 END), 0)) DESC, " +
+                "(COALESCE(SUM(CASE WHEN ia.adjustment_type = 'RETURN' THEN ia.quantity ELSE 0 END), 0) + " +
+                " COALESCE(SUM(CASE WHEN ia.adjustment_type = 'DAMAGED' THEN ia.quantity ELSE 0 END), 0)) DESC, " +
+                "m.name ASC " +
+                "LIMIT ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, rangeStart);
+            pstmt.setString(2, rangeEndExclusive);
+            pstmt.setString(3, safeSupplierFilter);
+            pstmt.setString(4, safeSupplierFilter);
+            pstmt.setString(5, safeCategoryFilter);
+            pstmt.setString(6, safeCategoryFilter);
+            pstmt.setInt(7, safeLimit);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    long returnedQuantity = rs.getLong("returned_qty");
+                    long damagedQuantity = rs.getLong("damaged_qty");
+                    long totalQuantity = returnedQuantity + damagedQuantity;
+                    double returnValue = round2(rs.getDouble("return_value"));
+                    double damagedValue = round2(rs.getDouble("damaged_value"));
+                    double totalValue = round2(returnValue + damagedValue);
+                    int medicineId = rs.getInt("medicine_id");
+                    String rootCauseTags = fetchRootCauseTags(conn, medicineId, rangeStart, rangeEndExclusive);
+
+                    rows.add(new ReturnDamagedInsightRow(
+                            medicineId,
+                            rs.getString("name") == null ? "" : rs.getString("name"),
+                            rs.getString("company") == null ? "" : rs.getString("company"),
+                            returnedQuantity,
+                            damagedQuantity,
+                            totalQuantity,
+                            returnValue,
+                            damagedValue,
+                            totalValue,
+                            rootCauseTags));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getReturnDamagedInsights: " + e.getMessage());
+        }
+
+        return rows;
+    }
+
+    private String normalizeFilterValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty() || "all".equalsIgnoreCase(normalized)) {
+            return null;
+        }
+        return normalized;
+    }
+
     private int normalizeLimit(int limit) {
         if (limit <= 0) {
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(limit, MAX_PAGE_SIZE);
+    }
+
+    private LocalDate parseDateFromTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 10) {
+            normalized = normalized.substring(0, 10);
+        }
+        try {
+            return LocalDate.parse(normalized);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private String fetchRootCauseTags(Connection conn, int medicineId, String rangeStart, String rangeEndExclusive) {
+        String sql = "SELECT DISTINCT root_cause_tag " +
+                "FROM inventory_adjustments " +
+                "WHERE medicine_id = ? " +
+                "AND occurred_at >= ? " +
+                "AND occurred_at < ? " +
+                "AND adjustment_type IN ('RETURN', 'DAMAGED') " +
+                "AND root_cause_tag IS NOT NULL " +
+                "AND TRIM(root_cause_tag) <> '' " +
+                "ORDER BY root_cause_tag ASC";
+        Set<String> tags = new LinkedHashSet<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, medicineId);
+            ps.setString(2, rangeStart);
+            ps.setString(3, rangeEndExclusive);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String tag = rs.getString("root_cause_tag");
+                    if (tag != null && !tag.isBlank()) {
+                        tags.add(tag.trim());
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.fetchRootCauseTags: " + e.getMessage());
+        }
+        if (tags.isEmpty()) {
+            return "-";
+        }
+        return String.join(", ", tags);
+    }
+
+    public record OutOfStockInsightRow(
+            int medicineId,
+            String medicineName,
+            String company,
+            int currentStock,
+            String lastSaleAt,
+            long daysOutOfStock,
+            double lookbackRevenue,
+            double averageDailyRevenue,
+            double estimatedRevenueImpact) {
+    }
+
+    public record NearStockOutInsightRow(
+            int medicineId,
+            String medicineName,
+            String company,
+            int currentStock,
+            double lookbackUnitsSold,
+            double lookbackRevenue,
+            double averageDailyConsumption,
+            int reorderThresholdQty,
+            double daysToStockOut,
+            String lastSaleAt,
+            double estimatedRevenueAtRisk) {
+    }
+
+    public record DeadStockInsightRow(
+            int medicineId,
+            String medicineName,
+            String company,
+            int currentStock,
+            double unitPrice,
+            String lastSaleAt,
+            long daysSinceLastMovement,
+            double deadStockValue) {
+    }
+
+    public record FastMovingInsightRow(
+            int medicineId,
+            String medicineName,
+            String company,
+            double lookbackUnitsSold,
+            double lookbackRevenue,
+            double averageDailyUnits,
+            double averageDailyRevenue,
+            String lastSaleAt) {
+    }
+
+    public record ReturnDamagedInsightRow(
+            int medicineId,
+            String medicineName,
+            String company,
+            long returnedQuantity,
+            long damagedQuantity,
+            long totalQuantity,
+            double returnValue,
+            double damagedValue,
+            double totalValue,
+            String rootCauseTags) {
     }
 }

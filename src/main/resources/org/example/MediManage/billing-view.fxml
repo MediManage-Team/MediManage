@@ -91,7 +91,12 @@
             <VBox spacing="8" styleClass="billing-section">
                 <Label text="Subscription Override Request" styleClass="label-strong"/>
                 <Label fx:id="lblOverrideStatus" text="No override requested for current bill." styleClass="text-muted"/>
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="Explanation Language:" styleClass="text-muted"/>
+                    <ComboBox fx:id="cmbDiscountExplanationLanguage" prefWidth="170"/>
+                </HBox>
                 <Button fx:id="btnRequestOverride" text="Request Discount Override" onAction="#handleRequestDiscountOverride" maxWidth="Infinity" styleClass="button-outlined"/>
+                <Button fx:id="btnExplainDiscountDecision" text="Explain Discount Decision (AI)" onAction="#handleExplainDiscountDecision" maxWidth="Infinity" styleClass="button-outlined"/>
             </VBox>
 
             <!-- Checkout Button -->

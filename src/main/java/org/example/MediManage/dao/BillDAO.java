@@ -291,6 +291,75 @@ public class BillDAO {
         return sales;
     }
 
+    public WeeklySalesMarginSummary getWeeklySalesMarginSummary(LocalDate weekStart, LocalDate weekEnd) {
+        LocalDate safeWeekStart = weekStart == null ? LocalDate.now() : weekStart;
+        LocalDate safeWeekEnd = weekEnd == null ? safeWeekStart.plusDays(6) : weekEnd;
+        if (safeWeekEnd.isBefore(safeWeekStart)) {
+            safeWeekEnd = safeWeekStart;
+        }
+
+        String rangeStart = safeWeekStart + " 00:00:00";
+        String rangeEndExclusive = safeWeekEnd.plusDays(1) + " 00:00:00";
+        String expenseRangeStart = safeWeekStart.toString();
+        String expenseRangeEndExclusive = safeWeekEnd.plusDays(1).toString();
+
+        String billSql = "SELECT COUNT(*) AS bill_count, " +
+                "COALESCE(SUM(total_amount), 0) AS net_sales, " +
+                "COALESCE(SUM(subscription_savings_amount), 0) AS discount_burn " +
+                "FROM bills WHERE bill_date >= ? AND bill_date < ?";
+        String expenseSql = "SELECT COALESCE(SUM(amount), 0) AS total_expenses " +
+                "FROM expenses WHERE date >= ? AND date < ?";
+
+        long billCount = 0L;
+        double netSales = 0.0;
+        double discountBurn = 0.0;
+        double totalExpenses = 0.0;
+
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            try (PreparedStatement billPs = conn.prepareStatement(billSql)) {
+                billPs.setString(1, rangeStart);
+                billPs.setString(2, rangeEndExclusive);
+                try (ResultSet rs = billPs.executeQuery()) {
+                    if (rs.next()) {
+                        billCount = rs.getLong("bill_count");
+                        netSales = rs.getDouble("net_sales");
+                        discountBurn = rs.getDouble("discount_burn");
+                    }
+                }
+            }
+
+            try (PreparedStatement expensePs = conn.prepareStatement(expenseSql)) {
+                expensePs.setString(1, expenseRangeStart);
+                expensePs.setString(2, expenseRangeEndExclusive);
+                try (ResultSet rs = expensePs.executeQuery()) {
+                    if (rs.next()) {
+                        totalExpenses = rs.getDouble("total_expenses");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        netSales = round2(netSales);
+        discountBurn = round2(discountBurn);
+        totalExpenses = round2(totalExpenses);
+        double grossSales = round2(netSales + discountBurn);
+        double grossMargin = round2(netSales - totalExpenses);
+        double grossMarginPercent = grossSales <= 0.0 ? 0.0 : round2((grossMargin / grossSales) * 100.0);
+
+        return new WeeklySalesMarginSummary(
+                safeWeekStart.toString(),
+                safeWeekEnd.toString(),
+                billCount,
+                grossSales,
+                netSales,
+                grossMargin,
+                grossMarginPercent,
+                discountBurn,
+                totalExpenses);
+    }
+
     // ======================== AI CARE PROTOCOL ========================
 
     /**
@@ -351,5 +420,21 @@ public class BillDAO {
             return DEFAULT_HISTORY_LIMIT;
         }
         return Math.min(limit, MAX_HISTORY_LIMIT);
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    public record WeeklySalesMarginSummary(
+            String weekStartDate,
+            String weekEndDate,
+            long billCount,
+            double grossSales,
+            double netSales,
+            double grossMargin,
+            double grossMarginPercent,
+            double discountBurn,
+            double totalExpenses) {
     }
 }

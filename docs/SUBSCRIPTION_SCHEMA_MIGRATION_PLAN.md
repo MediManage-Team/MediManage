@@ -45,6 +45,7 @@ Implemented in:
 ## 4) Rollback Strategy (Phase 1 Safe Rollback)
 
 1. Disable subscription flags:
+   - `subscription.release.enabled=false`
    - `subscription.commerce.enabled=false`
    - `subscription.approvals.enabled=false`
    - `subscription.discount.overrides.enabled=false`

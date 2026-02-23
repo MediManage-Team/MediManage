@@ -36,6 +36,7 @@ import org.example.MediManage.security.Permission;
 import org.example.MediManage.security.RbacPolicy;
 import org.example.MediManage.service.SubscriptionApprovalService;
 import org.example.MediManage.service.SubscriptionService;
+import org.example.MediManage.service.subscription.SubscriptionOverrideRiskScoringEngine;
 import org.example.MediManage.util.UserSession;
 
 import java.sql.SQLException;
@@ -153,11 +154,17 @@ public class SubscriptionAdminController {
     @FXML
     private TableColumn<SubscriptionDiscountOverride, String> colOverrideCreatedAt;
     @FXML
+    private Label lblOverrideAlerts;
+    @FXML
     private Label lblOverrideSelection;
     @FXML
     private TextField txtOverrideApprovedPercent;
     @FXML
     private TextArea txtOverrideDecisionReason;
+    @FXML
+    private CheckBox chkHighRiskHumanReview;
+    @FXML
+    private Label lblHighRiskHumanReviewHint;
     @FXML
     private Button btnApproveOverride;
     @FXML
@@ -175,11 +182,15 @@ public class SubscriptionAdminController {
     private SubscriptionPlan selectedPlan;
     private SubscriptionPlanMedicineRule selectedRule;
     private SubscriptionDiscountOverride selectedOverride;
+    private SubscriptionOverrideRiskScoringEngine.OverrideRiskAssessment selectedOverrideRiskAssessment;
     private boolean approvalsEnabled;
 
     @FXML
     public void initialize() {
         RbacPolicy.requireCurrentUser(Permission.MANAGE_SUBSCRIPTION_POLICY);
+        if (!FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_COMMERCE)) {
+            throw new SecurityException("Subscription administration is disabled for this user.");
+        }
 
         configurePlanTable();
         configureRuleTable();
@@ -274,8 +285,8 @@ public class SubscriptionAdminController {
         User currentUser = UserSession.getInstance().getUser();
         boolean canApprove = currentUser != null
                 && RbacPolicy.canAccess(currentUser.getRole(), Permission.APPROVE_SUBSCRIPTION_OVERRIDES);
-        approvalsEnabled = FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_APPROVALS)
-                && FeatureFlags.isEnabled(FeatureFlag.SUBSCRIPTION_DISCOUNT_OVERRIDES)
+        approvalsEnabled = FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_APPROVALS)
+                && FeatureFlags.isEnabledForCurrentUser(FeatureFlag.SUBSCRIPTION_DISCOUNT_OVERRIDES)
                 && canApprove;
 
         if (!approvalsEnabled && approvalsTab != null && subscriptionTabPane != null) {
@@ -438,7 +449,20 @@ public class SubscriptionAdminController {
                             ? selectedOverride.requestedDiscountPercent()
                             : parseRequiredDouble(txtOverrideApprovedPercent, "Approved discount percent");
             String reason = requireText(txtOverrideDecisionReason, "Decision reason");
-            approvalService.approveManualOverride(selectedOverride.overrideId(), approvedPercent, reason);
+            boolean highRiskReviewConfirmed = !isHighRiskHumanReviewRequired()
+                    || (chkHighRiskHumanReview != null && chkHighRiskHumanReview.isSelected());
+            if (isHighRiskHumanReviewRequired() && !highRiskReviewConfirmed) {
+                showAlert(
+                        Alert.AlertType.WARNING,
+                        "Human Review Required",
+                        "AI flagged this override as high-risk. Confirm manual review before approval.");
+                return;
+            }
+            approvalService.approveManualOverride(
+                    selectedOverride.overrideId(),
+                    approvedPercent,
+                    reason,
+                    highRiskReviewConfirmed);
             showAlert(Alert.AlertType.INFORMATION, "Override Approved", "Override request approved.");
             loadPendingOverrides();
             clearOverrideForm();
@@ -514,12 +538,54 @@ public class SubscriptionAdminController {
     private void loadPendingOverrides() {
         try {
             overrideRows.setAll(approvalService.getPendingOverrides());
+            refreshOverrideAlerts();
             if (overrideRows.isEmpty()) {
                 lblOverrideSelection.setText("No pending overrides.");
             }
         } catch (SecurityException e) {
+            if (lblOverrideAlerts != null) {
+                lblOverrideAlerts.getStyleClass().removeAll("text-warning", "text-muted");
+                lblOverrideAlerts.getStyleClass().add("text-muted");
+                lblOverrideAlerts.setText("Override alerts unavailable: " + e.getMessage());
+            }
             showAlert(Alert.AlertType.ERROR, "Access Denied", e.getMessage());
         }
+    }
+
+    private void refreshOverrideAlerts() {
+        if (lblOverrideAlerts == null) {
+            return;
+        }
+
+        List<SubscriptionApprovalService.OverrideFrequencyAlert> alerts = approvalService.getOverrideFrequencyAlerts();
+        lblOverrideAlerts.getStyleClass().removeAll("text-warning", "text-muted");
+        if (alerts.isEmpty()) {
+            lblOverrideAlerts.getStyleClass().add("text-muted");
+            lblOverrideAlerts.setText("No unusual override frequency detected in the last 24 hours.");
+            return;
+        }
+
+        StringBuilder summary = new StringBuilder("Override frequency alerts: ");
+        int visibleCount = Math.min(3, alerts.size());
+        for (int i = 0; i < visibleCount; i++) {
+            SubscriptionApprovalService.OverrideFrequencyAlert alert = alerts.get(i);
+            if (i > 0) {
+                summary.append(" | ");
+            }
+            summary.append("User #")
+                    .append(alert.requestedByUserId())
+                    .append(" -> ")
+                    .append(alert.totalRequests())
+                    .append(" requests (")
+                    .append(alert.severity())
+                    .append(")");
+        }
+        if (alerts.size() > visibleCount) {
+            summary.append(" | +").append(alerts.size() - visibleCount).append(" more");
+        }
+
+        lblOverrideAlerts.getStyleClass().add("text-warning");
+        lblOverrideAlerts.setText(summary.toString());
     }
 
     private void populatePlanForm(SubscriptionPlan plan) {
@@ -588,8 +654,27 @@ public class SubscriptionAdminController {
             clearOverrideForm();
             return;
         }
-        lblOverrideSelection.setText("Selected override #" + override.overrideId()
-                + " | Requested: " + formatNumber(override.requestedDiscountPercent()) + "%");
+        selectedOverrideRiskAssessment = null;
+        String base = "Selected override #" + override.overrideId()
+                + " | Requested: " + formatNumber(override.requestedDiscountPercent()) + "%";
+        try {
+            SubscriptionOverrideRiskScoringEngine.OverrideRiskAssessment riskAssessment = approvalService
+                    .getOverrideRiskAssessment(override.overrideId());
+            selectedOverrideRiskAssessment = riskAssessment;
+            if (riskAssessment.escalationRecommended()) {
+                lblOverrideSelection.setText(base + " | AI Risk: " + riskAssessment.riskBand()
+                        + " " + riskAssessment.riskScore()
+                        + "/100 | Human review confirmation required");
+                showHighRiskHumanReviewRequirement(riskAssessment);
+            } else {
+                lblOverrideSelection.setText(base + " | AI Risk: " + riskAssessment.riskBand()
+                        + " " + riskAssessment.riskScore() + "/100");
+                hideHighRiskHumanReviewRequirement();
+            }
+        } catch (Exception ignored) {
+            lblOverrideSelection.setText(base);
+            hideHighRiskHumanReviewRequirement();
+        }
         txtOverrideApprovedPercent.setText(formatNumber(override.requestedDiscountPercent()));
         btnApproveOverride.setDisable(false);
         btnRejectOverride.setDisable(false);
@@ -597,11 +682,47 @@ public class SubscriptionAdminController {
 
     private void clearOverrideForm() {
         selectedOverride = null;
+        selectedOverrideRiskAssessment = null;
         txtOverrideApprovedPercent.clear();
         txtOverrideDecisionReason.clear();
         btnApproveOverride.setDisable(true);
         btnRejectOverride.setDisable(true);
         lblOverrideSelection.setText("Select a pending override to review.");
+        hideHighRiskHumanReviewRequirement();
+    }
+
+    private boolean isHighRiskHumanReviewRequired() {
+        return selectedOverrideRiskAssessment != null && selectedOverrideRiskAssessment.escalationRecommended();
+    }
+
+    private void showHighRiskHumanReviewRequirement(
+            SubscriptionOverrideRiskScoringEngine.OverrideRiskAssessment riskAssessment) {
+        if (chkHighRiskHumanReview != null) {
+            chkHighRiskHumanReview.setSelected(false);
+            chkHighRiskHumanReview.setDisable(false);
+            chkHighRiskHumanReview.setVisible(true);
+            chkHighRiskHumanReview.setManaged(true);
+        }
+        if (lblHighRiskHumanReviewHint != null) {
+            lblHighRiskHumanReviewHint.setText(
+                    "AI recommendation flagged this request as high-risk. "
+                            + riskAssessment.recommendedAction());
+            lblHighRiskHumanReviewHint.setVisible(true);
+            lblHighRiskHumanReviewHint.setManaged(true);
+        }
+    }
+
+    private void hideHighRiskHumanReviewRequirement() {
+        if (chkHighRiskHumanReview != null) {
+            chkHighRiskHumanReview.setSelected(false);
+            chkHighRiskHumanReview.setVisible(false);
+            chkHighRiskHumanReview.setManaged(false);
+        }
+        if (lblHighRiskHumanReviewHint != null) {
+            lblHighRiskHumanReviewHint.setText("");
+            lblHighRiskHumanReviewHint.setVisible(false);
+            lblHighRiskHumanReviewHint.setManaged(false);
+        }
     }
 
     private void updatePlanStatus(SubscriptionPlanStatus targetStatus) {
