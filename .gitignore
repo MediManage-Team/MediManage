@@ -48,6 +48,7 @@ Desktop.ini
 *.db
 *.db.bak
 *.db.backup_*
+*.db.backup-*
 *.sqlite
 *.sqlite3
 # Allow the bundled resource database to be tracked
@@ -78,6 +79,9 @@ Output/
 
 # ── Logs ──────────────────────────────────────────────────
 *.log
+
+# ── Generated Invoices ───────────────────────────────────
+Invoice_*.pdf
 
 # ── Maven Wrapper (keep jar) ─────────────────────────────
 !.mvn/wrapper/maven-wrapper.jar
