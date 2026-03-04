@@ -36,7 +36,9 @@ class InMemoryStoreConcurrencyTest {
                             "Company-" + (index % 7),
                             "2030-12-31",
                             10.0 + index,
-                            50);
+                            50,
+                            0.0,
+                            10);
                 } finally {
                     done.countDown();
                 }

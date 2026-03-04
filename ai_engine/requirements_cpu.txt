@@ -10,5 +10,8 @@ huggingface_hub
 transformers
 duckduckgo-search
 
+# Database — PostgreSQL support (optional)
+psycopg2-binary
+
 # CPU inference — llama.cpp Python bindings
 llama-cpp-python

@@ -6,7 +6,7 @@ that any AI host (Claude, Gemini, VS Code Copilot) can call.
 
 Transport: STDIO (launched as a subprocess by the AI host)
 Framework: FastMCP (mcp[cli])
-Database:  Direct SQLite connection to medimanage.db
+Database:  Connects to SQLite or PostgreSQL via db_connector
 
 Usage:
   # Test with MCP Inspector
@@ -17,8 +17,9 @@ Usage:
 """
 
 import os
-import sqlite3
+import db_connector
 import json
+import sqlite3
 import logging
 from datetime import datetime, timedelta
 from contextlib import contextmanager
@@ -59,53 +60,64 @@ mcp = FastMCP(
 )
 
 # ---------------------------------------------------------------------------
-# Database helpers
+# Database helpers (use db_connector for SQLite / PostgreSQL)
 # ---------------------------------------------------------------------------
 
 @contextmanager
 def get_db():
-    """Yield a read-only SQLite connection with Row factory."""
-    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    try:
+    """Yield a read-only database connection."""
+    with db_connector.get_readonly_connection() as conn:
         yield conn
-    finally:
-        conn.close()
 
 
 @contextmanager
 def get_db_rw():
-    """Yield a read-write SQLite connection for mutations."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
+    """Yield a read-write database connection."""
+    with db_connector.get_readwrite_connection() as conn:
         yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
 
 
 def rows_to_dicts(rows):
-    """Convert sqlite3.Row objects to plain dicts."""
-    return [dict(r) for r in rows]
+    """Convert cursor result rows to plain dicts."""
+    if not rows:
+        return []
+    # sqlite3.Row supports dict(), psycopg2 rows need column mapping
+    try:
+        return [dict(r) for r in rows]
+    except (TypeError, ValueError):
+        return rows
 
 
-def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
-        (table_name,),
-    ).fetchone()
-    return row is not None
+def _table_exists(conn, table_name: str) -> bool:
+    cur = conn.cursor()
+    if db_connector._get_backend() == "postgresql":
+        cur.execute(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema='public' AND table_name=%s",
+            (table_name,),
+        )
+    else:
+        cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+            (table_name,),
+        )
+    return cur.fetchone() is not None
 
 
-def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+def _table_columns(conn, table_name: str) -> set[str]:
     if not _table_exists(conn, table_name):
         return set()
-    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-    return {r["name"] for r in rows}
+    cur = conn.cursor()
+    if db_connector._get_backend() == "postgresql":
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name=%s",
+            (table_name,),
+        )
+        return {r[0] for r in cur.fetchall()}
+    else:
+        cur.execute(f"PRAGMA table_info({table_name})")
+        return {r[1] for r in cur.fetchall()}
 
 
 def _resolve_prescription_schema(conn: sqlite3.Connection) -> dict[str, str]:
@@ -806,7 +818,7 @@ def ai_rag_query(prompt: str) -> str:
 
 @mcp.tool()
 def get_hardware_info() -> str:
-    """Get current hardware detection results and NPU/GPU status."""
+    """Get current hardware detection results and GPU status."""
     import urllib.request
     import urllib.error
 
@@ -815,11 +827,7 @@ def get_hardware_info() -> str:
         with urllib.request.urlopen(req, timeout=10) as resp:
             hw = json.loads(resp.read())
 
-        req2 = urllib.request.Request(f"{AI_ENGINE_URL}/npu_info")
-        with urllib.request.urlopen(req2, timeout=10) as resp2:
-            npu = json.loads(resp2.read())
-
-        return json.dumps({"hardware": hw, "npu": npu}, indent=2)
+        return json.dumps({"hardware": hw}, indent=2)
     except urllib.error.URLError:
         return "Error: AI Engine is not running."
     except Exception as e:

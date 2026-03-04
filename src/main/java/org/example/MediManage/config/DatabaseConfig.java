@@ -5,7 +5,9 @@ import java.io.InputStream;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 import java.util.prefs.Preferences;
 
@@ -191,12 +193,50 @@ public class DatabaseConfig {
         String database = requireNonBlank(settings.postgresDatabase(), "PostgreSQL database name is required.");
         String user = requireNonBlank(settings.postgresUser(), "PostgreSQL username is required.");
 
+        // Auto-create the database if it doesn't exist
+        ensureDatabaseExists(host, settings.postgresPort(), database, user,
+                settings.postgresPassword() == null ? "" : settings.postgresPassword());
+
         String url = "jdbc:postgresql://" + host + ":" + settings.postgresPort() + "/" + database;
         java.util.Properties pgProperties = new java.util.Properties();
         pgProperties.setProperty("user", user);
         pgProperties.setProperty("password", settings.postgresPassword() == null ? "" : settings.postgresPassword());
         pgProperties.setProperty("sslmode", "disable");
         return DriverManager.getConnection(url, pgProperties);
+    }
+
+    /**
+     * Connects to the default 'postgres' database and creates the target database
+     * if it doesn't exist.
+     */
+    private static void ensureDatabaseExists(String host, int port, String database, String user, String password) {
+        String adminUrl = "jdbc:postgresql://" + host + ":" + port + "/postgres";
+        java.util.Properties adminProps = new java.util.Properties();
+        adminProps.setProperty("user", user);
+        adminProps.setProperty("password", password);
+        adminProps.setProperty("sslmode", "disable");
+
+        try (Connection adminConn = DriverManager.getConnection(adminUrl, adminProps)) {
+            // Check if the database exists
+            try (java.sql.PreparedStatement ps = adminConn.prepareStatement(
+                    "SELECT 1 FROM pg_database WHERE datname = ?")) {
+                ps.setString(1, database);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return; // Database already exists
+                    }
+                }
+            }
+
+            // Create the database
+            try (Statement stmt = adminConn.createStatement()) {
+                stmt.execute("CREATE DATABASE \"" + database.replace("\"", "\"\"") + "\"");
+                System.out.println("✅ Created PostgreSQL database: " + database);
+            }
+        } catch (SQLException e) {
+            // Log but don't throw — the main connection attempt will provide a clear error
+            System.err.println("⚠️ Could not auto-create database '" + database + "': " + e.getMessage());
+        }
     }
 
     private static java.io.File resolveDatabaseFile(String configuredPath) {

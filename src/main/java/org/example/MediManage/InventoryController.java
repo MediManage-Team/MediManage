@@ -20,7 +20,6 @@ public class InventoryController {
     private static final String RESTOCK_READY_LABEL = "✨ Get AI Suggestions";
     private static final String RESTOCK_BUSY_LABEL = "⏳ Running...";
 
-
     @FXML
     private TextField searchField;
     @FXML
@@ -54,6 +53,10 @@ public class InventoryController {
     private TextField txtPrice;
     @FXML
     private TextField txtStock;
+    @FXML
+    private TextField txtPurchasePrice;
+    @FXML
+    private TextField txtReorderThreshold;
 
     @FXML
     private Button btnSave;
@@ -204,6 +207,10 @@ public class InventoryController {
         }
         txtPrice.setText(String.valueOf(med.getPrice()));
         txtStock.setText(String.valueOf(med.getStock()));
+        if (txtPurchasePrice != null)
+            txtPurchasePrice.setText(med.getPurchasePrice() > 0 ? String.valueOf(med.getPurchasePrice()) : "");
+        if (txtReorderThreshold != null)
+            txtReorderThreshold.setText("");
 
         btnSave.setText("Update Medicine");
         btnDelete.setDisable(false);
@@ -225,12 +232,19 @@ public class InventoryController {
         try {
             double price = Double.parseDouble(priceStr);
             int stock = Integer.parseInt(stockStr);
+            double purchasePrice = 0.0;
+            int reorderThreshold = 10;
+            if (txtPurchasePrice != null && !txtPurchasePrice.getText().isEmpty())
+                purchasePrice = Double.parseDouble(txtPurchasePrice.getText());
+            if (txtReorderThreshold != null && !txtReorderThreshold.getText().isEmpty())
+                reorderThreshold = Integer.parseInt(txtReorderThreshold.getText());
 
             if (selectedMedicine == null) {
-                inventoryService.addMedicine(name, company, expiryDate, price, stock);
+                inventoryService.addMedicine(name, company, expiryDate, price, stock, purchasePrice, reorderThreshold);
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine added.");
             } else {
-                inventoryService.updateMedicine(selectedMedicine, name, company, expiryDate, price, stock);
+                inventoryService.updateMedicine(selectedMedicine, name, company, expiryDate, price, stock,
+                        purchasePrice, reorderThreshold);
                 showAlert(Alert.AlertType.INFORMATION, "Success", "Medicine updated.");
             }
             handleClear();
@@ -266,6 +280,10 @@ public class InventoryController {
         dateExpiry.setValue(null);
         txtPrice.clear();
         txtStock.clear();
+        if (txtPurchasePrice != null)
+            txtPurchasePrice.clear();
+        if (txtReorderThreshold != null)
+            txtReorderThreshold.clear();
         inventoryTable.getSelectionModel().clearSelection();
         btnSave.setText("Add New");
         btnDelete.setDisable(true);

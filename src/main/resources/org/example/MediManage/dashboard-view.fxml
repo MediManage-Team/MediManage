@@ -6,522 +6,185 @@
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.DashboardController" stylesheets="@css/admin.css" prefWidth="1200" prefHeight="800">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.DashboardController" prefWidth="1200" prefHeight="800">
 
     <!-- Main Content -->
     <center>
         <TabPane fx:id="mainTabPane" tabClosingPolicy="UNAVAILABLE">
+
+            <!-- ==================== TAB 1: DASHBOARD ==================== -->
             <Tab text="Dashboard">
                 <ScrollPane fitToWidth="true" fitToHeight="true" pannable="true" styleClass="edge-to-edge">
                     <content>
-                <VBox spacing="20" styleClass="dark-panel">
+                        <VBox spacing="16" styleClass="dark-panel">
+                            <padding>
+                                <Insets top="16" right="20" bottom="16" left="20"/>
+                            </padding>
 
-                    <!-- Header -->
-                    <HBox spacing="12" alignment="CENTER_LEFT">
-                        <Label text="Overview" styleClass="page-title"/>
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <Button
-                            fx:id="btnToggleOperationsHub"
-                            text="Hide Ops Hub"
-                            onAction="#handleToggleOperationsHub"
-                            styleClass="button-outlined dashboard-toggle-button"/>
-                    </HBox>
+                            <!-- ── Page Header ── -->
+                            <Label text="Overview" styleClass="page-title"/>
 
-                    <VBox spacing="8" styleClass="dashboard-feature-ribbon">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Feature Ribbon" styleClass="section-title dashboard-ribbon-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Button text="Reset View" onAction="#handleResetDashboardRibbon" styleClass="button-outlined dashboard-ribbon-reset"/>
-                        </HBox>
-                        <FlowPane hgap="8" vgap="8" prefWrapLength="900">
-                            <children>
-                                <ToggleButton fx:id="tglRibbonTopOverview" text="Top Overview" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                                <ToggleButton fx:id="tglRibbonInventoryRisk" text="Inventory Risk" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                                <ToggleButton fx:id="tglRibbonSalesMargin" text="Sales Margin" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                                <ToggleButton fx:id="tglRibbonSubscriptionImpact" text="Subscription Impact" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                                <ToggleButton fx:id="tglRibbonAnomalyAlerts" text="Anomaly Alerts" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                                <ToggleButton fx:id="tglRibbonActionTracker" text="Action Tracker" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                                <ToggleButton fx:id="tglRibbonInventoryOverview" text="Inventory Table" selected="true" onAction="#handleDashboardRibbonToggles" styleClass="feature-ribbon-toggle"/>
-                            </children>
-                        </FlowPane>
-                    </VBox>
-
-                    <HBox fx:id="dashboardTopRow" spacing="16" alignment="TOP_LEFT">
-                        <VBox spacing="16" HBox.hgrow="ALWAYS">
-                            <VBox spacing="10" styleClass="card">
-                                <HBox spacing="10" alignment="CENTER_LEFT">
-                                    <Label text="Analytics Filters" styleClass="section-title"/>
-                                    <Region HBox.hgrow="ALWAYS"/>
-                                    <Button text="Apply Filters" onAction="#handleApplyAnalyticsFilters" styleClass="button-secondary"/>
-                                    <Button text="Reset" onAction="#handleResetAnalyticsFilters" styleClass="button-outlined"/>
-                                </HBox>
-                                <GridPane hgap="12" vgap="8">
-                                    <columnConstraints>
-                                        <ColumnConstraints hgrow="ALWAYS"/>
-                                        <ColumnConstraints hgrow="ALWAYS"/>
-                                        <ColumnConstraints hgrow="ALWAYS"/>
-                                        <ColumnConstraints hgrow="ALWAYS"/>
-                                        <ColumnConstraints hgrow="ALWAYS"/>
-                                    </columnConstraints>
-                                    <Label text="Store" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                                    <Label text="From" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-                                    <Label text="To" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
-                                    <Label text="Category" GridPane.rowIndex="0" GridPane.columnIndex="3"/>
-                                    <Label text="Supplier" GridPane.rowIndex="0" GridPane.columnIndex="4"/>
-
-                                    <ComboBox fx:id="cmbFilterStore" prefWidth="180" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                                    <DatePicker fx:id="dpFilterStartDate" prefWidth="160" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-                                    <DatePicker fx:id="dpFilterEndDate" prefWidth="160" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
-                                    <ComboBox fx:id="cmbFilterCategory" prefWidth="180" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
-                                    <ComboBox fx:id="cmbFilterSupplier" prefWidth="180" GridPane.rowIndex="1" GridPane.columnIndex="4"/>
-                                </GridPane>
-                                <Label fx:id="lblFilterScopeHint" text="Scope: -" styleClass="text-muted"/>
-                                <Separator/>
-                                <HBox spacing="10" alignment="CENTER_LEFT">
-                                    <Label text="One-Click Export"/>
-                                    <ComboBox fx:id="cmbAnalyticsExportFormat" prefWidth="130"/>
-                                    <Button text="Export Analytics" onAction="#handleExportAnalyticsReport" styleClass="button-primary"/>
-                                </HBox>
-                                <HBox spacing="10" alignment="CENTER_LEFT">
-                                    <Label text="Schedule Dispatch"/>
-                                    <ComboBox fx:id="cmbDispatchChannel" prefWidth="120"/>
-                                    <TextField fx:id="txtDispatchRecipient" promptText="email or WhatsApp number" prefWidth="220"/>
-                                    <ComboBox fx:id="cmbDispatchFormat" prefWidth="120"/>
-                                    <ComboBox fx:id="cmbDispatchFrequency" prefWidth="120"/>
-                                    <Button text="Schedule" onAction="#handleScheduleAnalyticsDispatch" styleClass="button-secondary"/>
-                                    <Button text="Run Due Now" onAction="#handleRunDueDispatchesNow" styleClass="button-outlined"/>
-                                </HBox>
-                                <Label fx:id="lblDispatchStatus" text="Dispatch: -" styleClass="text-muted"/>
-                            </VBox>
-
-                            <!-- Stats Cards -->
-                            <HBox spacing="16">
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                            <!-- ══════════ ROW 1: KPI CARDS (4 across) ══════════ -->
+                            <HBox spacing="14">
+                                <VBox styleClass="card kpi-card kpi-card-sales" HBox.hgrow="ALWAYS">
                                     <Label text="Daily Sales" styleClass="card-title"/>
                                     <Label fx:id="dailySales" text="₹0.00" styleClass="card-value"/>
                                 </VBox>
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                                <VBox styleClass="card kpi-card kpi-card-warning" HBox.hgrow="ALWAYS">
                                     <Label text="Low Stock" styleClass="card-title"/>
                                     <Label fx:id="lowStock" text="0" styleClass="card-value"/>
                                 </VBox>
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                                <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS">
                                     <Label text="Pending Rxs" styleClass="card-title"/>
                                     <Label fx:id="pendingRx" text="0" styleClass="card-value"/>
                                 </VBox>
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                                <VBox styleClass="card kpi-card kpi-card-profit" HBox.hgrow="ALWAYS">
                                     <Label text="Total Profit" styleClass="card-title"/>
                                     <Label fx:id="totalProfit" text="₹0.00" styleClass="card-value"/>
                                 </VBox>
-                            </HBox>
-
-                            <HBox spacing="16">
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                                    <Label text="Active Subscribers" styleClass="card-title"/>
-                                    <Label fx:id="activeSubscribers" text="0" styleClass="card-value"/>
-                                </VBox>
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                                    <Label text="Renewals Due (7d)" styleClass="card-title"/>
-                                    <Label fx:id="renewalsDue" text="0" styleClass="card-value"/>
-                                </VBox>
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                                    <Label text="Subscription Savings" styleClass="card-title"/>
-                                    <Label fx:id="subscriptionDiscountValue" text="₹0.00" styleClass="card-value"/>
-                                </VBox>
-                                <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                                    <Label text="Pending Overrides" styleClass="card-title"/>
-                                    <Label fx:id="pendingOverrides" text="0" styleClass="card-value"/>
+                                <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS">
+                                    <Label text="Avg Margin" styleClass="card-title"/>
+                                    <Label fx:id="avgMargin" text="0.0%" styleClass="card-value"/>
                                 </VBox>
                             </HBox>
+
+                            <!-- ══════════ ROW 2: EXPIRY + SUBSCRIPTIONS (2 bento cells) ══════════ -->
+                            <HBox spacing="14">
+                                <!-- Expiry Buckets -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="⏰  Expiry Buckets" styleClass="section-title"/>
+                                    <HBox spacing="16">
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Expired" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiryExpired" text="0" styleClass="card-value text-danger"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="0–30d" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiry0To30" text="0" styleClass="card-value text-warning"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="31–60d" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiry31To60" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="61–90d" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiry61To90" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                    </HBox>
+                                </VBox>
+
+                                <!-- Today's Summary -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📊  Today's Summary" styleClass="section-title"/>
+                                    <HBox spacing="16">
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Bills" styleClass="text-muted"/>
+                                            <Label fx:id="lblTodayBills" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Customers" styleClass="text-muted"/>
+                                            <Label fx:id="lblTodayCustomers" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Monthly Exp." styleClass="text-muted"/>
+                                            <Label fx:id="lblMonthlyExpenses" text="₹0.00" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Returns" styleClass="text-muted"/>
+                                            <Label fx:id="lblTodayReturns" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Reorder" styleClass="text-muted"/>
+                                            <Label fx:id="lblReorderNeeded" text="0" styleClass="card-value text-warning"/>
+                                        </VBox>
+                                    </HBox>
+                                </VBox>
+                            </HBox>
+
+                            <!-- ══════════ ROW 3: STOCK HEALTH + SALES (2 bento cells) ══════════ -->
+                            <HBox spacing="14">
+                                <!-- Stock Health -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📦  Stock Health" styleClass="section-title"/>
+                                    <TableView fx:id="stockHealthTable" minHeight="200" prefHeight="240" styleClass="dashboard-table">
+                                        <columns>
+                                            <TableColumn fx:id="colStockHealthMedicine" text="Medicine" prefWidth="160"/>
+                                            <TableColumn fx:id="colStockHealthCompany" text="Company" prefWidth="120"/>
+                                            <TableColumn fx:id="colStockHealthIssue" text="Issue" prefWidth="100"/>
+                                            <TableColumn fx:id="colStockHealthStock" text="Stock" prefWidth="70"/>
+                                            <TableColumn fx:id="colStockHealthDetail" text="Detail" prefWidth="130"/>
+                                        </columns>
+                                        <columnResizePolicy>
+                                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                        </columnResizePolicy>
+                                    </TableView>
+                                </VBox>
+
+                                <!-- Sales & Margin -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📈  Sales and Margin" styleClass="section-title"/>
+                                    <HBox spacing="16">
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Gross Sales" styleClass="text-muted"/>
+                                            <Label fx:id="lblGrossSales" text="₹0.00" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Net Sales" styleClass="text-muted"/>
+                                            <Label fx:id="lblNetSales" text="₹0.00" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Margin" styleClass="text-muted"/>
+                                            <Label fx:id="lblGrossMargin" text="0.00%" styleClass="card-value"/>
+                                        </VBox>
+                                    </HBox>
+                                    <Separator/>
+                                    <Label text="Top Movers (30d)" styleClass="text-muted"/>
+                                    <TableView fx:id="topMoversTable" minHeight="130" prefHeight="150" styleClass="dashboard-table">
+                                        <columns>
+                                            <TableColumn fx:id="colTopMoverMedicine" text="Medicine" prefWidth="180"/>
+                                            <TableColumn fx:id="colTopMoverUnitsSold" text="Units" prefWidth="80"/>
+                                            <TableColumn fx:id="colTopMoverRevenue" text="Revenue (₹)" prefWidth="110"/>
+                                        </columns>
+                                        <columnResizePolicy>
+                                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                        </columnResizePolicy>
+                                    </TableView>
+                                </VBox>
+                            </HBox>
+
+                            <!-- ══════════ ROW 4: INVENTORY (full width) ══════════ -->
+                            <VBox spacing="8" styleClass="card">
+                                <HBox alignment="CENTER_LEFT" spacing="10">
+                                    <Label text="📋  Inventory" styleClass="section-title"/>
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <TextField fx:id="searchMedicine" promptText="Search medicines..." prefWidth="250"/>
+                                    <Button text="Export Excel" onAction="#handleExportExcel" styleClass="button-outlined">
+                                        <graphic>
+                                            <FontIcon iconLiteral="fas-file-excel"/>
+                                        </graphic>
+                                    </Button>
+                                </HBox>
+                                <TableView fx:id="inventoryTable" minHeight="260" prefHeight="360" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="150"/>
+                                        <TableColumn fx:id="colCompany" text="Company" prefWidth="100"/>
+                                        <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
+                                        <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
+                                        <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
+                                        <TableColumn fx:id="colMargin" text="Margin %" prefWidth="80"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </VBox>
+
                         </VBox>
-
-                        <VBox fx:id="dashboardOperationsHub" spacing="12" styleClass="dashboard-side-panel" minWidth="240" prefWidth="270" maxWidth="290">
-                            <Label text="Operations Hub" styleClass="section-title"/>
-                            <Label
-                                text="Fast actions and workflow guidance for the current shift."
-                                styleClass="text-muted"
-                                wrapText="true"/>
-
-                            <Button text="Apply Current Filters" onAction="#handleApplyAnalyticsFilters" styleClass="button-secondary dashboard-side-button" maxWidth="Infinity"/>
-                            <Button text="Export Analytics Snapshot" onAction="#handleExportAnalyticsReport" styleClass="button-primary dashboard-side-button" maxWidth="Infinity"/>
-                            <Button text="Run Due Dispatches" onAction="#handleRunDueDispatchesNow" styleClass="button-outlined dashboard-side-button" maxWidth="Infinity"/>
-
-                            <Separator/>
-
-                            <Label text="Workflow" styleClass="section-title dashboard-side-section"/>
-                            <Label text="1. Apply filters by store, date, category, and supplier." styleClass="dashboard-side-item" wrapText="true"/>
-                            <Label text="2. Review stock-risk and anomaly panels below." styleClass="dashboard-side-item" wrapText="true"/>
-                            <Label text="3. Assign owner and due date in Action Tracker." styleClass="dashboard-side-item" wrapText="true"/>
-
-                            <Separator/>
-
-                            <Label text="Operational Notes" styleClass="section-title dashboard-side-section"/>
-                            <Label
-                                text="Use weekly dispatch for routine analytics to reduce alert fatigue."
-                                styleClass="text-muted"
-                                wrapText="true"/>
-                            <Label
-                                text="High override trends should be compared with rejection reasons in Reports."
-                                styleClass="text-muted"
-                                wrapText="true"/>
-                        </VBox>
-                    </HBox>
-
-                    <VBox fx:id="cardExpiryBuckets" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Expiry Medicines Buckets" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblExpiryWeekWindow" text="Week: -" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Already Expired" styleClass="text-muted"/>
-                                <Label fx:id="lblExpiryExpired" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="0-30 Days" styleClass="text-muted"/>
-                                <Label fx:id="lblExpiry0To30" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="31-60 Days" styleClass="text-muted"/>
-                                <Label fx:id="lblExpiry31To60" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="61-90 Days" styleClass="text-muted"/>
-                                <Label fx:id="lblExpiry61To90" text="0" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                    </VBox>
-
-                    <VBox fx:id="cardOutOfStock" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Out of Stock Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblOutOfStockWindow" text="Lookback: last 30 days" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Out-of-Stock SKUs" styleClass="text-muted"/>
-                                <Label fx:id="lblOutOfStockSkuCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Avg Days Out" styleClass="text-muted"/>
-                                <Label fx:id="lblOutOfStockAvgDays" text="0.0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Revenue Impact Est." styleClass="text-muted"/>
-                                <Label fx:id="lblOutOfStockRevenueImpact" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="outOfStockTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colOutOfStockMedicine" text="Medicine" prefWidth="180"/>
-                                <TableColumn fx:id="colOutOfStockCompany" text="Company" prefWidth="140"/>
-                                <TableColumn fx:id="colOutOfStockDays" text="Days Out" prefWidth="90"/>
-                                <TableColumn fx:id="colOutOfStockLastSale" text="Last Sale" prefWidth="140"/>
-                                <TableColumn fx:id="colOutOfStockAvgDailyRevenue" text="Avg Daily Rev (₹)" prefWidth="130"/>
-                                <TableColumn fx:id="colOutOfStockRevenueImpact" text="Revenue Impact Est. (₹)" prefWidth="150"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                    <VBox fx:id="cardNearStockOut" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Near Stock-Out Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblNearStockOutWindow" text="Lookback: last 30 days | Reorder coverage: 7 days" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Near Stock-Out SKUs" styleClass="text-muted"/>
-                                <Label fx:id="lblNearStockOutSkuCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Avg Days Left" styleClass="text-muted"/>
-                                <Label fx:id="lblNearStockOutAvgDaysLeft" text="0.00" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Revenue At Risk" styleClass="text-muted"/>
-                                <Label fx:id="lblNearStockOutRevenueAtRisk" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="nearStockOutTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colNearStockOutMedicine" text="Medicine" prefWidth="170"/>
-                                <TableColumn fx:id="colNearStockOutCompany" text="Company" prefWidth="130"/>
-                                <TableColumn fx:id="colNearStockOutStock" text="Stock" prefWidth="80"/>
-                                <TableColumn fx:id="colNearStockOutAvgDailyConsumption" text="Avg Daily Cons." prefWidth="120"/>
-                                <TableColumn fx:id="colNearStockOutThreshold" text="Reorder Thresh." prefWidth="120"/>
-                                <TableColumn fx:id="colNearStockOutDaysLeft" text="Days Left" prefWidth="95"/>
-                                <TableColumn fx:id="colNearStockOutRevenueAtRisk" text="Revenue At Risk (₹)" prefWidth="150"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                    <VBox fx:id="cardDeadStock" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Dead Stock Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblDeadStockWindow" text="No movement threshold: 60 days" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Dead Stock SKUs" styleClass="text-muted"/>
-                                <Label fx:id="lblDeadStockSkuCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Avg Days Stagnant" styleClass="text-muted"/>
-                                <Label fx:id="lblDeadStockAvgDaysStagnant" text="0.0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Locked Stock Value" styleClass="text-muted"/>
-                                <Label fx:id="lblDeadStockValue" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="deadStockTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colDeadStockMedicine" text="Medicine" prefWidth="170"/>
-                                <TableColumn fx:id="colDeadStockCompany" text="Company" prefWidth="130"/>
-                                <TableColumn fx:id="colDeadStockStock" text="Stock" prefWidth="80"/>
-                                <TableColumn fx:id="colDeadStockLastSale" text="Last Sale" prefWidth="140"/>
-                                <TableColumn fx:id="colDeadStockDaysStagnant" text="Days Stagnant" prefWidth="120"/>
-                                <TableColumn fx:id="colDeadStockValue" text="Dead Stock Value (₹)" prefWidth="150"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                    <VBox fx:id="cardFastMoving" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Fast-Moving Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblFastMovingWindow" text="Lookback: last 30 days" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Fast-Moving SKUs" styleClass="text-muted"/>
-                                <Label fx:id="lblFastMovingSkuCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Units Sold (Window)" styleClass="text-muted"/>
-                                <Label fx:id="lblFastMovingUnits" text="0.00" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Revenue (Window)" styleClass="text-muted"/>
-                                <Label fx:id="lblFastMovingRevenue" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="fastMovingTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colFastMovingMedicine" text="Medicine" prefWidth="160"/>
-                                <TableColumn fx:id="colFastMovingCompany" text="Company" prefWidth="120"/>
-                                <TableColumn fx:id="colFastMovingUnitsSold" text="Units Sold" prefWidth="100"/>
-                                <TableColumn fx:id="colFastMovingRevenue" text="Revenue (₹)" prefWidth="120"/>
-                                <TableColumn fx:id="colFastMovingAvgDailyUnits" text="Avg Daily Units" prefWidth="120"/>
-                                <TableColumn fx:id="colFastMovingAvgDailyRevenue" text="Avg Daily Rev (₹)" prefWidth="130"/>
-                                <TableColumn fx:id="colFastMovingLastSale" text="Last Sale" prefWidth="140"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                    <VBox fx:id="cardReturnDamaged" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Return/Damaged Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblReturnDamagedWindow" text="Lookback: last 30 days" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Total Quantity" styleClass="text-muted"/>
-                                <Label fx:id="lblReturnDamagedQuantity" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Total Value" styleClass="text-muted"/>
-                                <Label fx:id="lblReturnDamagedValue" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Root-Cause Tags" styleClass="text-muted"/>
-                                <Label fx:id="lblReturnDamagedRootCauses" text="0" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="returnDamagedTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colReturnDamagedMedicine" text="Medicine" prefWidth="160"/>
-                                <TableColumn fx:id="colReturnDamagedCompany" text="Company" prefWidth="120"/>
-                                <TableColumn fx:id="colReturnDamagedReturnedQty" text="Returned Qty" prefWidth="95"/>
-                                <TableColumn fx:id="colReturnDamagedDamagedQty" text="Damaged Qty" prefWidth="95"/>
-                                <TableColumn fx:id="colReturnDamagedTotalQty" text="Total Qty" prefWidth="90"/>
-                                <TableColumn fx:id="colReturnDamagedTotalValue" text="Total Value (₹)" prefWidth="120"/>
-                                <TableColumn fx:id="colReturnDamagedRootCauseTags" text="Root-Cause Tags" prefWidth="180"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                    <VBox fx:id="cardSalesMargin" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Sales and Margin Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblSalesMarginWindow" text="Week: -" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Gross Sales" styleClass="text-muted"/>
-                                <Label fx:id="lblSalesMarginGrossSales" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Net Sales" styleClass="text-muted"/>
-                                <Label fx:id="lblSalesMarginNetSales" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Gross Margin" styleClass="text-muted"/>
-                                <Label fx:id="lblSalesMarginGrossMargin" text="₹0.00 (0.00%)" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Discount Burn" styleClass="text-muted"/>
-                                <Label fx:id="lblSalesMarginDiscountBurn" text="₹0.00 | Bills: 0" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                    </VBox>
-
-                    <VBox fx:id="cardSubscriptionImpact" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Subscription Impact Panel" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblSubscriptionImpactWindow" text="Week: -" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Members Billed" styleClass="text-muted"/>
-                                <Label fx:id="lblSubscriptionImpactMembersBilled" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Savings Given" styleClass="text-muted"/>
-                                <Label fx:id="lblSubscriptionImpactSavingsGiven" text="₹0.00" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Renewals Due (7d)" styleClass="text-muted"/>
-                                <Label fx:id="lblSubscriptionImpactRenewalsDue" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Pending Overrides" styleClass="text-muted"/>
-                                <Label fx:id="lblSubscriptionImpactOverrideCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                    </VBox>
-
-                    <VBox fx:id="cardAnomalyAlerts" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Weekly Anomaly Alerts" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label fx:id="lblAnomalyWindow" text="Week: -" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Total Alerts" styleClass="text-muted"/>
-                                <Label fx:id="lblAnomalyCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="High Severity" styleClass="text-muted"/>
-                                <Label fx:id="lblAnomalyHighCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="anomalyAlertsTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colAnomalyType" text="Alert Type" prefWidth="130"/>
-                                <TableColumn fx:id="colAnomalySeverity" text="Severity" prefWidth="90"/>
-                                <TableColumn fx:id="colAnomalyMetric" text="Metric" prefWidth="170"/>
-                                <TableColumn fx:id="colAnomalyThreshold" text="Threshold" prefWidth="170"/>
-                                <TableColumn fx:id="colAnomalyMessage" text="Message" prefWidth="240"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                    <VBox fx:id="cardActionTracker" spacing="10" styleClass="card">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Manager/Admin Action Tracker" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Label text="Actions" styleClass="text-muted"/>
-                        </HBox>
-                        <HBox spacing="20">
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Tracked Alerts" styleClass="text-muted"/>
-                                <Label fx:id="lblActionTrackerCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                            <VBox HBox.hgrow="ALWAYS">
-                                <Label text="Closed" styleClass="text-muted"/>
-                                <Label fx:id="lblActionTrackerClosedCount" text="0" styleClass="card-value"/>
-                            </VBox>
-                        </HBox>
-                        <TableView fx:id="actionTrackerTable" minHeight="220" prefHeight="320" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colActionTrackerAlertType" text="Alert Type" prefWidth="140"/>
-                                <TableColumn fx:id="colActionTrackerSeverity" text="Severity" prefWidth="90"/>
-                                <TableColumn fx:id="colActionTrackerOwner" text="Owner" prefWidth="130"/>
-                                <TableColumn fx:id="colActionTrackerDueDate" text="Due Date" prefWidth="110"/>
-                                <TableColumn fx:id="colActionTrackerStatus" text="Closure Status" prefWidth="120"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Label text="Status"/>
-                            <ComboBox fx:id="cmbActionClosureStatus" prefWidth="150"/>
-                            <Label text="Due Date"/>
-                            <DatePicker fx:id="dpActionDueDate" prefWidth="150"/>
-                            <Button text="Save Action" onAction="#handleSaveActionTracker" styleClass="button-primary"/>
-                        </HBox>
-                    </VBox>
-
-                    <!-- Inventory Overview -->
-                    <VBox fx:id="cardInventoryOverview" spacing="15" styleClass="card" VBox.vgrow="ALWAYS">
-                        <!-- Inventory Header -->
-                        <HBox alignment="CENTER_LEFT" spacing="10">
-                            <Label text="Inventory Overview" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Button text="Export Excel" onAction="#handleExportExcel" styleClass="button-outlined">
-                                <graphic>
-                                    <FontIcon iconLiteral="fas-file-excel"/>
-                                </graphic>
-                            </Button>
-                            <TextField fx:id="searchMedicine" promptText="Search medicines..." prefWidth="250"/>
-                        </HBox>
-
-                        <TableView fx:id="inventoryTable" minHeight="260" prefHeight="360" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
-                            <columns>
-                                <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="150"/>
-                                <TableColumn fx:id="colCompany" text="Company" prefWidth="100"/>
-                                <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
-                                <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
-                                <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                </VBox>
                     </content>
                 </ScrollPane>
             </Tab>
 
+            <!-- ==================== TAB 2: HISTORY ==================== -->
             <Tab text="History">
                 <VBox spacing="20" styleClass="dark-panel">
                     <Label text="Bill History" styleClass="page-title"/>
@@ -546,6 +209,7 @@
                 </VBox>
             </Tab>
 
+            <!-- ==================== TAB 3: BUSINESS INTELLIGENCE ==================== -->
             <Tab text="Business Intelligence">
                 <VBox spacing="20" styleClass="dark-panel">
                     <Label text="Inventory Intelligence (AI)" styleClass="page-title"/>
@@ -575,6 +239,7 @@
                 </VBox>
             </Tab>
 
+            <!-- ==================== TAB 4: AI ASSISTANT ==================== -->
             <Tab fx:id="aiTab" text="AI Assistant">
                 <content>
                     <fx:include source="ai-view.fxml"/>

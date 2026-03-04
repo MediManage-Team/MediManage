@@ -33,6 +33,9 @@ public class DatabaseUtil {
 
             // Initialize Schema if tables don't exist
             runSchema(conn);
+
+            // Auto-seed sample data if DB is fresh (idempotent)
+            runSeedDataIfNeeded(conn);
         }
     }
 
@@ -75,8 +78,9 @@ public class DatabaseUtil {
                                         + sql.substring(0, Math.min(50, sql.length())) + "...");
                             } catch (SQLException e) {
                                 // Log but don't fail so existing DBs can still boot.
-                                System.err.println("Database Initialization Warning: " + e.getMessage() + " [Statement: "
-                                        + sql.substring(0, Math.min(50, sql.length())) + "...]");
+                                System.err
+                                        .println("Database Initialization Warning: " + e.getMessage() + " [Statement: "
+                                                + sql.substring(0, Math.min(50, sql.length())) + "...]");
                             }
                         }
                     }
@@ -87,6 +91,62 @@ public class DatabaseUtil {
         }
 
         System.out.println("✅ Schema initialized successfully.");
+    }
+
+    /**
+     * Automatically seeds sample data if the database is fresh.
+     * Uses suppliers table as the idempotent guard — if it has data, seeding is
+     * skipped.
+     */
+    private static void runSeedDataIfNeeded(Connection conn) {
+        try (Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM suppliers")) {
+            if (rs.next() && rs.getInt(1) > 0) {
+                System.out.println("ℹ️ Seed data already exists — skipping.");
+                return;
+            }
+        } catch (SQLException e) {
+            // Table might not exist yet, that's okay
+            System.out.println("ℹ️ Skipping seed check: " + e.getMessage());
+            return;
+        }
+
+        System.out.println("🌱 Seeding sample data...");
+        String[] seedFiles = { "/db/seed_data.sql", "/db/seed_dashboard.sql" };
+        for (String seedFile : seedFiles) {
+            runSqlResource(conn, seedFile);
+        }
+        System.out.println("✅ Sample data seeded successfully.");
+    }
+
+    /**
+     * Executes all SQL statements from a classpath resource file.
+     */
+    private static void runSqlResource(Connection conn, String resourcePath) {
+        try (InputStream is = DatabaseUtil.class.getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                System.err.println("⚠️ Seed file not found: " + resourcePath);
+                return;
+            }
+            try (java.util.Scanner scanner = new java.util.Scanner(is, StandardCharsets.UTF_8.name())) {
+                scanner.useDelimiter(";");
+                try (Statement stmt = conn.createStatement()) {
+                    while (scanner.hasNext()) {
+                        String sql = scanner.next().trim();
+                        if (!sql.isEmpty() && !sql.startsWith("--")) {
+                            try {
+                                stmt.execute(sql);
+                            } catch (SQLException e) {
+                                // Log but continue — some INSERT OR IGNORE may warn
+                                System.err.println("Seed warning: " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (java.io.IOException | SQLException e) {
+            System.err.println("⚠️ Failed to read seed file: " + resourcePath + " — " + e.getMessage());
+        }
     }
 
     private static String resolveSchemaResource(Connection conn) throws SQLException {
@@ -107,7 +167,8 @@ public class DatabaseUtil {
         }
 
         if (columnExists(conn, tableName, columnName)) {
-            System.out.println("ℹ️ Skipped migration: column '" + columnName + "' already exists on '" + tableName + "'.");
+            System.out.println(
+                    "ℹ️ Skipped migration: column '" + columnName + "' already exists on '" + tableName + "'.");
             return true;
         }
         return false;

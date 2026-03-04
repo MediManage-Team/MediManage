@@ -18,9 +18,8 @@ public final class RbacPolicy {
     }
 
     public static boolean canAccess(UserRole role, Permission permission) {
-        if (role == null || permission == null) {
+        if (role == null || permission == null)
             return false;
-        }
         Set<UserRole> allowed = ALLOWED_ROLES.get(permission);
         return allowed != null && allowed.contains(role);
     }
@@ -34,9 +33,8 @@ public final class RbacPolicy {
     }
 
     public static void requireRole(UserRole role, Permission permission) {
-        if (canAccess(role, permission)) {
+        if (canAccess(role, permission))
             return;
-        }
         Set<UserRole> allowedRoles = ALLOWED_ROLES.getOrDefault(permission, Collections.emptySet());
         String allowed = allowedRoles.stream()
                 .map(Enum::name)
@@ -52,22 +50,13 @@ public final class RbacPolicy {
 
     private static Map<Permission, Set<UserRole>> buildPolicy() {
         EnumMap<Permission, Set<UserRole>> map = new EnumMap<>(Permission.class);
-
         Set<UserRole> adminOnly = EnumSet.of(UserRole.ADMIN);
         Set<UserRole> adminManager = EnumSet.of(UserRole.ADMIN, UserRole.MANAGER);
-        Set<UserRole> enrollmentOperators = EnumSet.of(
-                UserRole.ADMIN,
-                UserRole.MANAGER,
-                UserRole.PHARMACIST,
-                UserRole.CASHIER);
 
         map.put(Permission.MANAGE_USERS, adminOnly);
         map.put(Permission.MANAGE_MEDICINES, adminManager);
         map.put(Permission.MANAGE_SYSTEM_SETTINGS, adminManager);
         map.put(Permission.EXECUTE_DATABASE_MIGRATION, adminManager);
-        map.put(Permission.MANAGE_SUBSCRIPTION_POLICY, adminManager);
-        map.put(Permission.MANAGE_SUBSCRIPTION_ENROLLMENTS, enrollmentOperators);
-        map.put(Permission.APPROVE_SUBSCRIPTION_OVERRIDES, adminManager);
 
         return Collections.unmodifiableMap(map);
     }

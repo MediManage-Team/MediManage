@@ -84,42 +84,6 @@ public class ReportService {
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
             String careProtocol)
             throws JRException {
-        generateInvoicePDF(items, totalAmount, customerName, filePath, careProtocol, "", 0.0, 0.0);
-    }
-
-    public void generateInvoicePDF(
-            List<BillItem> items,
-            double totalAmount,
-            String customerName,
-            String filePath,
-            String careProtocol,
-            String subscriptionPlanName,
-            double subscriptionSavings,
-            double subscriptionDiscountPercent) throws JRException {
-        generateInvoicePDF(
-                items,
-                totalAmount,
-                customerName,
-                filePath,
-                careProtocol,
-                subscriptionPlanName,
-                subscriptionSavings,
-                subscriptionDiscountPercent,
-                "English",
-                "");
-    }
-
-    public void generateInvoicePDF(
-            List<BillItem> items,
-            double totalAmount,
-            String customerName,
-            String filePath,
-            String careProtocol,
-            String subscriptionPlanName,
-            double subscriptionSavings,
-            double subscriptionDiscountPercent,
-            String subscriptionExplanationLanguage,
-            String subscriptionExplanationSnippet) throws JRException {
         // Load Template
         InputStream reportStream = getClass().getResourceAsStream("/reports/invoice.jrxml");
         if (reportStream == null) {
@@ -133,23 +97,7 @@ public class ReportService {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("CustomerName", customerName);
         parameters.put("TotalAmount", totalAmount);
-        // Note: To print the Care Protocol, we need a parameter in the JRXML or we can
-        // print it separately/append it.
-        // Assuming we pass it as a parameter for now. If JRXML doesn't have it, it
-        // won't show, BUT
-        // we can try to append a page dynamically using Jasper API if we had a
-        // subreport.
-        // For simplicity and robustness without editing JRXML visually:
-        // We will pass it. If the user wants it VISIBLE, they need to update JRXML.
-        // However, we can also use a "Summary" band if available.
         parameters.put("CareProtocol", careProtocol);
-        parameters.put("SubscriptionPlanName", subscriptionPlanName == null ? "" : subscriptionPlanName);
-        parameters.put("SubscriptionSavings", subscriptionSavings);
-        parameters.put("SubscriptionDiscountPercent", subscriptionDiscountPercent);
-        parameters.put("SubscriptionExplanationLanguage",
-                subscriptionExplanationLanguage == null ? "English" : subscriptionExplanationLanguage);
-        parameters.put("SubscriptionExplanationSnippet",
-                subscriptionExplanationSnippet == null ? "" : subscriptionExplanationSnippet);
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
@@ -259,9 +207,10 @@ public class ReportService {
             List<List<String>> rows = raw == null || raw.rows() == null
                     ? List.of()
                     : raw.rows().stream()
-                            .map(row -> row == null ? List.<String>of() : row.stream()
-                                    .map(cell -> cell == null ? "" : cell.trim())
-                                    .toList())
+                            .map(row -> row == null ? List.<String>of()
+                                    : row.stream()
+                                            .map(cell -> cell == null ? "" : cell.trim())
+                                            .toList())
                             .toList();
             sections.add(new AnalyticsReportSection(sectionTitle, headers, rows));
         }
@@ -375,7 +324,8 @@ public class ReportService {
             document.open();
 
             document.add(new Paragraph(payload.title(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
-            document.add(new Paragraph("Generated At: " + payload.generatedAt(), FontFactory.getFont(FontFactory.HELVETICA, 10)));
+            document.add(new Paragraph("Generated At: " + payload.generatedAt(),
+                    FontFactory.getFont(FontFactory.HELVETICA, 10)));
             document.add(new Paragraph(payload.filterScope(), FontFactory.getFont(FontFactory.HELVETICA, 10)));
 
             if (!payload.summaryLines().isEmpty()) {
@@ -398,14 +348,16 @@ public class ReportService {
 
                 if (!section.headers().isEmpty()) {
                     for (String header : section.headers()) {
-                        PdfPCell cell = new PdfPCell(new Phrase(header, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9)));
+                        PdfPCell cell = new PdfPCell(
+                                new Phrase(header, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9)));
                         cell.setHorizontalAlignment(Element.ALIGN_LEFT);
                         table.addCell(cell);
                     }
                 }
 
                 if (section.rows().isEmpty()) {
-                    PdfPCell emptyCell = new PdfPCell(new Phrase("No data", FontFactory.getFont(FontFactory.HELVETICA, 9)));
+                    PdfPCell emptyCell = new PdfPCell(
+                            new Phrase("No data", FontFactory.getFont(FontFactory.HELVETICA, 9)));
                     emptyCell.setColspan(Math.max(1, columns));
                     table.addCell(emptyCell);
                 } else {

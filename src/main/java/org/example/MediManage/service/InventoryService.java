@@ -14,8 +14,8 @@ public class InventoryService {
     public record RestockPreparation(boolean requiresAi, String message, String snapshot) {
     }
 
-    private static final int DEFAULT_PAGE_SIZE = 50;
-    private static final int MAX_PAGE_SIZE = 200;
+    private static final int DEFAULT_PAGE_SIZE = 200;
+    private static final int MAX_PAGE_SIZE = 500;
     private static final int RESTOCK_ANALYSIS_CAP = 500;
     private static final int LOW_STOCK_THRESHOLD = 20;
 
@@ -63,18 +63,22 @@ public class InventoryService {
         return medicineStore.getMedicinesPage(0, RESTOCK_ANALYSIS_CAP);
     }
 
-    public void addMedicine(String name, String company, LocalDate expiryDate, double price, int stock) {
-        medicineStore.addMedicine(name, "", company, expiryDate.toString(), price, stock);
+    public void addMedicine(String name, String company, LocalDate expiryDate, double price, int stock,
+            double purchasePrice, int reorderThreshold) {
+        medicineStore.addMedicine(name, "", company, expiryDate.toString(), price, stock, purchasePrice,
+                reorderThreshold);
     }
 
-    public void updateMedicine(Medicine selectedMedicine, String name, String company, LocalDate expiryDate, double price,
-            int stock) {
+    public void updateMedicine(Medicine selectedMedicine, String name, String company, LocalDate expiryDate,
+            double price,
+            int stock, double purchasePrice, int reorderThreshold) {
         selectedMedicine.setName(name);
         selectedMedicine.setCompany(company);
         selectedMedicine.setExpiry(expiryDate.toString());
         selectedMedicine.setPrice(price);
+        selectedMedicine.setPurchasePrice(purchasePrice);
 
-        medicineStore.updateMedicine(selectedMedicine);
+        medicineStore.updateMedicine(selectedMedicine, reorderThreshold);
         medicineStore.updateStock(selectedMedicine.getId(), stock);
     }
 

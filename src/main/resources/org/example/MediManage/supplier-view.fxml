@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox spacing="12" styleClass="dark-panel"
+    xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SupplierController">
+    <padding>
+        <Insets top="16" right="16" bottom="16" left="16"/>
+    </padding>
+
+    <Label text="🏭 Supplier Management" styleClass="page-title"/>
+
+    <!-- Search / Add Toolbar -->
+    <HBox spacing="10" alignment="CENTER_LEFT">
+        <TextField fx:id="txtSearch" promptText="Search suppliers..." HBox.hgrow="ALWAYS"/>
+        <Button text="🔍 Search" onAction="#handleSearch" styleClass="button-primary"/>
+        <Button text="+ Add Supplier" onAction="#handleAdd" styleClass="button-success"/>
+    </HBox>
+
+    <!-- Suppliers Table -->
+    <TableView fx:id="supplierTable" VBox.vgrow="ALWAYS">
+        <columns>
+            <TableColumn fx:id="colId" text="ID" prefWidth="50"/>
+            <TableColumn fx:id="colName" text="Name" prefWidth="180"/>
+            <TableColumn fx:id="colContact" text="Contact Person" prefWidth="150"/>
+            <TableColumn fx:id="colPhone" text="Phone" prefWidth="120"/>
+            <TableColumn fx:id="colEmail" text="Email" prefWidth="180"/>
+            <TableColumn fx:id="colGst" text="GST #" prefWidth="130"/>
+            <TableColumn fx:id="colStatus" text="Status" prefWidth="80"/>
+        </columns>
+        <columnResizePolicy>
+            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+        </columnResizePolicy>
+    </TableView>
+
+    <!-- Action Buttons -->
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Button fx:id="btnEdit" text="✏ Edit" onAction="#handleEdit" styleClass="button-outlined"/>
+        <Button fx:id="btnDeactivate" text="🗑 Deactivate" onAction="#handleDeactivate" styleClass="button-outlined"/>
+        <Button fx:id="btnRefresh" text="🔄 Refresh" onAction="#handleRefresh" styleClass="button-outlined"/>
+    </HBox>
+</VBox>

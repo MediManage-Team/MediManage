@@ -71,6 +71,16 @@
                         <TextField fx:id="txtStock" promptText="Qty"/>
                     </VBox>
                 </HBox>
+                <HBox spacing="10">
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="Cost Price (₹)"/>
+                        <TextField fx:id="txtPurchasePrice" promptText="0.00"/>
+                    </VBox>
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="Reorder Threshold"/>
+                        <TextField fx:id="txtReorderThreshold" promptText="10"/>
+                    </VBox>
+                </HBox>
 
                 <Region VBox.vgrow="ALWAYS"/>
 

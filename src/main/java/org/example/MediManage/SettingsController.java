@@ -61,6 +61,8 @@ public class SettingsController {
     private TextField modelPathField;
     @FXML
     private ComboBox<String> hardwareCombo;
+    @FXML
+    private PasswordField hfTokenField;
 
     // --- Cloud AI ---
     @FXML
@@ -101,9 +103,10 @@ public class SettingsController {
         // --- Local AI ---
         modelPathField.setText(prefs.get("local_model_path", ""));
 
-        hardwareCombo.getItems().addAll("Auto", "OpenVINO (Intel NPU)", "Ryzen AI / DirectML (AMD)",
-                "CUDA (NVIDIA GPU)", "CPU Only");
+        hardwareCombo.getItems().addAll("Auto", "CUDA (NVIDIA)", "DirectML (AMD)", "CPU Only");
         hardwareCombo.setValue(prefs.get("ai_hardware", "Auto"));
+
+        hfTokenField.setText(prefs.get("hf_token", ""));
 
         // --- Cloud AI ---
         // Provider ComboBox
@@ -201,6 +204,57 @@ public class SettingsController {
     }
 
     @FXML
+    private void handleTestHfToken() {
+        String token = hfTokenField.getText().trim();
+        if (token.isEmpty()) {
+            org.example.MediManage.util.ToastNotification.warning("Enter a HuggingFace token first");
+            return;
+        }
+        org.example.MediManage.util.ToastNotification.info("Testing HuggingFace token…");
+
+        AppExecutors.runBackground(() -> {
+            try {
+                java.net.URL url = new java.net.URL("https://huggingface.co/api/whoami-v2");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    // Parse username from response
+                    java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null)
+                        sb.append(line);
+                    reader.close();
+                    String body = sb.toString();
+                    // Simple JSON parse for "name" field
+                    String username = "valid";
+                    int nameIdx = body.indexOf("\"name\"");
+                    if (nameIdx >= 0) {
+                        int colonIdx = body.indexOf(":", nameIdx);
+                        int quoteStart = body.indexOf("\"", colonIdx + 1);
+                        int quoteEnd = body.indexOf("\"", quoteStart + 1);
+                        if (quoteStart >= 0 && quoteEnd > quoteStart) {
+                            username = body.substring(quoteStart + 1, quoteEnd);
+                        }
+                    }
+                    final String uname = username;
+                    org.example.MediManage.util.ToastNotification.success("HF Token valid — " + uname);
+                } else {
+                    org.example.MediManage.util.ToastNotification.error("HF Token invalid (HTTP " + code + ")");
+                }
+                conn.disconnect();
+            } catch (Exception e) {
+                org.example.MediManage.util.ToastNotification.error("HF Token test failed: " + e.getMessage());
+            }
+        });
+    }
+
+    @FXML
     private void handleMigrateSqliteToPostgres() {
         if (!FeatureFlags.isEnabled(FeatureFlag.POSTGRES_MIGRATION)) {
             showAlert(Alert.AlertType.WARNING, "Migration Disabled",
@@ -251,7 +305,8 @@ public class SettingsController {
                     summary.append("Rows migrated:\n");
                     result.migratedRowsByTable().forEach((table, rows) -> summary
                             .append(" - ").append(table).append(": ").append(rows).append('\n'));
-                    summary.append("\nMigration complete. Click Save Settings to persist PostgreSQL as active backend.");
+                    summary.append(
+                            "\nMigration complete. Click Save Settings to persist PostgreSQL as active backend.");
                     showAlert(Alert.AlertType.INFORMATION, "Migration Successful", summary.toString());
                 });
             } catch (Exception migrationError) {
@@ -315,7 +370,8 @@ public class SettingsController {
         prefs.put(DatabaseConfig.PREF_PG_DATABASE,
                 settings.postgresDatabase() == null ? "" : settings.postgresDatabase());
         prefs.put(DatabaseConfig.PREF_PG_USER, settings.postgresUser() == null ? "" : settings.postgresUser());
-        prefs.put(DatabaseConfig.PREF_PG_PASSWORD, settings.postgresPassword() == null ? "" : settings.postgresPassword());
+        prefs.put(DatabaseConfig.PREF_PG_PASSWORD,
+                settings.postgresPassword() == null ? "" : settings.postgresPassword());
 
         System.setProperty(DatabaseConfig.DB_BACKEND_PROPERTY, settings.backend().name().toLowerCase());
         System.setProperty(DatabaseConfig.DB_PATH_PROPERTY, settings.sqlitePath() == null ? "" : settings.sqlitePath());
@@ -600,12 +656,14 @@ public class SettingsController {
         } catch (Exception e) {
             showAlert(Alert.AlertType.ERROR, "Database Settings Error",
                     "Could not save database settings:\n" + e.getMessage());
+            org.example.MediManage.util.ToastNotification.error("DB settings error: " + e.getMessage());
             return;
         }
 
         // Local AI
         prefs.put("local_model_path", modelPathField.getText());
         prefs.put("ai_hardware", hardwareCombo.getValue());
+        prefs.put("hf_token", hfTokenField.getText().trim());
 
         // Cloud AI — Provider & Model
         String provider = providerCombo.getValue();
@@ -651,6 +709,7 @@ public class SettingsController {
                 "Configuration saved.\nDatabase: " + dbSettings.backend().name()
                         + "\nCloud AI: " + provider + " / " + (modelId != null ? modelId : "default")
                         + "\nIf database backend changed, restart the app to reconnect cleanly.");
+        org.example.MediManage.util.ToastNotification.success("Settings Saved");
 
         // Trigger local model reload if path set
         triggerModelReload();
@@ -658,12 +717,10 @@ public class SettingsController {
         // Sync the active Python env to match the hardware selection
         String hardware = hardwareCombo.getValue();
         String config = "auto";
-        if (hardware.contains("OpenVINO"))
-            config = "openvino";
-        else if (hardware.contains("DirectML") || hardware.contains("Ryzen"))
-            config = "directml";
-        else if (hardware.contains("CUDA"))
+        if (hardware.contains("CUDA"))
             config = "cuda";
+        else if (hardware.contains("DirectML"))
+            config = "directml";
         else if (hardware.contains("CPU"))
             config = "cpu";
 
@@ -735,11 +792,7 @@ public class SettingsController {
 
         String hardware = hardwareCombo.getValue();
         String config = "auto";
-        if (hardware.contains("OpenVINO"))
-            config = "openvino";
-        else if (hardware.contains("DirectML") || hardware.contains("Ryzen"))
-            config = "directml";
-        else if (hardware.contains("CUDA"))
+        if (hardware.contains("CUDA"))
             config = "cuda";
         else if (hardware.contains("CPU"))
             config = "cpu";

@@ -42,13 +42,15 @@ public class SqliteMedicineStore implements MedicineStore {
     }
 
     @Override
-    public void addMedicine(String name, String genericName, String company, String expiry, double price, int initialStock) {
-        medicineDAO.addMedicine(name, genericName, company, expiry, price, initialStock);
+    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+            int initialStock, double purchasePrice, int reorderThreshold) {
+        medicineDAO.addMedicine(name, genericName, company, expiry, price, initialStock, purchasePrice,
+                reorderThreshold);
     }
 
     @Override
-    public void updateMedicine(Medicine medicine) {
-        medicineDAO.updateMedicine(medicine);
+    public void updateMedicine(Medicine medicine, int reorderThreshold) {
+        medicineDAO.updateMedicine(medicine, reorderThreshold);
     }
 
     @Override

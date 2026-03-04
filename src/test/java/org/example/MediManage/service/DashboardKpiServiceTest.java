@@ -3,7 +3,6 @@ package org.example.MediManage.service;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.ExpenseDAO;
 import org.example.MediManage.dao.PrescriptionDAO;
-import org.example.MediManage.dao.SubscriptionDAO;
 import org.example.MediManage.model.Medicine;
 import org.junit.jupiter.api.Test;
 
@@ -19,8 +18,7 @@ class DashboardKpiServiceTest {
         DashboardKpiService service = new DashboardKpiService(
                 new FakeBillDAO(),
                 new FakeExpenseDAO(),
-                new FakePrescriptionDAO(),
-                new FakeSubscriptionDAO());
+                new FakePrescriptionDAO());
 
         LocalDate today = LocalDate.now();
         List<Medicine> inventory = List.of(
@@ -44,10 +42,6 @@ class DashboardKpiServiceTest {
         assertEquals(1200.0, kpis.dailySales(), 0.0001);
         assertEquals(300.0, kpis.monthlyExpenses(), 0.0001);
         assertEquals(4, kpis.pendingRxCount());
-        assertEquals(5L, kpis.activeSubscribers());
-        assertEquals(2L, kpis.renewalsDueSoon());
-        assertEquals(75.0, kpis.dailySubscriptionSavings(), 0.0001);
-        assertEquals(1L, kpis.pendingOverrideCount());
     }
 
     private static Medicine medicine(int id, LocalDate expiry, int stock) {
@@ -72,13 +66,6 @@ class DashboardKpiServiceTest {
         @Override
         public int countByStatus(String status) {
             return "PENDING".equals(status) ? 4 : 0;
-        }
-    }
-
-    private static class FakeSubscriptionDAO extends SubscriptionDAO {
-        @Override
-        public SubscriptionDashboardSnapshot getDashboardSnapshot(int renewalWindowDays) {
-            return new SubscriptionDashboardSnapshot(5L, 2L, 75.0, 1L);
         }
     }
 }

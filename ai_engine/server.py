@@ -143,10 +143,7 @@ def hardware():
     return jsonify(hardware_detect.get_hardware_info())
 
 
-@app.route('/npu_info', methods=['GET'])
-def npu_info():
-    """Return AMD NPU generation detection and setup status."""
-    return jsonify(hardware_detect.get_npu_setup_info())
+
 
 
 @app.route('/query_db', methods=['POST'])
@@ -219,7 +216,7 @@ def _auto_load_model():
         return
 
     # Prefer ONNX GenAI format, then GGUF, then anything else
-    priority = {"ONNX GenAI": 0, "GGUF": 1, "ONNX": 2, "OpenVINO": 3}
+    priority = {"ONNX GenAI": 0, "GGUF": 1, "ONNX": 2}
     models.sort(key=lambda m: priority.get(m.get("format", ""), 99))
 
     best = models[0]
@@ -472,7 +469,7 @@ def _scan_model(path, name):
         if "genai_config.json" in dir_files:
             info["format"] = "ONNX GenAI"
         elif any(f.endswith(".xml") for f in dir_files):
-            info["format"] = "OpenVINO"
+            info["format"] = "ONNX"
         elif any(f.endswith(".onnx") for f in dir_files):
             info["format"] = "ONNX"
         elif any(f.endswith(".gguf") for f in dir_files):
@@ -483,7 +480,7 @@ def _scan_model(path, name):
     elif os.path.isfile(path):
         info["size_mb"] = round(os.path.getsize(path) / 1024 / 1024, 2)
         if path.endswith(".xml"):
-            info["format"] = "OpenVINO"
+            info["format"] = "ONNX"
         elif path.endswith(".onnx"):
             info["format"] = "ONNX"
         elif path.endswith(".gguf"):

@@ -12,6 +12,9 @@ transformers
 duckduckgo-search
 mcp[cli]
 
+# Database — PostgreSQL support (optional)
+psycopg2-binary
+
 # GPU inference — CUDA acceleration
 onnxruntime-gpu
 onnxruntime-genai-cuda

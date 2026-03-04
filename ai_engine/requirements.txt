@@ -8,6 +8,9 @@ transformers
 duckduckgo-search
 mcp[cli]
 
+# Database — PostgreSQL support (optional)
+psycopg2-binary
+
 # Agent optimization (Microsoft Agent Lightning — Linux only)
 # pip install agentlightning
 
@@ -17,9 +20,6 @@ llama-cpp-python
 # Hardware acceleration (install the one matching your hardware)
 # For NVIDIA GPU:
 # pip install onnxruntime-gpu
-# For AMD NPU / DirectML:
-# pip install onnxruntime-genai-directml
-# For Intel NPU:
-# pip install openvino
-# For ONNX Runtime GenAI (generic):
-# pip install onnxruntime-genai
+# pip install onnxruntime-genai-cuda
+# For AMD GPU (DirectML):
+# pip install onnxruntime-directml

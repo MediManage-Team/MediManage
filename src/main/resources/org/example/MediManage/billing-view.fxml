@@ -13,6 +13,14 @@
         <VBox spacing="10" styleClass="dark-panel">
             <Label text="Current Bill" styleClass="page-title"/>
 
+            <!-- Hold / Recall Toolbar -->
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Button fx:id="btnHoldOrder" text="⏸ Hold" onAction="#handleHoldOrder" styleClass="button-outlined" prefHeight="32"/>
+                <Button fx:id="btnRecallOrder" text="📋 Recall" onAction="#handleRecallOrder" styleClass="button-outlined" prefHeight="32"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="lblHeldCount" text="" styleClass="text-muted"/>
+            </HBox>
+
             <TableView fx:id="billingTable" VBox.vgrow="ALWAYS">
                 <columns>
                     <TableColumn fx:id="colName" text="Item Name" prefWidth="200"/>
@@ -47,12 +55,24 @@
 
                     <Label text="Phone:" GridPane.columnIndex="0" GridPane.rowIndex="1" styleClass="text-muted"/>
                     <Label fx:id="lblCustomerPhone" text="-" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+
+                    <Label text="Points:" GridPane.columnIndex="0" GridPane.rowIndex="2" styleClass="text-muted"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                        <Label fx:id="lblLoyaltyPoints" text="-" styleClass="card-value"/>
+                        <Button fx:id="btnRedeemPoints" text="Redeem 5%" onAction="#handleRedeemPoints" styleClass="button-success" visible="false" managed="false"/>
+                    </HBox>
                 </GridPane>
             </VBox>
 
             <!-- Item Entry Section -->
             <VBox spacing="10" styleClass="billing-section" VBox.vgrow="ALWAYS">
                 <Label text="Add Item" styleClass="label-strong"/>
+
+                <!-- Barcode Scanner Input -->
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="🔖"/>
+                    <TextField fx:id="txtBarcode" promptText="Scan or type barcode..." HBox.hgrow="ALWAYS"/>
+                </HBox>
 
                 <VBox spacing="2">
                     <Label text="Search Medicine"/>
@@ -74,8 +94,8 @@
                 <Region VBox.vgrow="ALWAYS"/>
 
                 <Label text="Shortcuts:" styleClass="text-muted"/>
-                <Label text="Enter on Search → Select List" styleClass="text-muted"/>
-                <Label text="Enter on Qty → Add Item" styleClass="text-muted"/>
+                <Label text="Ctrl+F → Search | Ctrl+L → Customer" styleClass="text-muted"/>
+                <Label text="Ctrl+Enter → Checkout | Esc → Clear" styleClass="text-muted"/>
             </VBox>
 
             <!-- Patient Care Assistant (Cloud AI) -->
@@ -88,16 +108,7 @@
                 </VBox>
             </TitledPane>
 
-            <VBox spacing="8" styleClass="billing-section">
-                <Label text="Subscription Override Request" styleClass="label-strong"/>
-                <Label fx:id="lblOverrideStatus" text="No override requested for current bill." styleClass="text-muted"/>
-                <HBox spacing="8" alignment="CENTER_LEFT">
-                    <Label text="Explanation Language:" styleClass="text-muted"/>
-                    <ComboBox fx:id="cmbDiscountExplanationLanguage" prefWidth="170"/>
-                </HBox>
-                <Button fx:id="btnRequestOverride" text="Request Discount Override" onAction="#handleRequestDiscountOverride" maxWidth="Infinity" styleClass="button-outlined"/>
-                <Button fx:id="btnExplainDiscountDecision" text="Explain Discount Decision (AI)" onAction="#handleExplainDiscountDecision" maxWidth="Infinity" styleClass="button-outlined"/>
-            </VBox>
+
 
             <!-- Checkout Button -->
             <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success button-xl"/>

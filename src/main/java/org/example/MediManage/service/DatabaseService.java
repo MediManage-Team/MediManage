@@ -3,7 +3,6 @@ package org.example.MediManage.service;
 import org.example.MediManage.DatabaseUtil;
 import javafx.concurrent.Task;
 
-import java.sql.SQLException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 

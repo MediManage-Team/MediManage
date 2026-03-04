@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<VBox spacing="0" alignment="CENTER"
+    xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.CustomerDisplayController" style="-fx-background-color: #0f1218;">
+    <padding>
+        <Insets top="30" right="40" bottom="30" left="40"/>
+    </padding>
+
+    <!-- Header -->
+    <VBox alignment="CENTER" spacing="4">
+        <Label fx:id="lblPharmacyName" text="MediManage Pharmacy" style="-fx-text-fill: #5fe6b3; -fx-font-size: 28px; -fx-font-weight: bold;"/>
+        <Label fx:id="lblWelcome" text="Welcome! Your items:" style="-fx-text-fill: #8892a6; -fx-font-size: 16px;"/>
+    </VBox>
+
+    <Region prefHeight="20"/>
+
+    <!-- Items Table -->
+    <TableView fx:id="itemsTable" VBox.vgrow="ALWAYS" style="-fx-background-color: #161b24; -fx-font-size: 16px;">
+        <columns>
+            <TableColumn fx:id="colItem" text="Item" prefWidth="300"/>
+            <TableColumn fx:id="colQty" text="Qty" prefWidth="80"/>
+            <TableColumn fx:id="colPrice" text="Price" prefWidth="120"/>
+            <TableColumn fx:id="colTotal" text="Total" prefWidth="120"/>
+        </columns>
+        <columnResizePolicy>
+            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+        </columnResizePolicy>
+    </TableView>
+
+    <Region prefHeight="20"/>
+
+    <!-- Total Display -->
+    <HBox alignment="CENTER_RIGHT" spacing="20" style="-fx-padding: 15; -fx-background-color: #1a2030; -fx-background-radius: 8;">
+        <Label text="TOTAL:" style="-fx-text-fill: #8892a6; -fx-font-size: 24px; -fx-font-weight: bold;"/>
+        <Label fx:id="lblTotal" text="₹ 0.00" style="-fx-text-fill: #5fe6b3; -fx-font-size: 32px; -fx-font-weight: bold;"/>
+    </HBox>
+
+    <Region prefHeight="20"/>
+
+    <!-- Footer Message -->
+    <Label fx:id="lblFooter" text="Thank you for shopping with us!" style="-fx-text-fill: #555e6e; -fx-font-size: 14px;" alignment="CENTER" maxWidth="Infinity"/>
+</VBox>

@@ -37,12 +37,6 @@ class RbacPolicyTest {
     }
 
     @Test
-    void policyAllowsCashierToManageSubscriptionEnrollments() {
-        assertTrue(RbacPolicy.canAccess(UserRole.CASHIER, Permission.MANAGE_SUBSCRIPTION_ENROLLMENTS));
-        assertFalse(RbacPolicy.canAccess(UserRole.STAFF, Permission.MANAGE_SUBSCRIPTION_ENROLLMENTS));
-    }
-
-    @Test
     void requireCurrentUserRejectsAnonymousRequests() {
         assertThrows(SecurityException.class, () -> RbacPolicy.requireCurrentUser(Permission.MANAGE_SYSTEM_SETTINGS));
     }

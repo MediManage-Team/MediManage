@@ -1149,24 +1149,31 @@
 .progress-indicator:indeterminate .indicator .spinner .segment:0 {
     -fx-background-color: #00d4ffFF;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:1 {
     -fx-background-color: #00d4ffDD;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:2 {
     -fx-background-color: #00d4ffBB;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:3 {
     -fx-background-color: #00d4ff99;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:4 {
     -fx-background-color: #00d4ff66;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:5 {
     -fx-background-color: #00d4ff44;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:6 {
     -fx-background-color: #00d4ff22;
 }
+
 .progress-indicator:indeterminate .indicator .spinner .segment:7 {
     -fx-background-color: #00d4ff11;
 }
@@ -1381,48 +1388,84 @@
 
 
 /* ============================
-   DASHBOARD OPERATIONS HUB
+   DASHBOARD SECTION PANES
    ============================ */
-.dashboard-feature-ribbon {
-    -fx-background-color: #0f1724;
+.dashboard-section-pane {
+    -fx-text-fill: #e6f0ff;
+}
+
+.dashboard-section-pane>.title {
+    -fx-background-color: linear-gradient(to right, #0f172480, #0f1724);
     -fx-border-color: #2a2650;
     -fx-border-width: 1;
-    -fx-border-radius: 10;
-    -fx-background-radius: 10;
-    -fx-padding: 10 12;
+    -fx-border-radius: 10 10 0 0;
+    -fx-background-radius: 10 10 0 0;
+    -fx-padding: 12 16;
 }
 
-.dashboard-ribbon-title {
-    -fx-font-size: 13px;
-}
-
-.dashboard-ribbon-reset {
-    -fx-font-size: 12px;
-    -fx-padding: 5 10;
-}
-
-.feature-ribbon-toggle {
-    -fx-background-color: #252042;
-    -fx-text-fill: #bfc9e6;
-    -fx-border-color: #2a2650;
-    -fx-border-width: 1;
-    -fx-border-radius: 16;
-    -fx-background-radius: 16;
-    -fx-font-size: 12px;
-    -fx-padding: 5 12;
-}
-
-.feature-ribbon-toggle:selected {
-    -fx-background-color: #00d4ff20;
-    -fx-text-fill: #00d4ff;
-    -fx-border-color: #00d4ff70;
+.dashboard-section-pane>.title>.text {
+    -fx-fill: #e6f0ff;
+    -fx-font-size: 14px;
     -fx-font-weight: bold;
 }
 
-.feature-ribbon-toggle:hover {
-    -fx-border-color: #00d4ff60;
+.dashboard-section-pane>.title>.arrow-button .arrow {
+    -fx-background-color: #00d4ff;
 }
 
+.dashboard-section-pane>*.content {
+    -fx-background-color: #171230;
+    -fx-border-color: #2a2650;
+    -fx-border-width: 0 1 1 1;
+    -fx-border-radius: 0 0 10 10;
+    -fx-background-radius: 0 0 10 10;
+}
+
+
+/* ============================
+   KPI CARD ACCENTS
+   ============================ */
+.kpi-card {
+    -fx-border-width: 0 0 0 4;
+    -fx-padding: 14 16;
+}
+
+.kpi-card-sales {
+    -fx-border-color: #00d4ff;
+}
+
+.kpi-card-warning {
+    -fx-border-color: #ff6b6b;
+}
+
+.kpi-card-info {
+    -fx-border-color: #7aa2f7;
+}
+
+.kpi-card-profit {
+    -fx-border-color: #5fe6b3;
+}
+
+.kpi-card-subscribers {
+    -fx-border-color: #bb9af7;
+}
+
+.kpi-card-renewal {
+    -fx-border-color: #e8c66a;
+}
+
+.kpi-card-savings {
+    -fx-border-color: #5fe6b3;
+}
+
+.kpi-card-overrides {
+    -fx-border-color: #ff6b6b;
+}
+
+
+/* ============================
+   DASHBOARD TABLE (compact)
+   ============================ */
 .dashboard-table {
     -fx-fixed-cell-size: 30;
 }
@@ -1435,47 +1478,127 @@
     -fx-padding: 6 10;
 }
 
-.dashboard-side-panel {
-    -fx-background-color: linear-gradient(to bottom, #121a2f, #0f1724);
+/* ============================
+   ROLE-SPECIFIC ACCENT OVERRIDES
+   (Merged from admin.css, cashier.css, pharmacist.css)
+   Default accent is cyan (#00d4ff) — same as admin theme
+   ============================ */
+
+/* -- Cashier accent (amber/gold, larger touch targets) --
+   Apply style class 'role-cashier' to root for cashier users */
+.role-cashier {
+    -fx-accent: #e8c66a;
+    -fx-font-size: 14px;
+}
+
+.role-cashier .sidebar-button:focused,
+.role-cashier .sidebar-button:pressed {
+    -fx-background-color: #e8c66a20;
+    -fx-text-fill: #e8c66a;
+}
+
+.role-cashier .header-bar {
+    -fx-border-color: transparent transparent #e8c66a transparent;
+}
+
+.role-cashier .sidebar-button {
+    -fx-font-size: 15px;
+    -fx-padding: 12 16;
+}
+
+/* -- Pharmacist accent (green) --
+   Apply style class 'role-pharmacist' to root for pharmacist users */
+.role-pharmacist {
+    -fx-accent: #5fe6b3;
+}
+
+.role-pharmacist .sidebar-button:focused,
+.role-pharmacist .sidebar-button:pressed {
+    -fx-background-color: #5fe6b320;
+    -fx-text-fill: #5fe6b3;
+}
+
+.role-pharmacist .header-bar {
+    -fx-border-color: transparent transparent #5fe6b3 transparent;
+}
+
+.role-pharmacist .button-primary {
+    -fx-background-color: linear-gradient(to bottom, #5fe6b3, derive(#5fe6b3, -15%));
+    -fx-text-fill: #061427;
+    -fx-border-color: #5fe6b3;
+}
+
+.role-pharmacist .button-primary:hover {
+    -fx-background-color: linear-gradient(to bottom, #78f0c6, #5fe6b3);
+    -fx-effect: dropshadow(three-pass-box, #5fe6b340, 10, 0, 0, 0);
+}
+
+/* ============================
+   TOAST / SNACKBAR
+   ============================ */
+.toast-card {
+    -fx-background-color: rgba(15, 23, 36, 0.92);
+    -fx-background-radius: 10;
     -fx-border-color: #2a2650;
     -fx-border-width: 1;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-    -fx-padding: 16;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.28), 10, 0.0, 0, 2);
+    -fx-border-radius: 10;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.45), 16, 0, 0, 4);
+    -fx-min-height: 44;
+    -fx-max-width: 380;
+    -fx-cursor: hand;
 }
 
-.dashboard-side-panel .separator .line {
-    -fx-border-color: #2a2650;
+.toast-card:hover {
+    -fx-background-color: rgba(20, 28, 44, 0.96);
 }
 
-.dashboard-side-button {
-    -fx-max-width: infinity;
-    -fx-alignment: CENTER_LEFT;
+/* ── Icon ── */
+.toast-icon {
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
+    -fx-min-width: 28;
+    -fx-alignment: center;
 }
 
-.dashboard-toggle-button {
-    -fx-font-size: 12px;
-    -fx-font-weight: bold;
-    -fx-padding: 6 12;
-}
-
-.dashboard-toggle-button:hover {
-    -fx-background-color: #00d4ff1a;
-}
-
-.dashboard-side-section {
+/* ── Message ── */
+.toast-message {
+    -fx-text-fill: #e6f0ff;
     -fx-font-size: 13px;
 }
 
-.dashboard-side-item {
-    -fx-padding: 8 10;
-    -fx-background-color: #25204290;
-    -fx-border-color: #2a2650;
-    -fx-border-width: 1;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-text-fill: #bfc9e6;
-    -fx-font-size: 12px;
+/* ── Severity accent colors ── */
+.toast-success {
+    -fx-border-color: #5fe6b3;
+}
+
+.toast-success .toast-icon,
+.toast-icon.toast-success {
+    -fx-text-fill: #5fe6b3;
+}
+
+.toast-info {
+    -fx-border-color: #7aa2f7;
+}
+
+.toast-info .toast-icon,
+.toast-icon.toast-info {
+    -fx-text-fill: #7aa2f7;
+}
+
+.toast-warning {
+    -fx-border-color: #e8c66a;
+}
+
+.toast-warning .toast-icon,
+.toast-icon.toast-warning {
+    -fx-text-fill: #e8c66a;
+}
+
+.toast-error {
+    -fx-border-color: #ff6b6b;
+}
+
+.toast-error .toast-icon,
+.toast-icon.toast-error {
+    -fx-text-fill: #ff6b6b;
 }

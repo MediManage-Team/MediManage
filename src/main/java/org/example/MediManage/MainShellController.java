@@ -6,11 +6,13 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.example.MediManage.model.User;
 import org.example.MediManage.util.AnimationUtils;
 import org.example.MediManage.util.SidebarManager;
+import org.example.MediManage.util.ToastNotification;
 import org.example.MediManage.util.UserSession;
 import org.example.MediManage.util.ViewSwitcher;
 
@@ -28,6 +30,8 @@ public class MainShellController implements ViewSwitcher {
     @FXML
     private Label userInfoLabel;
 
+    private StackPane toastOverlay;
+
     @FXML
     public void initialize() {
         User currentUser = UserSession.getInstance().getUser();
@@ -38,6 +42,12 @@ public class MainShellController implements ViewSwitcher {
         }
 
         userInfoLabel.setText("User: " + currentUser.getUsername() + " (" + currentUser.getRole() + ")");
+
+        // ── Install universal toast overlay ──
+        toastOverlay = new StackPane();
+        toastOverlay.setPickOnBounds(false);
+        toastOverlay.setMouseTransparent(false);
+        ToastNotification.install(toastOverlay);
 
         SidebarManager.generateSidebar(
                 sidebar,
@@ -66,6 +76,9 @@ public class MainShellController implements ViewSwitcher {
                 break;
         }
         switchView(homeView);
+
+        // Welcome toast
+        ToastNotification.success("Welcome, " + currentUser.getUsername() + "!");
     }
 
     @Override
@@ -77,7 +90,10 @@ public class MainShellController implements ViewSwitcher {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource(viewName + ".fxml"));
             Parent view = loader.load();
-            mainLayout.setCenter(view);
+
+            // Wrap content + toast overlay in a StackPane
+            StackPane contentWithOverlay = new StackPane(view, toastOverlay);
+            mainLayout.setCenter(contentWithOverlay);
             AnimationUtils.fadeIn(view, 250);
         } catch (IOException e) {
             e.printStackTrace();
@@ -107,30 +123,21 @@ public class MainShellController implements ViewSwitcher {
 
     private void applyTheme(org.example.MediManage.model.UserRole role) {
         try {
-            // Load common dark theme for ALL roles
+            // Load unified dark theme (includes all role accent overrides)
             String commonCssUrl = Objects.requireNonNull(getClass().getResource("css/common.css")).toExternalForm();
             mainLayout.getStylesheets().add(commonCssUrl);
 
-            // Layer role-specific accent CSS on top
-            String cssPath = "";
+            // Apply role-specific style class for accent color overrides
             switch (role) {
-                case ADMIN:
-                case MANAGER:
-                    cssPath = "css/admin.css";
-                    break;
                 case CASHIER:
-                    cssPath = "css/cashier.css";
+                    mainLayout.getStyleClass().add("role-cashier");
                     break;
                 case PHARMACIST:
-                    cssPath = "css/pharmacist.css";
+                    mainLayout.getStyleClass().add("role-pharmacist");
                     break;
                 default:
+                    // Admin/Manager use default cyan accent — no extra class needed
                     break;
-            }
-
-            if (!cssPath.isEmpty()) {
-                String cssUrl = Objects.requireNonNull(getClass().getResource(cssPath)).toExternalForm();
-                mainLayout.getStylesheets().add(cssUrl);
             }
         } catch (Exception e) {
             System.err.println("Failed to load theme: " + e.getMessage());

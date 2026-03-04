@@ -84,37 +84,6 @@ public class ModelStoreController {
                 "DeepSeek R1 7B. Advanced reasoning, 6GB+ VRAM.", "Premium", "GGUF", "ollama",
                 "~4.7 GB", "gpu"));
 
-        // ══════════ AMD NPU (Ryzen AI / DirectML) ══════════
-        List<ModelCard> amdModels = new ArrayList<>();
-        amdModels.add(new ModelCard("Microsoft Phi-4 Mini (DirectML)", "microsoft/Phi-4-mini-instruct-onnx",
-                "gpu/gpu-int4-rtn-block-32/*",
-                "Phi-4 Mini via Ryzen AI DirectML. AMD APU/GPU.", "\u2B50 Best", "ONNX GenAI",
-                "huggingface", "~2.4 GB", "npu_amd"));
-
-        amdModels.add(new ModelCard("Phi-4 Mini (Ryzen AI NPU)", "microsoft/Phi-4-mini-instruct-onnx",
-                "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/*",
-                "Phi-4 Mini optimized for AMD Ryzen AI NPU offload.", "NPU", "ONNX GenAI",
-                "huggingface", "~2.4 GB", "npu_amd"));
-
-        amdModels.add(new ModelCard("Llama 3.2 3B (Ryzen AI)", "llama3.2:3b", null,
-                "Meta Llama 3.2 3B. Runs on Ryzen AI via DirectML.", "Recommended", "GGUF", "ollama",
-                "~2.0 GB", "npu_amd"));
-
-        // ══════════ Intel NPU (OpenVINO / Intel AI) ══════════
-        List<ModelCard> intelModels = new ArrayList<>();
-        intelModels.add(new ModelCard("Phi-4 Mini (Intel OpenVINO)", "microsoft/Phi-4-mini-instruct-onnx",
-                "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/*",
-                "Phi-4 Mini via Intel OpenVINO. Core Ultra NPU.", "\u2B50 Best", "ONNX GenAI",
-                "huggingface", "~2.4 GB", "npu_intel"));
-
-        intelModels.add(new ModelCard("Llama 3.2 1B (Intel AI)", "llama3.2:1b", null,
-                "Meta Llama 3.2 1B optimized for Intel AI SDK.", "Fast", "GGUF", "ollama",
-                "~1.3 GB", "npu_intel"));
-
-        intelModels.add(new ModelCard("Qwen2.5 3B (OpenVINO)", "qwen2.5:3b", null,
-                "Alibaba Qwen2.5 3B. Strong on Intel NPU.", "Recommended", "GGUF", "ollama",
-                "~1.9 GB", "npu_intel"));
-
         // ══════════ CPU (BitNet.cpp / llama.cpp) ══════════
         List<ModelCard> cpuModels = new ArrayList<>();
         cpuModels.add(new ModelCard("BitNet b1.58 2B (GGUF)", "microsoft/bitnet-b1.58-2B-4T-gguf",
@@ -166,10 +135,8 @@ public class ModelStoreController {
         // Render all sections
         curatedModels.clear();
         curatedModels.addAll(gpuModels);
-        curatedModels.addAll(amdModels);
-        curatedModels.addAll(intelModels);
         curatedModels.addAll(cpuModels);
-        renderHardwareSections(gpuModels, amdModels, intelModels, cpuModels);
+        renderHardwareSections(gpuModels, cpuModels);
     }
 
     @FXML
@@ -222,21 +189,12 @@ public class ModelStoreController {
                 || model.source.toLowerCase().contains(lowerQuery);
     }
 
-    private void renderHardwareSections(List<ModelCard> gpu, List<ModelCard> amd,
-            List<ModelCard> intel, List<ModelCard> cpu) {
+    private void renderHardwareSections(List<ModelCard> gpu, List<ModelCard> cpu) {
         modelsContainer.getChildren().clear();
 
         addSection("\uD83D\uDFE2  NVIDIA GPU (CUDA)",
                 "onnxruntime-gpu  \u2022  Requires NVIDIA GPU with 4GB+ VRAM",
                 "#5fe6b3", "#0f2920", gpu);
-
-        addSection("\uD83D\uDD35  AMD NPU (Ryzen AI / DirectML)",
-                "onnxruntime-genai-directml  \u2022  AMD Ryzen AI, Radeon RX",
-                "#7aa2f7", "#0f1530", amd);
-
-        addSection("\uD83D\uDFE3  Intel NPU (OpenVINO / Intel AI)",
-                "openvino  \u2022  Intel Core Ultra NPU, Arc GPU",
-                "#bb9af7", "#1a0f30", intel);
 
         addSection("\uD83D\uDFE0  CPU (BitNet.cpp / llama.cpp)",
                 "llama-cpp-python  \u2022  Any CPU, no GPU required",
@@ -298,12 +256,6 @@ public class ModelStoreController {
         switch (model.hardware) {
             case "gpu":
                 badgeColor = "#0f2920; -fx-text-fill: #5fe6b3";
-                break;
-            case "npu_amd":
-                badgeColor = "#0f1530; -fx-text-fill: #7aa2f7";
-                break;
-            case "npu_intel":
-                badgeColor = "#1a0f30; -fx-text-fill: #bb9af7";
                 break;
             default:
                 badgeColor = "#1a1a0f; -fx-text-fill: #e8c66a";
@@ -389,9 +341,11 @@ public class ModelStoreController {
             loadInstalledModels();
 
             showAlert("Success", "Model downloaded & verified!\nLocation: " + status.optString("path"));
+            org.example.MediManage.util.ToastNotification.success("Model downloaded successfully");
         } else if ("cancelled".equals(state)) {
             progressTimer.cancel();
             statusLabel.setText("⏹ Download cancelled.");
+            org.example.MediManage.util.ToastNotification.warning("Download cancelled");
             globalProgressBar.setProgress(0);
             showStopButton(false);
         } else if ("error".equals(state)) {
@@ -399,6 +353,7 @@ public class ModelStoreController {
             globalProgressBar.setProgress(0);
             showStopButton(false);
             showAlert("Error", "Download failed: " + message);
+            org.example.MediManage.util.ToastNotification.error("Download failed: " + message);
         }
     }
 
@@ -524,6 +479,7 @@ public class ModelStoreController {
         statusLabel.setText("Loading model: " + model.optString("name") + "...");
         aiOrchestrator.loadLocalModel(path, "auto");
         statusLabel.setText("✅ Model load requested: " + model.optString("name"));
+        org.example.MediManage.util.ToastNotification.info("Loading model: " + model.optString("name"));
     }
 
     private void handleDeleteModel(JSONObject model) {
@@ -540,9 +496,11 @@ public class ModelStoreController {
                 boolean deleted = aiOrchestrator.deleteLocalModel(path);
                 if (deleted) {
                     statusLabel.setText("✅ Deleted: " + name);
+                    org.example.MediManage.util.ToastNotification.success("Model deleted: " + name);
                     loadInstalledModels(); // Refresh
                 } else {
                     showAlert("Error", "Failed to delete model. It may be in use or protected.");
+                    org.example.MediManage.util.ToastNotification.error("Failed to delete model");
                 }
             }
         });
@@ -580,7 +538,7 @@ public class ModelStoreController {
         String format;
         String source; // "huggingface", "ollama", "url"
         String sizeInfo; // e.g. "~2.4 GB"
-        String hardware; // "gpu", "npu_amd", "npu_intel", "cpu"
+        String hardware; // "gpu" or "cpu"
 
         public ModelCard(String name, String repoId, String filename, String description, String badge, String format,
                 String source, String sizeInfo, String hardware) {

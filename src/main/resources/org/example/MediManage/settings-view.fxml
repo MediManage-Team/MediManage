@@ -67,6 +67,15 @@
                 <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
                 <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
                 <Label text="Select 'Auto' to let the system decide, or force a specific provider." styleClass="text-muted"/>
+
+                <Separator/>
+
+                <Label text="HuggingFace Token (Optional — for faster downloads)" style="-fx-font-weight: bold;"/>
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <PasswordField fx:id="hfTokenField" promptText="hf_xxxxxxxxxxxxxxx" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button text="Test" onAction="#handleTestHfToken" styleClass="button-primary" style="-fx-min-width: 60;"/>
+                </HBox>
+                <Label text="Get a free token at: huggingface.co/settings/tokens" styleClass="text-muted" wrapText="true"/>
             </VBox>
         </TitledPane>
 

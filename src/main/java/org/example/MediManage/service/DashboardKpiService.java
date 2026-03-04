@@ -2,13 +2,15 @@ package org.example.MediManage.service;
 
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.ExpenseDAO;
+import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.dao.PrescriptionDAO;
-import org.example.MediManage.dao.SubscriptionDAO;
 import org.example.MediManage.model.Medicine;
+import org.example.MediManage.util.ReportingWindowUtils;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.List;
 
 public class DashboardKpiService {
     public record DashboardKpis(
@@ -17,25 +19,23 @@ public class DashboardKpiService {
             int pendingRxCount,
             long lowStockCount,
             double netProfit,
-            long activeSubscribers,
-            long renewalsDueSoon,
-            double dailySubscriptionSavings,
-            long pendingOverrideCount,
+            int dailyBillCount,
+            int dailyCustomerCount,
             long expiredMedicinesCount,
             long expiry0To30DaysCount,
             long expiry31To60DaysCount,
-            long expiry61To90DaysCount) {
+            long expiry61To90DaysCount,
+            double avgProfitMargin) {
     }
 
     private static final long KPI_TTL_MILLIS = 30_000;
     private static final int LOW_STOCK_THRESHOLD = 10;
-    private static final int RENEWAL_WINDOW_DAYS = 7;
     private static final DashboardKpiService INSTANCE = new DashboardKpiService();
 
     private final BillDAO billDAO;
     private final ExpenseDAO expenseDAO;
     private final PrescriptionDAO prescriptionDAO;
-    private final SubscriptionDAO subscriptionDAO;
+    private final MedicineDAO medicineDAO;
 
     private final Object lock = new Object();
     private double cachedDailySales;
@@ -44,23 +44,24 @@ public class DashboardKpiService {
     private long monthlyExpensesCachedAt;
     private int cachedPendingRxCount;
     private long pendingRxCachedAt;
-    private SubscriptionDAO.SubscriptionDashboardSnapshot cachedSubscriptionSnapshot;
-    private long subscriptionSnapshotCachedAt;
+    private int cachedDailyBillCount;
+    private int cachedDailyCustomerCount;
+    private long dailyBillsCachedAt;
 
     public DashboardKpiService() {
-        this(new BillDAO(), new ExpenseDAO(), new PrescriptionDAO(), new SubscriptionDAO());
+        this(new BillDAO(), new ExpenseDAO(), new PrescriptionDAO(), new MedicineDAO());
     }
 
-    DashboardKpiService(
-            BillDAO billDAO,
-            ExpenseDAO expenseDAO,
-            PrescriptionDAO prescriptionDAO,
-            SubscriptionDAO subscriptionDAO) {
+    DashboardKpiService(BillDAO billDAO, ExpenseDAO expenseDAO, PrescriptionDAO prescriptionDAO) {
+        this(billDAO, expenseDAO, prescriptionDAO, new MedicineDAO());
+    }
+
+    DashboardKpiService(BillDAO billDAO, ExpenseDAO expenseDAO, PrescriptionDAO prescriptionDAO,
+            MedicineDAO medicineDAO) {
         this.billDAO = billDAO;
         this.expenseDAO = expenseDAO;
         this.prescriptionDAO = prescriptionDAO;
-        this.subscriptionDAO = subscriptionDAO;
-        this.cachedSubscriptionSnapshot = new SubscriptionDAO.SubscriptionDashboardSnapshot(0L, 0L, 0.0, 0L);
+        this.medicineDAO = medicineDAO;
     }
 
     public static DashboardKpiService getInstance() {
@@ -73,22 +74,22 @@ public class DashboardKpiService {
         int pendingRx = getPendingRxCount();
         long lowStockCount = countLowStock(inventorySnapshot);
         ExpiryBuckets expiryBuckets = countExpiryBuckets(inventorySnapshot);
-        SubscriptionDAO.SubscriptionDashboardSnapshot subscriptionSnapshot = getSubscriptionSnapshot();
+        refreshDailyBillStats();
         double netProfit = (sales * 0.2) - expenses;
+        double avgMargin = computeAvgProfitMargin(inventorySnapshot);
         return new DashboardKpis(
                 sales,
                 expenses,
                 pendingRx,
                 lowStockCount,
                 netProfit,
-                subscriptionSnapshot.activeSubscribers(),
-                subscriptionSnapshot.renewalsDueSoon(),
-                subscriptionSnapshot.dailySubscriptionSavings(),
-                subscriptionSnapshot.pendingOverrideCount(),
+                cachedDailyBillCount,
+                cachedDailyCustomerCount,
                 expiryBuckets.expiredCount(),
                 expiryBuckets.expiry0To30DaysCount(),
                 expiryBuckets.expiry31To60DaysCount(),
-                expiryBuckets.expiry61To90DaysCount());
+                expiryBuckets.expiry61To90DaysCount(),
+                avgMargin);
     }
 
     public static void invalidateSalesMetrics() {
@@ -105,10 +106,6 @@ public class DashboardKpiService {
 
     public static void invalidateAllMetrics() {
         INSTANCE.invalidateAll();
-    }
-
-    public static void invalidateSubscriptionMetrics() {
-        INSTANCE.invalidateSubscriptions();
     }
 
     private double getDailySales() {
@@ -147,15 +144,15 @@ public class DashboardKpiService {
         }
     }
 
-    private SubscriptionDAO.SubscriptionDashboardSnapshot getSubscriptionSnapshot() {
+    private void refreshDailyBillStats() {
         long now = System.currentTimeMillis();
         synchronized (lock) {
-            if (!isExpired(subscriptionSnapshotCachedAt, now)) {
-                return cachedSubscriptionSnapshot;
+            if (!isExpired(dailyBillsCachedAt, now)) {
+                return;
             }
-            cachedSubscriptionSnapshot = subscriptionDAO.getDashboardSnapshot(RENEWAL_WINDOW_DAYS);
-            subscriptionSnapshotCachedAt = now;
-            return cachedSubscriptionSnapshot;
+            cachedDailyBillCount = billDAO.countTodaysBills();
+            cachedDailyCustomerCount = billDAO.countTodaysUniqueCustomers();
+            dailyBillsCachedAt = now;
         }
     }
 
@@ -219,6 +216,7 @@ public class DashboardKpiService {
     private void invalidateSales() {
         synchronized (lock) {
             dailySalesCachedAt = 0L;
+            dailyBillsCachedAt = 0L;
         }
     }
 
@@ -234,19 +232,26 @@ public class DashboardKpiService {
         }
     }
 
-    private void invalidateSubscriptions() {
-        synchronized (lock) {
-            subscriptionSnapshotCachedAt = 0L;
-        }
-    }
-
     private void invalidateAll() {
         synchronized (lock) {
             dailySalesCachedAt = 0L;
             monthlyExpensesCachedAt = 0L;
             pendingRxCachedAt = 0L;
-            subscriptionSnapshotCachedAt = 0L;
+            dailyBillsCachedAt = 0L;
         }
+    }
+
+    private static double computeAvgProfitMargin(Collection<Medicine> medicines) {
+        double sum = 0;
+        int count = 0;
+        for (Medicine m : medicines) {
+            double margin = m.getProfitMarginPercent();
+            if (margin > 0) {
+                sum += margin;
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : 0.0;
     }
 
     private record ExpiryBuckets(
@@ -254,5 +259,20 @@ public class DashboardKpiService {
             long expiry0To30DaysCount,
             long expiry31To60DaysCount,
             long expiry61To90DaysCount) {
+    }
+
+    /**
+     * Returns the weekly sales/margin summary for the current Monday–Sunday window.
+     */
+    public BillDAO.WeeklySalesMarginSummary getWeeklySalesSummary() {
+        ReportingWindowUtils.WeeklyWindow window = ReportingWindowUtils.mondayToSundayWindow(LocalDate.now());
+        return billDAO.getWeeklySalesMarginSummary(window.startDate(), window.endDate());
+    }
+
+    /**
+     * Returns top N fast-moving medicines over the given lookback period.
+     */
+    public List<MedicineDAO.FastMovingInsightRow> getTopMovers(int lookbackDays, int limit) {
+        return medicineDAO.getFastMovingInsights(lookbackDays, limit);
     }
 }

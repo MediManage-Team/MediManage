@@ -102,7 +102,8 @@ public class InMemoryMedicineStore implements MedicineStore {
     }
 
     @Override
-    public void addMedicine(String name, String genericName, String company, String expiry, double price, int initialStock) {
+    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+            int initialStock, double purchasePrice, int reorderThreshold) {
         lock.writeLock().lock();
         try {
             int nextId = medicineIdSequence.getAndIncrement();
@@ -113,7 +114,8 @@ public class InMemoryMedicineStore implements MedicineStore {
                     company,
                     expiry,
                     initialStock,
-                    price);
+                    price,
+                    purchasePrice);
             medicines.put(nextId, medicine);
         } finally {
             lock.writeLock().unlock();
@@ -121,7 +123,7 @@ public class InMemoryMedicineStore implements MedicineStore {
     }
 
     @Override
-    public void updateMedicine(Medicine medicine) {
+    public void updateMedicine(Medicine medicine, int reorderThreshold) {
         if (medicine == null || medicine.getId() <= 0) {
             return;
         }

@@ -156,6 +156,42 @@ public class MediManageApplication extends Application {
                                 pb.environment().put(LocalAdminTokenManager.ENV_NAME,
                                                 LocalAdminTokenManager.getOrCreateToken());
 
+                                // Pass HuggingFace token for faster model downloads
+                                String hfToken = prefs.get("hf_token", "").trim();
+                                if (!hfToken.isEmpty()) {
+                                        pb.environment().put("HF_TOKEN", hfToken);
+                                        System.out.println(
+                                                        "🔑 HF_TOKEN provided — authenticated HuggingFace downloads enabled.");
+                                }
+
+                                // Pass database config to Python AI engine
+                                String dbBackend = prefs.get(
+                                                org.example.MediManage.config.DatabaseConfig.PREF_DB_BACKEND,
+                                                "sqlite");
+                                pb.environment().put("MEDIMANAGE_DB_BACKEND", dbBackend);
+                                if ("postgresql".equals(dbBackend)) {
+                                        pb.environment().put("MEDIMANAGE_PG_HOST",
+                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_HOST,
+                                                                        "localhost"));
+                                        pb.environment().put("MEDIMANAGE_PG_PORT",
+                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_PORT,
+                                                                        "5432"));
+                                        pb.environment().put("MEDIMANAGE_PG_DATABASE",
+                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_DATABASE,
+                                                                        "medimanage"));
+                                        pb.environment().put("MEDIMANAGE_PG_USER",
+                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_USER,
+                                                                        "postgres"));
+                                        pb.environment().put("MEDIMANAGE_PG_PASSWORD",
+                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_PASSWORD,
+                                                                        ""));
+                                } else {
+                                        pb.environment().put("MEDIMANAGE_DB_PATH",
+                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_DB_PATH,
+                                                                        System.getProperty("user.dir")
+                                                                                        + "/medimanage.db"));
+                                }
+
                                 pythonProcess = pb.start();
 
                                 // Add Shutdown Hook
@@ -188,11 +224,15 @@ public class MediManageApplication extends Application {
                                                         startupPopup.appendLog("");
                                                         startupPopup.appendLog(
                                                                         "✅ Setup complete! This window will close shortly.");
-                                                        // Auto-close after 2 seconds
-                                                        AppExecutors.schedule(() -> Platform.runLater(this::closeStartupPopup),
-                                                                        2,
-                                                                        TimeUnit.SECONDS);
                                                 }
+                                                org.example.MediManage.util.ToastNotification
+                                                                .success("AI Engine Ready");
+                                                // Auto-close after 2 seconds
+                                                AppExecutors.schedule(
+                                                                () -> Platform.runLater(
+                                                                                this::closeStartupPopup),
+                                                                2,
+                                                                TimeUnit.SECONDS);
                                                 popupClosed = true;
 
                                                 // Start MCP Server on port 5001 alongside Flask
@@ -206,8 +246,10 @@ public class MediManageApplication extends Application {
                                         startupPopup.appendLog("❌ Error: " + e.getMessage());
                                         startupPopup.setStatus("❌ Failed to start AI Engine");
                                 }
+                                org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                         }
                 });
+
         }
 
         private void closeStartupPopup() {

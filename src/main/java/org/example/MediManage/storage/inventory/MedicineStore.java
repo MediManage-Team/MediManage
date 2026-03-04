@@ -15,9 +15,10 @@ public interface MedicineStore {
 
     int countMedicines(String keyword);
 
-    void addMedicine(String name, String genericName, String company, String expiry, double price, int initialStock);
+    void addMedicine(String name, String genericName, String company, String expiry, double price, int initialStock,
+            double purchasePrice, int reorderThreshold);
 
-    void updateMedicine(Medicine medicine);
+    void updateMedicine(Medicine medicine, int reorderThreshold);
 
     void updateStock(int medicineId, int newQuantity);
 

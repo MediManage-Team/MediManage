@@ -3,7 +3,7 @@ import logging
 import time
 import sys
 import platform
-import sqlite3
+from db_connector import get_readonly_connection, placeholder, fetchall_as_dicts
 import re
 from logging_setup import configure_structured_logging
 
@@ -70,7 +70,7 @@ class AIInferenceEngine:
         ranked by available hardware acceleration.
 
         Priority (when GPU is available):
-          1. gpu/ subdirectory (for CUDA or DirectML)
+          1. gpu/ subdirectory (for CUDA)
           2. cpu_and_mobile/ subdirectory
           3. Direct path with genai_config.json
 
@@ -107,8 +107,7 @@ class AIInferenceEngine:
         try:
             import onnxruntime as ort
             eps = ort.get_available_providers()
-            gpu_available = ("CUDAExecutionProvider" in eps or
-                            "DmlExecutionProvider" in eps)
+            gpu_available = "CUDAExecutionProvider" in eps
         except ImportError:
             pass
 
@@ -128,7 +127,7 @@ class AIInferenceEngine:
     def load_model(self, model_path, hardware_config="auto"):
         """
         Loads the model based on the hardware configuration.
-        hardware_config: "auto", "openvino", "directml", "cuda", "cpu", "bitnet"
+        hardware_config: "auto", "cuda", "cpu", "bitnet"
         """
         logger.info(f"Loading model from {model_path} with config: {hardware_config}")
 
@@ -147,8 +146,6 @@ class AIInferenceEngine:
         if model_path.endswith(".gguf") or (os.path.isdir(model_path) and any(
                 f.endswith(".gguf") for f in os.listdir(model_path))):
             self.framework = "gguf"  # BitNet.cpp / llama.cpp
-        elif model_path.endswith(".xml"):
-            self.framework = "openvino"
         elif os.path.isdir(model_path) and self._find_genai_model_path(model_path, hardware_config):
             self.framework = "genai"
             # Resolve to the actual subdirectory containing genai_config.json
@@ -157,20 +154,16 @@ class AIInferenceEngine:
         elif model_path.endswith(".onnx") or os.path.isdir(model_path):
             self.framework = "onnx_standard"
         else:
-            raise ValueError("Unsupported model format. Supported: GGUF, ONNX GenAI, OpenVINO (.xml), standard ONNX.")
+            raise ValueError("Unsupported model format. Supported: GGUF, ONNX GenAI, standard ONNX.")
 
         try:
             # --- GGUF / BitNet.cpp (CPU) ---
             if self.framework == "gguf":
                 self._load_gguf(model_path, hardware_config)
 
-            # --- ONNX Runtime GenAI (DirectML / CUDA / CPU) ---
+            # --- ONNX Runtime GenAI (CUDA / CPU) ---
             elif self.framework == "genai":
                 self._load_genai(model_path, hardware_config)
-
-            # --- OpenVINO (Intel CPU / GPU / NPU) ---
-            elif self.framework == "openvino":
-                self._load_openvino(model_path, hardware_config)
 
             # --- Standard ONNX (Fallback) ---
             elif self.framework == "onnx_standard":
@@ -213,7 +206,7 @@ class AIInferenceEngine:
         logger.info(f"GGUF model loaded on CPU with {n_threads} threads")
 
     def _load_genai(self, model_path, hardware_config):
-        """Load model using ONNX Runtime GenAI (DirectML, CUDA, CPU)."""
+        """Load model using ONNX Runtime GenAI (CUDA / DirectML / CPU)."""
         import onnxruntime_genai as og
 
         logger.info("Using ONNX Runtime GenAI...")
@@ -232,36 +225,48 @@ class AIInferenceEngine:
         is_gpu_model = "gpu" in model_lower and "cpu" not in os.path.basename(model_lower)
 
         ep = "cpu"  # Default fallback
-        use_dml = False
         use_cuda = False
+        use_dml = False
 
-        if is_gpu_model or hardware_config in ("directml", "cuda"):
+        if is_gpu_model or hardware_config == "cuda":
             if "CUDAExecutionProvider" in available_eps:
                 ep = "cuda"
                 use_cuda = True
                 logger.info("CUDA EP detected — using NVIDIA GPU acceleration")
             elif "DmlExecutionProvider" in available_eps:
-                ep = "dml"
+                ep = "directml"
                 use_dml = True
-                logger.info("DirectML detected — using iGPU acceleration")
+                logger.info("DirectML EP detected — using AMD GPU acceleration")
             else:
                 logger.warning("GPU model variant selected but no GPU EP available, falling back to CPU")
+        elif hardware_config == "directml":
+            if "DmlExecutionProvider" in available_eps:
+                ep = "directml"
+                use_dml = True
+                logger.info("DirectML EP selected — using AMD GPU acceleration")
+            else:
+                logger.warning("DirectML requested but not available, falling back to CPU")
         else:
             logger.info("CPU model variant — using CPU execution")
 
         logger.info(f"Loading GenAI model from: {model_path} with provider: {ep}")
 
         # Use Config API to explicitly set the execution provider
-        if use_dml or use_cuda:
-            if use_cuda:
-                _ensure_cuda_dlls_on_path()
+        if use_cuda:
+            _ensure_cuda_dlls_on_path()
             config = og.Config(model_path)
             config.clear_providers()
-            if use_dml:
-                config.append_provider('dml')
-            elif use_cuda:
-                config.append_provider('cuda')
+            config.append_provider('cuda')
             self.model = og.Model(config)
+        elif use_dml:
+            try:
+                config = og.Config(model_path)
+                config.clear_providers()
+                config.append_provider('dml')
+                self.model = og.Model(config)
+            except Exception as dml_err:
+                logger.warning(f"DirectML config failed ({dml_err}), trying default load")
+                self.model = og.Model(model_path)
         else:
             self.model = og.Model(model_path)
 
@@ -272,43 +277,17 @@ class AIInferenceEngine:
         self.gen_params = og.GeneratorParams(self.model)
         self.gen_params.set_search_options(do_sample=False)
 
-    def _load_openvino(self, model_path, hardware_config):
-        """Load model using OpenVINO (Intel CPU / GPU / NPU)."""
-        from openvino.runtime import Core
-        from transformers import AutoTokenizer
-
-        core = Core()
-        devices = core.available_devices
-        logger.info(f"Available OpenVINO devices: {devices}")
-
-        device = "CPU"
-        if hardware_config == "openvino" or hardware_config == "auto":
-            if "NPU" in devices:
-                device = "NPU"
-            elif "GPU" in devices:
-                device = "GPU"
-
-        logger.info(f"Loading OpenVINO model on {device}...")
-        self.model = core.read_model(model_path)
-        self.compiled_model = core.compile_model(self.model, device_name=device)
-        self.provider = f"OpenVINO:{device}"
-
-        model_dir = os.path.dirname(model_path)
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
-        except Exception:
-            logger.warning("Could not load local tokenizer, will use base behaviour.")
 
     def _load_onnx_standard(self, model_path, hardware_config):
-        """Load model using standard ONNX Runtime (DirectML / CUDA / CPU)."""
+        """Load model using standard ONNX Runtime (CUDA / DirectML / CPU)."""
         import onnxruntime as ort
         from transformers import AutoTokenizer
 
         providers = []
-        if hardware_config == "directml" or hardware_config == "auto":
-            providers.append("DmlExecutionProvider")
         if hardware_config == "cuda" or hardware_config == "auto":
             providers.append("CUDAExecutionProvider")
+        if hardware_config == "directml" or hardware_config == "auto":
+            providers.append("DmlExecutionProvider")
         providers.append("CPUExecutionProvider")
 
         self.session = ort.InferenceSession(model_path, providers=providers)
@@ -332,161 +311,169 @@ class AIInferenceEngine:
 
     def search_pharmacy_db(self, query):
         """
-        Query the MediManage SQLite database for pharmacy-related data.
+        Query the MediManage database for pharmacy-related data.
+        Supports both SQLite and PostgreSQL via db_connector.
         Returns formatted context string, or empty string if no relevant data.
         """
-        _HERE = os.path.dirname(os.path.abspath(__file__))
-        db_path = os.path.join(os.path.dirname(_HERE), "medimanage.db")
-        if not os.path.isfile(db_path):
-            return ""
-
         q = query.lower()
         results = []
+        ph = placeholder()  # '?' for SQLite, '%s' for PostgreSQL
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
+            with get_readonly_connection() as conn:
+                cur = conn.cursor()
 
-            # --- Medicine / Inventory queries ---
-            med_keywords = ['medicine', 'tablet', 'capsule', 'syrup', 'drug',
-                            'stock', 'inventory', 'available', 'paracetamol',
-                            'amoxicillin', 'how many', 'quantity', 'check']
-            if any(kw in q for kw in med_keywords):
-                # Extract search terms (remove common words)
-                stop = {'how', 'many', 'check', 'show', 'list', 'get', 'find',
-                        'me', 'the', 'a', 'an', 'of', 'in', 'is', 'are',
-                        'do', 'we', 'have', 'what', 'tablets', 'tablet',
-                        'capsules', 'medicine', 'medicines', 'drug', 'drugs',
-                        'stock', 'inventory', 'available', 'our'}
-                words = re.findall(r'[a-zA-Z]+', q)
-                search_terms = [w for w in words if w not in stop and len(w) > 2]
+                # --- Medicine / Inventory queries ---
+                med_keywords = ['medicine', 'tablet', 'capsule', 'syrup', 'drug',
+                                'stock', 'inventory', 'available', 'paracetamol',
+                                'amoxicillin', 'how many', 'quantity', 'check']
+                if any(kw in q for kw in med_keywords):
+                    stop = {'how', 'many', 'check', 'show', 'list', 'get', 'find',
+                            'me', 'the', 'a', 'an', 'of', 'in', 'is', 'are',
+                            'do', 'we', 'have', 'what', 'tablets', 'tablet',
+                            'capsules', 'medicine', 'medicines', 'drug', 'drugs',
+                            'stock', 'inventory', 'available', 'our'}
+                    words = re.findall(r'[a-zA-Z]+', q)
+                    search_terms = [w for w in words if w not in stop and len(w) > 2]
 
-                if search_terms:
-                    like_clauses = ' OR '.join(
-                        [f"m.name LIKE ? OR m.generic_name LIKE ?"
-                         for _ in search_terms])
-                    params = []
-                    for t in search_terms:
-                        params.extend([f"%{t}%", f"%{t}%"])
+                    if search_terms:
+                        like_clauses = ' OR '.join(
+                            [f"m.name LIKE {ph} OR m.generic_name LIKE {ph}"
+                             for _ in search_terms])
+                        params = []
+                        for t in search_terms:
+                            params.extend([f"%{t}%", f"%{t}%"])
 
-                    cur.execute(f"""
-                        SELECT m.name, m.generic_name, m.company,
-                               m.price, m.expiry_date,
-                               COALESCE(s.quantity, 0) as stock_qty
-                        FROM medicines m
-                        LEFT JOIN stock s ON m.medicine_id = s.medicine_id
-                        WHERE {like_clauses}
-                        LIMIT 20
-                    """, params)
-                else:
+                        cur.execute(f"""
+                            SELECT m.name, m.generic_name, m.company,
+                                   m.price, m.expiry_date,
+                                   COALESCE(s.quantity, 0) as stock_qty
+                            FROM medicines m
+                            LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                            WHERE {like_clauses}
+                            LIMIT 20
+                        """, params)
+                    else:
+                        cur.execute("""
+                            SELECT m.name, m.generic_name, m.company,
+                                   m.price, m.expiry_date,
+                                   COALESCE(s.quantity, 0) as stock_qty
+                            FROM medicines m
+                            LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                            LIMIT 20
+                        """)
+
+                    rows = fetchall_as_dicts(cur)
+                    if rows:
+                        results.append(f"[Inventory Data - {len(rows)} medicines found]:")
+                        for r in rows:
+                            results.append(
+                                f"  - {r['name']} ({r.get('generic_name') or 'N/A'}) | "
+                                f"Company: {r.get('company') or 'N/A'} | "
+                                f"Price: {r.get('price')} | "
+                                f"Stock: {r.get('stock_qty')} | "
+                                f"Expiry: {r.get('expiry_date') or 'N/A'}")
+
+                # --- Low stock queries ---
+                if any(kw in q for kw in ['low stock', 'reorder', 'running out',
+                                           'shortage', 'out of stock']):
                     cur.execute("""
-                        SELECT m.name, m.generic_name, m.company,
-                               m.price, m.expiry_date,
+                        SELECT m.name, m.generic_name,
                                COALESCE(s.quantity, 0) as stock_qty
                         FROM medicines m
                         LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                        WHERE COALESCE(s.quantity, 0) < 10
+                        ORDER BY stock_qty ASC
                         LIMIT 20
                     """)
+                    rows = fetchall_as_dicts(cur)
+                    if rows:
+                        results.append(f"[Low Stock Alert - {len(rows)} medicines below 10 units]:")
+                        for r in rows:
+                            results.append(
+                                f"  - {r['name']} ({r.get('generic_name') or 'N/A'}) | "
+                                f"Stock: {r.get('stock_qty')}")
 
-                rows = cur.fetchall()
-                if rows:
-                    results.append(f"[Inventory Data - {len(rows)} medicines found]:")
-                    for r in rows:
+                # --- Expiry queries ---
+                if any(kw in q for kw in ['expir', 'expired', 'expiring',
+                                           'shelf life', 'validity']):
+                    cur.execute("""
+                        SELECT m.name, m.expiry_date,
+                               COALESCE(s.quantity, 0) as stock_qty
+                        FROM medicines m
+                        LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                        WHERE m.expiry_date IS NOT NULL
+                          AND m.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
+                        ORDER BY m.expiry_date ASC
+                        LIMIT 20
+                    """) if ph == '%s' else cur.execute("""
+                        SELECT m.name, m.expiry_date,
+                               COALESCE(s.quantity, 0) as stock_qty
+                        FROM medicines m
+                        LEFT JOIN stock s ON m.medicine_id = s.medicine_id
+                        WHERE m.expiry_date IS NOT NULL
+                          AND m.expiry_date <= date('now', '+90 days')
+                        ORDER BY m.expiry_date ASC
+                        LIMIT 20
+                    """)
+                    rows = fetchall_as_dicts(cur)
+                    if rows:
+                        results.append(f"[Expiring Soon - {len(rows)} medicines within 90 days]:")
+                        for r in rows:
+                            results.append(
+                                f"  - {r['name']} | Expiry: {r.get('expiry_date')} | "
+                                f"Stock: {r.get('stock_qty')}")
+
+                # --- Customer queries ---
+                if any(kw in q for kw in ['customer', 'balance', 'debt',
+                                           'debtor', 'owe', 'credit']):
+                    cur.execute("""
+                        SELECT name, phone, current_balance
+                        FROM customers
+                        WHERE current_balance > 0
+                        ORDER BY current_balance DESC
+                        LIMIT 15
+                    """)
+                    rows = fetchall_as_dicts(cur)
+                    if rows:
+                        results.append(f"[Customer Balances - {len(rows)} with outstanding debt]:")
+                        for r in rows:
+                            results.append(
+                                f"  - {r['name']} | Phone: {r.get('phone') or 'N/A'} | "
+                                f"Balance: {r.get('current_balance')}")
+
+                # --- Sales / Bills queries ---
+                if any(kw in q for kw in ['sale', 'sales', 'revenue', 'bill',
+                                           'today', 'income', 'profit', 'earning']):
+                    today_sql = "CURRENT_DATE" if ph == '%s' else "date('now')"
+                    month_sql = "CURRENT_DATE - INTERVAL '30 days'" if ph == '%s' else "date('now', '-30 days')"
+
+                    cur.execute(f"""
+                        SELECT COUNT(*) as bill_count,
+                               COALESCE(SUM(total_amount), 0) as total_revenue
+                        FROM bills
+                        WHERE date(bill_date) = {today_sql}
+                    """)
+                    rows = fetchall_as_dicts(cur)
+                    if rows and rows[0]:
+                        r = rows[0]
                         results.append(
-                            f"  - {r['name']} ({r['generic_name'] or 'N/A'}) | "
-                            f"Company: {r['company'] or 'N/A'} | "
-                            f"Price: {r['price']} | "
-                            f"Stock: {r['stock_qty']} | "
-                            f"Expiry: {r['expiry_date'] or 'N/A'}")
+                            f"[Today's Sales]: {r.get('bill_count')} bills, "
+                            f"Total Revenue: {r.get('total_revenue')}")
 
-            # --- Low stock queries ---
-            if any(kw in q for kw in ['low stock', 'reorder', 'running out',
-                                       'shortage', 'out of stock']):
-                cur.execute("""
-                    SELECT m.name, m.generic_name,
-                           COALESCE(s.quantity, 0) as stock_qty
-                    FROM medicines m
-                    LEFT JOIN stock s ON m.medicine_id = s.medicine_id
-                    WHERE COALESCE(s.quantity, 0) < 10
-                    ORDER BY stock_qty ASC
-                    LIMIT 20
-                """)
-                rows = cur.fetchall()
-                if rows:
-                    results.append(f"[Low Stock Alert - {len(rows)} medicines below 10 units]:")
-                    for r in rows:
+                    cur.execute(f"""
+                        SELECT COUNT(*) as bill_count,
+                               COALESCE(SUM(total_amount), 0) as total_revenue
+                        FROM bills
+                        WHERE bill_date >= {month_sql}
+                    """)
+                    rows = fetchall_as_dicts(cur)
+                    if rows and rows[0]:
+                        r = rows[0]
                         results.append(
-                            f"  - {r['name']} ({r['generic_name'] or 'N/A'}) | "
-                            f"Stock: {r['stock_qty']}")
+                            f"[Last 30 Days]: {r.get('bill_count')} bills, "
+                            f"Total Revenue: {r.get('total_revenue')}")
 
-            # --- Expiry queries ---
-            if any(kw in q for kw in ['expir', 'expired', 'expiring',
-                                       'shelf life', 'validity']):
-                cur.execute("""
-                    SELECT m.name, m.expiry_date,
-                           COALESCE(s.quantity, 0) as stock_qty
-                    FROM medicines m
-                    LEFT JOIN stock s ON m.medicine_id = s.medicine_id
-                    WHERE m.expiry_date IS NOT NULL
-                      AND m.expiry_date <= date('now', '+90 days')
-                    ORDER BY m.expiry_date ASC
-                    LIMIT 20
-                """)
-                rows = cur.fetchall()
-                if rows:
-                    results.append(f"[Expiring Soon - {len(rows)} medicines within 90 days]:")
-                    for r in rows:
-                        results.append(
-                            f"  - {r['name']} | Expiry: {r['expiry_date']} | "
-                            f"Stock: {r['stock_qty']}")
-
-            # --- Customer queries ---
-            if any(kw in q for kw in ['customer', 'balance', 'debt',
-                                       'debtor', 'owe', 'credit']):
-                cur.execute("""
-                    SELECT name, phone, current_balance
-                    FROM customers
-                    WHERE current_balance > 0
-                    ORDER BY current_balance DESC
-                    LIMIT 15
-                """)
-                rows = cur.fetchall()
-                if rows:
-                    results.append(f"[Customer Balances - {len(rows)} with outstanding debt]:")
-                    for r in rows:
-                        results.append(
-                            f"  - {r['name']} | Phone: {r['phone'] or 'N/A'} | "
-                            f"Balance: {r['current_balance']}")
-
-            # --- Sales / Bills queries ---
-            if any(kw in q for kw in ['sale', 'sales', 'revenue', 'bill',
-                                       'today', 'income', 'profit', 'earning']):
-                cur.execute("""
-                    SELECT COUNT(*) as bill_count,
-                           COALESCE(SUM(total_amount), 0) as total_revenue
-                    FROM bills
-                    WHERE date(bill_date) = date('now')
-                """)
-                row = cur.fetchone()
-                if row:
-                    results.append(
-                        f"[Today's Sales]: {row['bill_count']} bills, "
-                        f"Total Revenue: {row['total_revenue']}")
-
-                cur.execute("""
-                    SELECT COUNT(*) as bill_count,
-                           COALESCE(SUM(total_amount), 0) as total_revenue
-                    FROM bills
-                    WHERE bill_date >= date('now', '-30 days')
-                """)
-                row = cur.fetchone()
-                if row:
-                    results.append(
-                        f"[Last 30 Days]: {row['bill_count']} bills, "
-                        f"Total Revenue: {row['total_revenue']}")
-
-            conn.close()
         except Exception as e:
             logger.error(f"Pharmacy DB query failed: {e}")
             return ""
@@ -550,7 +537,7 @@ class AIInferenceEngine:
                 # Estimate token count from response
                 tokens_generated = len(result_text.split()) * 4 // 3
 
-            # --- GenAI Inference (DirectML / CUDA / CPU) ---
+            # --- GenAI Inference (CUDA / CPU) ---
             elif self.framework == "genai":
                 import onnxruntime_genai as og
 
@@ -576,7 +563,7 @@ class AIInferenceEngine:
                 else:
                     result_text = decoded_output
 
-            # --- OpenVINO / Standard ONNX Inference ---
+            # --- Standard ONNX Inference ---
             else:
                 return (f"Backend '{self.framework}' loaded on {self.provider}, "
                         f"but raw inference loop not implemented. "
@@ -668,7 +655,7 @@ def get_model_info(model_path):
         if "genai_config.json" in all_files:
             info["format"] = "ONNX GenAI"
         elif any(f.endswith(".xml") for f in all_files):
-            info["format"] = "OpenVINO"
+            info["format"] = "ONNX"
         elif any(f.endswith(".onnx") for f in all_files):
             info["format"] = "ONNX"
         elif any(f.endswith(".gguf") for f in all_files):
@@ -679,7 +666,7 @@ def get_model_info(model_path):
     elif os.path.isfile(model_path):
         info["size_mb"] = round(os.path.getsize(model_path) / 1024 / 1024, 2)
         ext = os.path.splitext(model_path)[1].lower()
-        format_map = {".xml": "OpenVINO", ".onnx": "ONNX", ".gguf": "GGUF"}
+        format_map = {".xml": "ONNX", ".onnx": "ONNX", ".gguf": "GGUF"}
         info["format"] = format_map.get(ext, "unknown")
 
     return info

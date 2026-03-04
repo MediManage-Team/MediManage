@@ -18,17 +18,6 @@ public class BillDAO {
     public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
             String paymentMode)
             throws SQLException {
-        return generateInvoice(totalAmount, items, customerId, userId, paymentMode, null);
-    }
-
-    public int generateInvoice(
-            double totalAmount,
-            List<BillItem> items,
-            Integer customerId,
-            Integer userId,
-            String paymentMode,
-            SubscriptionInvoiceContext subscriptionContext)
-            throws SQLException {
         Connection conn = null;
         int billId = -1;
         try {
@@ -47,23 +36,16 @@ public class BillDAO {
             }
 
             String billSql = "INSERT INTO bills (" +
-                    "total_amount, bill_date, customer_id, user_id, payment_mode, " +
-                    "subscription_enrollment_id, subscription_plan_id, subscription_discount_percent, " +
-                    "subscription_savings_amount, subscription_approval_reference" +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    "total_amount, bill_date, customer_id, user_id, payment_mode" +
+                    ") VALUES (?, ?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
                 String now = java.time.LocalDateTime.now()
                         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
                 psBill.setString(2, now);
-                psBill.setObject(3, customerId); // setInt can't handle null, setObject can
+                psBill.setObject(3, customerId);
                 psBill.setObject(4, userId);
                 psBill.setString(5, paymentMode != null ? paymentMode : "CASH");
-                psBill.setObject(6, subscriptionContext != null ? subscriptionContext.subscriptionEnrollmentId() : null);
-                psBill.setObject(7, subscriptionContext != null ? subscriptionContext.subscriptionPlanId() : null);
-                psBill.setDouble(8, subscriptionContext != null ? subscriptionContext.subscriptionDiscountPercent() : 0.0);
-                psBill.setDouble(9, subscriptionContext != null ? subscriptionContext.subscriptionSavingsAmount() : 0.0);
-                psBill.setString(10, subscriptionContext != null ? subscriptionContext.subscriptionApprovalReference() : null);
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -72,9 +54,8 @@ public class BillDAO {
             }
 
             String itemSql = "INSERT INTO bill_items (" +
-                    "bill_id, medicine_id, quantity, price, total, " +
-                    "subscription_discount_percent, subscription_discount_amount, subscription_rule_source" +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                    "bill_id, medicine_id, quantity, price, total" +
+                    ") VALUES (?, ?, ?, ?, ?)";
             String stockSql = "UPDATE stock SET quantity = quantity - ? WHERE medicine_id = ?";
 
             try (PreparedStatement psItem = conn.prepareStatement(itemSql);
@@ -86,9 +67,6 @@ public class BillDAO {
                     psItem.setInt(3, item.getQty());
                     psItem.setDouble(4, item.getPrice());
                     psItem.setDouble(5, item.getTotal());
-                    psItem.setDouble(6, item.getSubscriptionDiscountPercent());
-                    psItem.setDouble(7, item.getSubscriptionDiscountAmount());
-                    psItem.setString(8, item.getSubscriptionRuleSource());
                     psItem.addBatch();
 
                     psStock.setInt(1, item.getQty());
@@ -100,8 +78,6 @@ public class BillDAO {
             }
 
             if ("Credit".equalsIgnoreCase(paymentMode) && customerId != null) {
-                // Update Customer Balance
-                // Execute directly on 'conn' to avoid SQLITE_BUSY (Database Locked)
                 String updateBalanceSql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
                 try (PreparedStatement psUpdate = conn.prepareStatement(updateBalanceSql)) {
                     psUpdate.setDouble(1, totalAmount);
@@ -131,14 +107,6 @@ public class BillDAO {
         return billId;
     }
 
-    public record SubscriptionInvoiceContext(
-            Integer subscriptionEnrollmentId,
-            Integer subscriptionPlanId,
-            double subscriptionDiscountPercent,
-            double subscriptionSavingsAmount,
-            String subscriptionApprovalReference) {
-    }
-
     public double getDailySales() {
         LocalDate today = LocalDate.now();
         String start = today.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
@@ -159,6 +127,46 @@ public class BillDAO {
             e.printStackTrace();
         }
         return 0.0;
+    }
+
+    public int countTodaysBills() {
+        LocalDate today = LocalDate.now();
+        String start = today.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String end = today.plusDays(1).atStartOfDay()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String sql = "SELECT COUNT(*) FROM bills WHERE bill_date >= ? AND bill_date < ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, start);
+            stmt.setString(2, end);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next())
+                    return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public int countTodaysUniqueCustomers() {
+        LocalDate today = LocalDate.now();
+        String start = today.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String end = today.plusDays(1).atStartOfDay()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String sql = "SELECT COUNT(DISTINCT customer_id) FROM bills WHERE bill_date >= ? AND bill_date < ? AND customer_id IS NOT NULL";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, start);
+            stmt.setString(2, end);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next())
+                    return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 
     public List<BillHistoryRecord> getBillHistory() {
@@ -304,15 +312,13 @@ public class BillDAO {
         String expenseRangeEndExclusive = safeWeekEnd.plusDays(1).toString();
 
         String billSql = "SELECT COUNT(*) AS bill_count, " +
-                "COALESCE(SUM(total_amount), 0) AS net_sales, " +
-                "COALESCE(SUM(subscription_savings_amount), 0) AS discount_burn " +
+                "COALESCE(SUM(total_amount), 0) AS net_sales " +
                 "FROM bills WHERE bill_date >= ? AND bill_date < ?";
         String expenseSql = "SELECT COALESCE(SUM(amount), 0) AS total_expenses " +
                 "FROM expenses WHERE date >= ? AND date < ?";
 
         long billCount = 0L;
         double netSales = 0.0;
-        double discountBurn = 0.0;
         double totalExpenses = 0.0;
 
         try (Connection conn = DatabaseUtil.getConnection()) {
@@ -323,7 +329,6 @@ public class BillDAO {
                     if (rs.next()) {
                         billCount = rs.getLong("bill_count");
                         netSales = rs.getDouble("net_sales");
-                        discountBurn = rs.getDouble("discount_burn");
                     }
                 }
             }
@@ -342,21 +347,17 @@ public class BillDAO {
         }
 
         netSales = round2(netSales);
-        discountBurn = round2(discountBurn);
         totalExpenses = round2(totalExpenses);
-        double grossSales = round2(netSales + discountBurn);
         double grossMargin = round2(netSales - totalExpenses);
-        double grossMarginPercent = grossSales <= 0.0 ? 0.0 : round2((grossMargin / grossSales) * 100.0);
+        double grossMarginPercent = netSales <= 0.0 ? 0.0 : round2((grossMargin / netSales) * 100.0);
 
         return new WeeklySalesMarginSummary(
                 safeWeekStart.toString(),
                 safeWeekEnd.toString(),
                 billCount,
-                grossSales,
                 netSales,
                 grossMargin,
                 grossMarginPercent,
-                discountBurn,
                 totalExpenses);
     }
 
@@ -430,11 +431,9 @@ public class BillDAO {
             String weekStartDate,
             String weekEndDate,
             long billCount,
-            double grossSales,
             double netSales,
             double grossMargin,
             double grossMarginPercent,
-            double discountBurn,
             double totalExpenses) {
     }
 }
