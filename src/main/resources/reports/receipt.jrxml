@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="Invoice" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="Receipt" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
 
     <parameter name="CustomerName" class="java.lang.String"/>
     <parameter name="TotalAmount" class="java.lang.Double"/>
 
-    <parameter name="CareProtocol" class="java.lang.String"/>
     <parameter name="SubscriptionPlanName" class="java.lang.String"/>
     <parameter name="SubscriptionSavings" class="java.lang.Double"/>
     <parameter name="SubscriptionDiscountPercent" class="java.lang.Double"/>
@@ -24,7 +23,7 @@
                 <textElement textAlignment="Center">
                     <font size="22" isBold="true"/>
                 </textElement>
-                <text><![CDATA[Medical Invoice]]></text>
+                <text><![CDATA[Medical Receipt]]></text>
             </staticText>
             <textField>
                 <reportElement x="0" y="40" width="555" height="20"/>
@@ -38,28 +37,28 @@
             <staticText>
                 <reportElement x="0" y="0" width="200" height="30"/>
                 <textElement>
-                    <font isBold="true"/>
+                    <font size="12" isBold="true"/>
                 </textElement>
                 <text><![CDATA[Item]]></text>
             </staticText>
             <staticText>
                 <reportElement x="200" y="0" width="100" height="30"/>
                 <textElement>
-                    <font isBold="true"/>
+                    <font size="12" isBold="true"/>
                 </textElement>
                 <text><![CDATA[Qty]]></text>
             </staticText>
             <staticText>
                 <reportElement x="300" y="0" width="100" height="30"/>
                 <textElement>
-                    <font isBold="true"/>
+                    <font size="12" isBold="true"/>
                 </textElement>
                 <text><![CDATA[Price]]></text>
             </staticText>
             <staticText>
                 <reportElement x="400" y="0" width="100" height="30"/>
                 <textElement>
-                    <font isBold="true"/>
+                    <font size="12" isBold="true"/>
                 </textElement>
                 <text><![CDATA[Total]]></text>
             </staticText>
@@ -88,7 +87,7 @@
     </detail>
 
     <summary>
-        <band height="180" splitType="Stretch">
+        <band height="120" splitType="Stretch">
             <textField>
                 <reportElement x="350" y="10" width="205" height="30"/>
                 <textElement textAlignment="Right">
@@ -126,26 +125,6 @@
                 <textFieldExpression><![CDATA[$P{SubscriptionExplanationSnippet} == null || $P{SubscriptionExplanationSnippet}.trim().isEmpty()
 ? ""
 : "Savings Explanation (" + ($P{SubscriptionExplanationLanguage} == null || $P{SubscriptionExplanationLanguage}.trim().isEmpty() ? "English" : $P{SubscriptionExplanationLanguage}) + "): " + $P{SubscriptionExplanationSnippet}]]></textFieldExpression>
-            </textField>
-
-            <line>
-                <reportElement positionType="Float" x="0" y="112" width="555" height="1"/>
-            </line>
-
-            <staticText>
-                <reportElement positionType="Float" x="0" y="122" width="555" height="20"/>
-                <textElement>
-                    <font size="12" isBold="true"/>
-                </textElement>
-                <text><![CDATA[Patient Care Protocol (AI Generated):]]></text>
-            </staticText>
-
-            <textField textAdjust="StretchHeight">
-                <reportElement positionType="Float" stretchType="ElementGroupHeight" x="0" y="147" width="555" height="20" isPrintWhenDetailOverflows="true"/>
-                <textElement markup="html">
-                    <font size="10"/>
-                </textElement>
-                <textFieldExpression><![CDATA[$P{CareProtocol} == null || $P{CareProtocol}.trim().isEmpty() ? "No additional AI care protocol generated." : $P{CareProtocol}.replaceAll("\n", "<br>")]]></textFieldExpression>
             </textField>
         </band>
     </summary>

@@ -2,8 +2,7 @@ package org.example.MediManage.config;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -14,7 +13,6 @@ class FeatureFlagsTest {
     @Test
     void defaultFlagsMatchBaseline() {
         assertTrue(FeatureFlags.isEnabled(FeatureFlag.AI_ASSISTANT));
-        assertTrue(FeatureFlags.isEnabled(FeatureFlag.POSTGRES_MIGRATION));
     }
 
     @Test
@@ -61,30 +59,5 @@ class FeatureFlagsTest {
         }
     }
 
-    private static void withSystemProperties(Map<String, String> values, Runnable assertion) {
-        Map<String, String> previous = new HashMap<>();
-        for (Map.Entry<String, String> entry : values.entrySet()) {
-            String key = entry.getKey();
-            previous.put(key, System.getProperty(key));
-            String value = entry.getValue();
-            if (value == null) {
-                System.clearProperty(key);
-            } else {
-                System.setProperty(key, value);
-            }
-        }
-        try {
-            assertion.run();
-        } finally {
-            for (Map.Entry<String, String> entry : previous.entrySet()) {
-                String key = entry.getKey();
-                String value = entry.getValue();
-                if (value == null) {
-                    System.clearProperty(key);
-                } else {
-                    System.setProperty(key, value);
-                }
-            }
-        }
-    }
+
 }

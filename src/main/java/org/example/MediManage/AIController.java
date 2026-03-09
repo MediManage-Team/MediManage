@@ -17,6 +17,11 @@ import org.example.MediManage.service.ai.AIServiceProvider;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
+import com.vladsch.flexmark.html.HtmlRenderer;
+import com.vladsch.flexmark.parser.Parser;
+import com.vladsch.flexmark.util.data.MutableDataSet;
+import javafx.scene.web.WebView;
+import java.util.concurrent.CancellationException;
 
 public class AIController {
 
@@ -32,8 +37,25 @@ public class AIController {
     private CheckBox webSearchCheck;
     @FXML
     private Label modelStatusLabel;
+    @FXML
+    private ToggleGroup engineToggleGroup;
+    @FXML
+    private RadioButton cloudRadio;
+    @FXML
+    private RadioButton localRadio;
+    @FXML
+    private Button stopButton;
 
     private final AIOrchestrator aiOrchestrator;
+    private CompletableFuture<?> currentRequest;
+
+    private static final Parser MARKDOWN_PARSER;
+    private static final HtmlRenderer HTML_RENDERER;
+    static {
+        MutableDataSet options = new MutableDataSet();
+        MARKDOWN_PARSER = Parser.builder(options).build();
+        HTML_RENDERER = HtmlRenderer.builder(options).build();
+    }
     private boolean modelAutoLoadTriggered = false;
     private HBox typingIndicator;
     private Timeline typingAnimation;
@@ -49,6 +71,20 @@ public class AIController {
 
         // Welcome message
         addSystemMessage("🤖 MediManage AI Assistant — Ask about inventory, stock, sales, or any medical question.");
+
+        // Engine Toggle Listener
+        if (engineToggleGroup != null) {
+            engineToggleGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
+                boolean useCloud = (newVal == cloudRadio);
+                aiOrchestrator.setForceCloud(useCloud);
+                addSystemMessage("⚡ Routing set to " + (useCloud ? "Cloud Only" : "Auto/Local") + ".");
+                if (!useCloud) {
+                    ensureModelLoaded();
+                }
+            });
+            // Apply UI initial selected value
+            aiOrchestrator.setForceCloud(engineToggleGroup.getSelectedToggle() == cloudRadio);
+        }
 
         // Check & display model status
         updateModelStatus();
@@ -97,6 +133,9 @@ public class AIController {
     }
 
     private void ensureModelLoaded() {
+        if (aiOrchestrator.isForceCloud()) {
+            return;
+        }
         if (modelAutoLoadTriggered)
             return;
         modelAutoLoadTriggered = true;
@@ -152,26 +191,55 @@ public class AIController {
         addUserMessage(msg);
         inputField.clear();
         sendButton.setDisable(true);
+        if (stopButton != null) {
+            stopButton.setVisible(true);
+            stopButton.setManaged(true);
+        }
         showTypingIndicator();
 
         boolean requiresPrecision = msg.toLowerCase().contains("dosage") ||
                 msg.toLowerCase().contains("side effect") ||
                 msg.toLowerCase().contains("interaction");
 
-        aiOrchestrator.processQuery(msg, requiresPrecision, useSearch)
+        currentRequest = aiOrchestrator.processQuery(msg, requiresPrecision, useSearch)
                 .thenAccept(response -> Platform.runLater(() -> {
                     removeTypingIndicator();
                     addAIMessage(response);
                     sendButton.setDisable(false);
+                    if (stopButton != null) {
+                        stopButton.setVisible(false);
+                        stopButton.setManaged(false);
+                    }
                 }))
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
                         removeTypingIndicator();
-                        addSystemMessage("❌ Error: " + ex.getMessage());
                         sendButton.setDisable(false);
+                        if (stopButton != null) {
+                            stopButton.setVisible(false);
+                            stopButton.setManaged(false);
+                        }
+                        if (!(ex instanceof CancellationException) && !(ex.getCause() instanceof CancellationException)) {
+                            addSystemMessage("❌ Error: " + ex.getMessage());
+                        }
                     });
                     return null;
                 });
+    }
+
+    @FXML
+    private void handleStopGeneration() {
+        if (currentRequest != null && !currentRequest.isDone()) {
+            currentRequest.cancel(true);
+            aiOrchestrator.cancelLocalGeneration();
+            addSystemMessage("🛑 Generation stopped by user.");
+            removeTypingIndicator();
+            sendButton.setDisable(false);
+            if (stopButton != null) {
+                stopButton.setVisible(false);
+                stopButton.setManaged(false);
+            }
+        }
     }
 
     /**
@@ -192,20 +260,33 @@ public class AIController {
                     addReportMessage(displayName, dbData);
 
                     // Phase 2: Send to AI for polished analysis
+                    if (stopButton != null) {
+                        stopButton.setVisible(true);
+                        stopButton.setManaged(true);
+                    }
                     showTypingIndicator();
                     String aiPrompt = buildAnalysisPrompt(displayName, dbData);
-                    aiOrchestrator.localQueryWithContext(aiPrompt, dbData)
+                    currentRequest = aiOrchestrator.localQueryWithContext(aiPrompt, dbData)
                             .thenAccept(aiResponse -> Platform.runLater(() -> {
                                 removeTypingIndicator();
                                 addAIAnalysisMessage(aiResponse);
                                 sendButton.setDisable(false);
+                                if (stopButton != null) {
+                                    stopButton.setVisible(false);
+                                    stopButton.setManaged(false);
+                                }
                             }))
                             .exceptionally(ex -> {
                                 Platform.runLater(() -> {
                                     removeTypingIndicator();
-                                    // AI not available is fine — DB data already shown
-                                    addSystemMessage("💡 AI analysis unavailable — raw data shown above.");
                                     sendButton.setDisable(false);
+                                    if (stopButton != null) {
+                                        stopButton.setVisible(false);
+                                        stopButton.setManaged(false);
+                                    }
+                                    if (!(ex instanceof CancellationException) && !(ex.getCause() instanceof CancellationException)) {
+                                        addSystemMessage("💡 AI analysis unavailable — raw data shown above.");
+                                    }
                                 });
                                 return null;
                             });
@@ -369,26 +450,43 @@ public class AIController {
     private void addAIMessage(String text) {
         HBox box = new HBox(8);
         box.setAlignment(Pos.TOP_LEFT);
-        box.setPadding(new Insets(4, 60, 4, 10));
+        box.setPadding(new Insets(4, 30, 4, 10));
 
         Label avatar = new Label("🤖");
         avatar.setStyle("-fx-font-size: 18px; -fx-padding: 4 0 0 0;");
 
         VBox bubble = new VBox(2);
         bubble.setMaxWidth(550);
-
-        Label msgLabel = new Label(text);
-        msgLabel.setWrapText(true);
-        msgLabel.setMaxWidth(550);
-        msgLabel.setStyle(
+        bubble.setStyle(
                 "-fx-background-color: #2a2d3e;" +
-                        "-fx-text-fill: #e0e0e0; -fx-padding: 10 14; -fx-background-radius: 16 16 16 4;" +
-                        "-fx-font-size: 13px;");
+                        "-fx-padding: 8 12; -fx-background-radius: 16 16 16 4;");
+
+        String htmlContent = HTML_RENDERER.render(MARKDOWN_PARSER.parse(text));
+        String wrappedHtml = "<html><body style='background-color:#2a2d3e; color:#e0e0e0; font-family:-apple-system, Segoe UI, sans-serif; font-size:13px; line-height:1.4; margin:0; padding:0;'>"
+                           + htmlContent + "</body></html>";
+
+        WebView webView = new WebView();
+        webView.setMaxWidth(530);
+        webView.setPrefHeight(30);
+        webView.getEngine().loadContent(wrappedHtml);
+
+        webView.getEngine().getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
+            if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
+                Platform.runLater(() -> {
+                    try {
+                        Object height = webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
+                        if (height instanceof Number) {
+                            webView.setPrefHeight(((Number) height).doubleValue() + 20);
+                        }
+                    } catch (Exception e) {}
+                });
+            }
+        });
 
         Label timeLabel = new Label(timestamp());
         timeLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 9px;");
 
-        bubble.getChildren().addAll(msgLabel, timeLabel);
+        bubble.getChildren().addAll(webView, timeLabel);
         box.getChildren().addAll(avatar, bubble);
         chatBox.getChildren().add(box);
     }
@@ -599,16 +697,33 @@ public class AIController {
         sep.setStyle("-fx-background-color: #333;");
 
         // AI response text
-        Label msgLabel = new Label(text);
-        msgLabel.setWrapText(true);
-        msgLabel.setMaxWidth(560);
-        msgLabel.setStyle("-fx-text-fill: #d0d0d0; -fx-font-size: 12.5px; -fx-line-spacing: 3;");
+        String htmlContent = HTML_RENDERER.render(MARKDOWN_PARSER.parse(text));
+        String wrappedHtml = "<html><body style='background-color:#1a1e2e; color:#d0d0d0; font-family:-apple-system, Segoe UI, sans-serif; font-size:12.5px; line-height:1.4; margin:0; padding:0;'>"
+                           + htmlContent + "</body></html>";
+
+        WebView webView = new WebView();
+        webView.setMaxWidth(560);
+        webView.setPrefHeight(30);
+        webView.getEngine().loadContent(wrappedHtml);
+
+        webView.getEngine().documentProperty().addListener((obs, oldDoc, newDoc) -> {
+            if (newDoc != null) {
+                Platform.runLater(() -> {
+                    try {
+                        Object height = webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
+                        if (height instanceof Number) {
+                            webView.setPrefHeight(((Number) height).doubleValue() + 20);
+                        }
+                    } catch (Exception e) {}
+                });
+            }
+        });
 
         // Timestamp
         Label timeLabel = new Label("🤖 AI-generated • " + timestamp());
         timeLabel.setStyle("-fx-text-fill: #a855f7; -fx-font-size: 9px; -fx-padding: 4 0 0 0;");
 
-        card.getChildren().addAll(header, sep, msgLabel, timeLabel);
+        card.getChildren().addAll(header, sep, webView, timeLabel);
         box.getChildren().addAll(avatar, card);
         chatBox.getChildren().add(box);
     }

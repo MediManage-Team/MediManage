@@ -27,11 +27,15 @@ public final class SecureSecretStore {
         String prefKey = prefKey(key);
         if (value == null || value.isBlank()) {
             PREFS.remove(prefKey);
+            try { PREFS.flush(); } catch (Exception ignored) {}
             return;
         }
 
         String payload = encryptPayload(value);
         PREFS.put(prefKey, payload);
+        try {
+            PREFS.flush();
+        } catch (Exception ignored) {}
     }
 
     public static String get(String key) {
@@ -58,6 +62,7 @@ public final class SecureSecretStore {
 
     public static void remove(String key) {
         PREFS.remove(prefKey(key));
+        try { PREFS.flush(); } catch (Exception ignored) {}
     }
 
     private static String encryptPayload(String value) {

@@ -90,17 +90,10 @@ def rows_to_dicts(rows):
 
 def _table_exists(conn, table_name: str) -> bool:
     cur = conn.cursor()
-    if db_connector._get_backend() == "postgresql":
-        cur.execute(
-            "SELECT 1 FROM information_schema.tables "
-            "WHERE table_schema='public' AND table_name=%s",
-            (table_name,),
-        )
-    else:
-        cur.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
-            (table_name,),
-        )
+    cur.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+        (table_name,),
+    )
     return cur.fetchone() is not None
 
 
@@ -108,16 +101,8 @@ def _table_columns(conn, table_name: str) -> set[str]:
     if not _table_exists(conn, table_name):
         return set()
     cur = conn.cursor()
-    if db_connector._get_backend() == "postgresql":
-        cur.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_schema='public' AND table_name=%s",
-            (table_name,),
-        )
-        return {r[0] for r in cur.fetchall()}
-    else:
-        cur.execute(f"PRAGMA table_info({table_name})")
-        return {r[1] for r in cur.fetchall()}
+    cur.execute(f"PRAGMA table_info({table_name})")
+    return {r[1] for r in cur.fetchall()}
 
 
 def _resolve_prescription_schema(conn: sqlite3.Connection) -> dict[str, str]:
@@ -133,7 +118,7 @@ def _resolve_prescription_schema(conn: sqlite3.Connection) -> dict[str, str]:
     else:
         raise RuntimeError("No prescription identifier column found.")
 
-    date_col = None
+    date_col = ""
     for candidate in ("prescribed_date", "created_at", "prescription_date"):
         if candidate in cols:
             date_col = candidate
@@ -208,7 +193,7 @@ def fmt_table(rows, max_rows: int = 50) -> str:
 # =========================================================================
 
 @mcp.resource("medimanage://schema")
-def get_schema() -> str:
+def get_schema() -> str:  # type: ignore
     """Full database schema (tables and columns) for MediManage."""
     with get_db() as conn:
         cur = conn.cursor()
@@ -218,13 +203,13 @@ def get_schema() -> str:
 
 
 @mcp.resource("medimanage://inventory/summary")
-def inventory_summary_resource() -> str:
+def inventory_summary_resource() -> str:  # type: ignore
     """Current inventory KPI snapshot."""
     return json.dumps(_get_inventory_summary(), indent=2)
 
 
 @mcp.resource("medimanage://sales/today")
-def today_sales_resource() -> str:
+def today_sales_resource() -> str:  # type: ignore
     """Today's sales summary."""
     today = datetime.now().strftime("%Y-%m-%d")
     return json.dumps(_get_sales_for_date(today), indent=2)
@@ -238,7 +223,7 @@ def today_sales_resource() -> str:
 def search_medicines(
     query: str,
     limit: int = 20,
-) -> str:
+) -> str:  # type: ignore
     """Search medicines by name, generic name, or company.
 
     Args:
@@ -259,11 +244,12 @@ def search_medicines(
             """,
             (f"%{query}%", f"%{query}%", f"%{query}%", limit),
         )
-        return fmt_table(rows_to_dicts(cur.fetchall()))
+        res = fmt_table(rows_to_dicts(cur.fetchall()))
+    return res
 
 
 @mcp.tool()
-def get_low_stock(threshold: int = 10) -> str:
+def get_low_stock(threshold: int = 10) -> str:  # type: ignore
     """List medicines below a minimum stock threshold.
 
     Args:
@@ -286,7 +272,7 @@ def get_low_stock(threshold: int = 10) -> str:
 
 
 @mcp.tool()
-def get_expiring_soon(days: int = 30) -> str:
+def get_expiring_soon(days: int = 30) -> str:  # type: ignore
     """List medicines expiring within N days.
 
     Args:
@@ -312,7 +298,7 @@ def get_expiring_soon(days: int = 30) -> str:
 
 
 @mcp.tool()
-def update_stock(medicine_id: int, quantity_change: int) -> str:
+def update_stock(medicine_id: int, quantity_change: int) -> str:  # type: ignore
     """Add or subtract stock for a medicine.
 
     Args:
@@ -356,7 +342,7 @@ def add_medicine(
     price: float,
     expiry_date: str,
     initial_stock: int = 0,
-) -> str:
+) -> str:  # type: ignore
     """Add a new medicine to the catalog.
 
     Args:
@@ -390,7 +376,7 @@ def add_medicine(
 
 
 @mcp.tool()
-def get_inventory_summary() -> str:
+def get_inventory_summary() -> str:  # type: ignore
     """Get inventory KPIs: total items, total value, low stock count, expiring count."""
     return json.dumps(_get_inventory_summary(), indent=2)
 
@@ -446,7 +432,7 @@ def _get_inventory_summary() -> dict:
 # =========================================================================
 
 @mcp.tool()
-def search_customers(query: str, limit: int = 20) -> str:
+def search_customers(query: str, limit: int = 20) -> str:  # type: ignore
     """Search customers by name or phone number.
 
     Args:
@@ -469,7 +455,7 @@ def search_customers(query: str, limit: int = 20) -> str:
 
 
 @mcp.tool()
-def get_customer_balance(customer_id: int) -> str:
+def get_customer_balance(customer_id: int) -> str:  # type: ignore
     """Get a customer's outstanding credit (udhar) balance.
 
     Args:
@@ -496,7 +482,7 @@ def get_customer_balance(customer_id: int) -> str:
 
 
 @mcp.tool()
-def list_top_debtors(limit: int = 10) -> str:
+def list_top_debtors(limit: int = 10) -> str:  # type: ignore
     """List customers with the highest unpaid credit balances.
 
     Args:
@@ -522,7 +508,7 @@ def list_top_debtors(limit: int = 10) -> str:
 # =========================================================================
 
 @mcp.tool()
-def get_daily_sales(date: Optional[str] = None) -> str:
+def get_daily_sales(date: Optional[str] = None) -> str:  # type: ignore
     """Get sales summary for a specific date (defaults to today).
 
     Args:
@@ -565,7 +551,7 @@ def _get_sales_for_date(date: str) -> dict:
 
 
 @mcp.tool()
-def get_recent_bills(limit: int = 10) -> str:
+def get_recent_bills(limit: int = 10) -> str:  # type: ignore
     """Get the most recent bills with basic details.
 
     Args:
@@ -592,7 +578,7 @@ def get_expenses(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     category: Optional[str] = None,
-) -> str:
+) -> str:  # type: ignore
     """Get expenses filtered by date range and/or category.
 
     Args:
@@ -629,7 +615,7 @@ def get_expenses(
 def get_profit_summary(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-) -> str:
+) -> str:  # type: ignore
     """Get profit/loss summary: gross revenue, expenses, net profit.
 
     Args:
@@ -667,7 +653,7 @@ def get_profit_summary(
 # =========================================================================
 
 @mcp.tool()
-def search_prescriptions(query: str, limit: int = 20) -> str:
+def search_prescriptions(query: str, limit: int = 20) -> str:  # type: ignore
     """Search prescriptions by patient name or medicine.
 
     Args:
@@ -696,7 +682,7 @@ def search_prescriptions(query: str, limit: int = 20) -> str:
 
 
 @mcp.tool()
-def get_prescription_details(prescription_id: str) -> str:
+def get_prescription_details(prescription_id: str) -> str:  # type: ignore
     """Get full details of a specific prescription.
 
     Args:

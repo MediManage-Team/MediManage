@@ -11,45 +11,17 @@
         <!-- Database Configuration -->
         <TitledPane text="Database Configuration" collapsible="false">
             <VBox spacing="10">
-                <Label text="Switch between SQLite and PostgreSQL. SQLite remains the default for local usage." styleClass="text-muted" wrapText="true"/>
-
-                <Label text="Backend" style="-fx-font-weight: bold;"/>
-                <ComboBox fx:id="dbBackendCombo" maxWidth="Infinity"/>
-
                 <VBox spacing="6">
                     <Label text="SQLite Database File" style="-fx-font-weight: bold;"/>
-                    <TextField fx:id="sqlitePathField" promptText="Path to medimanage.db"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <TextField fx:id="sqlitePathField" promptText="Path to medimanage.db" HBox.hgrow="ALWAYS"/>
+                        <Button text="Browse" onAction="#handleBrowseDatabase"/>
+                    </HBox>
                 </VBox>
 
-                <VBox fx:id="postgresConfigBox" spacing="8" visible="false" managed="false">
-                    <Separator/>
-                    <Label text="PostgreSQL Connection" style="-fx-font-weight: bold;"/>
-                    <GridPane hgap="10" vgap="8">
-                        <Label text="Host" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                        <TextField fx:id="postgresHostField" promptText="localhost" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-
-                        <Label text="Port" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                        <TextField fx:id="postgresPortField" promptText="5432" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-
-                        <Label text="Database" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                        <TextField fx:id="postgresDatabaseField" promptText="medimanage" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
-
-                        <Label text="Username" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
-                        <TextField fx:id="postgresUserField" promptText="postgres" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
-
-                        <Label text="Password" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
-                        <PasswordField fx:id="postgresPasswordField" promptText="Database password" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
-
-                        <columnConstraints>
-                            <ColumnConstraints minWidth="80" prefWidth="90"/>
-                            <ColumnConstraints hgrow="ALWAYS"/>
-                        </columnConstraints>
-                    </GridPane>
-                </VBox>
-
-                <HBox alignment="CENTER_RIGHT" spacing="10">
-                    <Button fx:id="migrateSqliteToPostgresButton" text="Migrate SQLite → PostgreSQL" onAction="#handleMigrateSqliteToPostgres" styleClass="button-purple"/>
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
                     <Button text="Test Database Connection" onAction="#handleTestDatabaseConnection" styleClass="button-outlined"/>
+                    <Button text="Save Database Settings" onAction="#handleSaveDatabase" styleClass="button-success"/>
                 </HBox>
             </VBox>
         </TitledPane>
@@ -58,15 +30,19 @@
         <TitledPane text="Local AI Configuration" collapsible="false">
             <VBox spacing="10">
                 <Button text="Download New Models (Model Store)" onAction="#handleOpenModelStore" styleClass="button-purple"/>
-                <Label text="Current Model Path: (.onnx or .xml)" style="-fx-font-weight: bold;"/>
+                <Label text="Current Model:" style="-fx-font-weight: bold;"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
-                    <TextField fx:id="modelPathField" promptText="Select local model file..." HBox.hgrow="ALWAYS"/>
-                    <Button text="Browse" onAction="#handleBrowseModel"/>
+                    <ComboBox fx:id="localModelCombo" promptText="Select local model..." HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button text="Browse" onAction="#handleBrowseModel" style="-fx-min-width: 80px;"/>
                 </HBox>
 
                 <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
                 <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
                 <Label text="Select 'Auto' to let the system decide, or force a specific provider." styleClass="text-muted"/>
+
+                <VBox fx:id="envContainer" spacing="8" style="-fx-padding: 10 0 0 0;">
+                    <!-- Environment cards dynamically injected here -->
+                </VBox>
 
                 <Separator/>
 
@@ -76,6 +52,11 @@
                     <Button text="Test" onAction="#handleTestHfToken" styleClass="button-primary" style="-fx-min-width: 60;"/>
                 </HBox>
                 <Label text="Get a free token at: huggingface.co/settings/tokens" styleClass="text-muted" wrapText="true"/>
+
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
+                    <Button text="View Engine Logs" onAction="#handleViewEngineLogs" styleClass="button-outlined"/>
+                    <Button text="Save Local AI Settings" onAction="#handleSaveLocalAI" styleClass="button-success"/>
+                </HBox>
             </VBox>
         </TitledPane>
 
@@ -131,22 +112,9 @@
                 </GridPane>
 
                 <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
-                    <Button fx:id="saveSettingsButton" text="Save Settings" onAction="#handleSaveSettings" styleClass="button-success"/>
+                    <Button text="Save Cloud AI Settings" onAction="#handleSaveCloudAI" styleClass="button-success"/>
                 </HBox>
             </VBox>
-        </TitledPane>
-
-        <TitledPane text="Python Environments" collapsible="false">
-            <VBox spacing="10">
-                <Label text="Manage separate environments for each hardware backend." styleClass="text-muted"/>
-                <ScrollPane fitToWidth="true" style="-fx-max-height: 250px;">
-                    <VBox fx:id="envContainer" spacing="10" style="-fx-padding: 5;"/>
-                </ScrollPane>
-            </VBox>
-        </TitledPane>
-
-        <TitledPane text="Installation Logs" expanded="false">
-            <TextArea fx:id="logConsole" editable="false" wrapText="true" prefHeight="150" styleClass="console-text"/>
         </TitledPane>
     </VBox>
 </ScrollPane>

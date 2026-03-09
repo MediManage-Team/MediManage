@@ -45,6 +45,7 @@ public class ModelStoreController {
     private Button stopButton;
     private final List<ModelCard> curatedModels = new ArrayList<>();
     private static final String MODELS_DIR = System.getProperty("user.home") + "/MediManage/models";
+    private boolean isDownloading = false;
 
     @FXML
     public void initialize() {
@@ -64,6 +65,13 @@ public class ModelStoreController {
         }
         // Load installed models on init
         Platform.runLater(this::loadInstalledModels);
+
+        // Add live-search behavior
+        if (searchField != null) {
+            searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+                handleSearch();
+            });
+        }
     }
 
     // ======================== DOWNLOAD TAB ========================
@@ -86,10 +94,6 @@ public class ModelStoreController {
 
         // ══════════ CPU (BitNet.cpp / llama.cpp) ══════════
         List<ModelCard> cpuModels = new ArrayList<>();
-        cpuModels.add(new ModelCard("BitNet b1.58 2B (GGUF)", "microsoft/bitnet-b1.58-2B-4T-gguf",
-                "ggml-model-i2_s.gguf",
-                "Microsoft 1-bit LLM! 2B params at 1.58-bit. Ultra-fast CPU.", "\uD83D\uDD0B 1-bit",
-                "BitNet GGUF", "huggingface", "~500 MB", "cpu"));
 
         cpuModels.add(new ModelCard("Phi-4 Mini (CPU ONNX)", "microsoft/Phi-4-mini-instruct-onnx",
                 "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/*",
@@ -294,10 +298,28 @@ public class ModelStoreController {
         downloadBtn.setOnAction(e -> startDownload(model));
 
         card.getChildren().addAll(badgeRow, title, desc, infoRow, downloadBtn);
+
+        // Add smooth hover effect
+        card.setOnMouseEntered(e -> {
+            card.setStyle("-fx-background-color: #1a2235; -fx-padding: 15; -fx-background-radius: 10; -fx-border-color: #3b466e; -fx-border-radius: 10; -fx-border-width: 1;");
+            card.setScaleX(1.02);
+            card.setScaleY(1.02);
+        });
+        card.setOnMouseExited(e -> {
+            card.setStyle("-fx-background-color: #0f1724; -fx-padding: 15; -fx-background-radius: 10; -fx-border-color: #2d3555; -fx-border-radius: 10; -fx-border-width: 1;");
+            card.setScaleX(1.0);
+            card.setScaleY(1.0);
+        });
+
         return card;
     }
 
     private void startDownload(ModelCard model) {
+        if (isDownloading) {
+            org.example.MediManage.util.ToastNotification.warning("A download is already in progress!");
+            return;
+        }
+        isDownloading = true;
         statusLabel.setText("Starting download for " + model.name + " (via " + model.source + ")...");
         globalProgressBar.setProgress(-1); // Indeterminate
         showStopButton(true);
@@ -332,6 +354,7 @@ public class ModelStoreController {
             statusLabel.setText("🔒 Verifying checksums...");
             globalProgressBar.setProgress(-1); // Indeterminate during verification
         } else if ("completed".equals(state)) {
+            isDownloading = false;
             progressTimer.cancel();
             statusLabel.setText("✅ " + message);
             globalProgressBar.setProgress(1.0);
@@ -343,12 +366,14 @@ public class ModelStoreController {
             showAlert("Success", "Model downloaded & verified!\nLocation: " + status.optString("path"));
             org.example.MediManage.util.ToastNotification.success("Model downloaded successfully");
         } else if ("cancelled".equals(state)) {
+            isDownloading = false;
             progressTimer.cancel();
             statusLabel.setText("⏹ Download cancelled.");
             org.example.MediManage.util.ToastNotification.warning("Download cancelled");
             globalProgressBar.setProgress(0);
             showStopButton(false);
         } else if ("error".equals(state)) {
+            isDownloading = false;
             progressTimer.cancel();
             globalProgressBar.setProgress(0);
             showStopButton(false);
@@ -453,6 +478,19 @@ public class ModelStoreController {
         actions.getChildren().addAll(loadBtn, deleteBtn);
 
         card.getChildren().addAll(info, actions);
+
+        // Add subtle hover effect for installed list row
+        card.setOnMouseEntered(e -> {
+            card.setStyle("-fx-background-color: #1a2235; -fx-padding: 15; -fx-background-radius: 8; -fx-border-color: #3b466e; -fx-border-radius: 8; -fx-border-width: 1;");
+            card.setScaleX(1.005);
+            card.setScaleY(1.005);
+        });
+        card.setOnMouseExited(e -> {
+            card.setStyle("-fx-background-color: #0f1724; -fx-padding: 15; -fx-background-radius: 8; -fx-border-color: #2d3555; -fx-border-radius: 8; -fx-border-width: 1;");
+            card.setScaleX(1.0);
+            card.setScaleY(1.0);
+        });
+
         return card;
     }
 
@@ -476,10 +514,17 @@ public class ModelStoreController {
         if (path.isEmpty())
             return;
 
-        statusLabel.setText("Loading model: " + model.optString("name") + "...");
+        String name = model.optString("name");
+        statusLabel.setText("Loading model: " + name + "...");
         aiOrchestrator.loadLocalModel(path, "auto");
-        statusLabel.setText("✅ Model load requested: " + model.optString("name"));
-        org.example.MediManage.util.ToastNotification.info("Loading model: " + model.optString("name"));
+        
+        // Persist the choice so Settings and reboots remember it
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences
+                .userNodeForPackage(org.example.MediManage.SettingsController.class);
+        prefs.put("local_model_path", path);
+
+        statusLabel.setText("✅ Model set as active: " + name);
+        org.example.MediManage.util.ToastNotification.info("Model set as active: " + name);
     }
 
     private void handleDeleteModel(JSONObject model) {

@@ -39,7 +39,7 @@
                                     <Label fx:id="pendingRx" text="0" styleClass="card-value"/>
                                 </VBox>
                                 <VBox styleClass="card kpi-card kpi-card-profit" HBox.hgrow="ALWAYS">
-                                    <Label text="Total Profit" styleClass="card-title"/>
+                                    <Label text="Monthly Profit" styleClass="card-title"/>
                                     <Label fx:id="totalProfit" text="₹0.00" styleClass="card-value"/>
                                 </VBox>
                                 <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS">

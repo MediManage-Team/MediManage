@@ -1,0 +1,10 @@
+# Core dependencies for Cloud-Only (Base) usage
+flask
+numpy
+requests
+duckduckgo-search
+mcp[cli]
+
+# Note: This profile completely excludes ML frameworks (PyTorch, ONNX, Llama.cpp)
+# It is designed specifically for fast installation when users only want to 
+# connect to external APIs (Gemini, Groq, OpenAI) without running local models.

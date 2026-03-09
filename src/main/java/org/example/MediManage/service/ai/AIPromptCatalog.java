@@ -88,24 +88,32 @@ public final class AIPromptCatalog {
                 return replaceToken(template, "CUSTOMER_CONTEXT", context.toString());
         }
 
-        public static String salesSummaryPrompt(Map<String, Double> salesData, double totalRevenue) {
+        public static String salesSummaryPrompt(Map<String, Double> salesData, double totalRevenue, Map<String, Integer> topItems) {
                 String data = salesData == null ? ""
                                 : salesData.entrySet().stream()
                                                 .map(e -> e.getKey() + ": INR " + String.format("%.2f", e.getValue()))
                                                 .collect(Collectors.joining("\n"));
                 String revenue = String.format("%.2f", totalRevenue);
+                String items = topItems == null ? "" : topItems.entrySet().stream()
+                                .limit(5)
+                                .map(e -> e.getKey() + " (" + e.getValue() + " units)")
+                                .collect(Collectors.joining(", "));
 
-                String template = "Analyze the following pharmacy sales data and provide a concise business summary:\n\n"
+                String template = "I am a Pharmacist. Create a detailed 'Patient Care Assistance Report' based on the following sales data:\n"
                                 +
-                                "Daily Sales:\n{{DAILY_SALES_DATA}}\n" +
-                                "Total Revenue: INR {{TOTAL_REVENUE}}\n\n" +
-                                "Provide:\n" +
-                                "1. Sales trend observation (up/down/stable)\n" +
-                                "2. Peak and low days\n" +
-                                "3. Revenue optimization suggestions\n" +
-                                "4. One actionable recommendation\n\n" +
-                                "Keep it brief - max 5 lines.";
-                return replaceToken(replaceToken(template, "DAILY_SALES_DATA", data), "TOTAL_REVENUE", revenue);
+                                "Top Selling Medicines: {{TOP_ITEMS}}\n\n" +
+                                "Provide a structured, multi-point guide with these EXACT section names as headers:\n" +
+                                "Public Health Trend\n" +
+                                "Care Assistance Advice\n" +
+                                "Inventory Recommendations\n\n" +
+                                "Format each section as: 'SectionName: content'. " +
+                                "Under 'Care Assistance Advice', provide specific lifestyle, dietary, and non-medical advice that pharmacists should give to patients buying these top-selling medicines. " +
+                                "Do NOT use markdown formatting like ** or #. \n\n" +
+                                "CRITICAL: The response MUST be highly detailed and clinical. Write at least 3-4 comprehensive sentences for EACH of the three sections. Provide a thorough, professional paragraph for each section.";
+                
+                String res1 = replaceToken(template, "DAILY_SALES_DATA", data);
+                String res2 = replaceToken(res1, "TOTAL_REVENUE", revenue);
+                return replaceToken(res2, "TOP_ITEMS", items);
         }
 
         public static String restockSuggestionPrompt(String inventorySnapshot) {

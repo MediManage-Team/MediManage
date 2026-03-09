@@ -75,6 +75,10 @@ public class AIOrchestrator {
         this.forceCloud = force;
     }
 
+    public boolean isForceCloud() {
+        return forceCloud;
+    }
+
     // ======================== MAIN ROUTING ========================
 
     public CompletableFuture<String> processQuery(String query, boolean requiresPrecision, boolean useSearch) {
@@ -160,6 +164,16 @@ public class AIOrchestrator {
             return CompletableFuture.completedFuture(cached);
 
         return withRateLimit(() -> {
+            if (forceCloud) {
+                if (cloudService.isAvailable()) {
+                    String augmented = "### Business Data\n" + businessContext + "\n\n### Query\n" + prompt;
+                    return cloudService.chat(augmented).thenApply(r -> cacheAndReturn(cacheKey, r));
+                }
+                return CompletableFuture.failedFuture(
+                        new RuntimeException(
+                                "Cloud AI required but not available. Please configure API key in Settings."));
+            }
+
             if (localService.isAvailable()) {
                 return localService.chatWithContext(prompt, businessContext)
                         .thenApply(r -> cacheAndReturn(cacheKey, r));
@@ -197,6 +211,15 @@ public class AIOrchestrator {
         }
 
         return withRateLimit(() -> {
+            if (forceCloud) {
+                if (cloudService.isAvailable()) {
+                    String augmented = "### Business Data\n" + businessContext + "\n\n### Query\n" + prompt;
+                    return cloudService.chat(augmented);
+                }
+                return CompletableFuture.failedFuture(
+                        new RuntimeException("Cloud AI required but not available. Please configure API key in Settings."));
+            }
+
             CompletableFuture<String> localAnalysis;
             if (localService.isAvailable()) {
                 localAnalysis = localService.chatWithContext(
@@ -317,5 +340,9 @@ public class AIOrchestrator {
 
     public boolean deleteLocalModel(String modelPath) {
         return localService.deleteModel(modelPath);
+    }
+
+    public void cancelLocalGeneration() {
+        localService.cancelGeneration();
     }
 }

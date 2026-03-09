@@ -1,14 +1,15 @@
 package org.example.MediManage;
 
 import javafx.fxml.FXML;
-import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.PasswordField;
+
 import javafx.scene.control.TextField;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.scene.control.Alert;
 
+import javafx.scene.layout.VBox;
 import java.io.File;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,49 +19,54 @@ import java.util.prefs.Preferences;
 import org.json.JSONObject;
 
 import org.example.MediManage.config.DatabaseConfig;
-import org.example.MediManage.config.FeatureFlag;
-import org.example.MediManage.config.FeatureFlags;
 import org.example.MediManage.security.CloudApiKeyStore;
 import org.example.MediManage.security.LocalAdminTokenManager;
 import org.example.MediManage.security.Permission;
 import org.example.MediManage.security.RbacPolicy;
-import org.example.MediManage.service.DatabaseMigrationService;
 import org.example.MediManage.service.ai.CloudAIService;
 import org.example.MediManage.service.ai.AIServiceProvider;
-import org.example.MediManage.util.UserSession;
 import org.example.MediManage.util.AppExecutors;
 
 public class SettingsController {
-    private static final String DB_BACKEND_SQLITE = "SQLite (Default)";
-    private static final String DB_BACKEND_POSTGRES = "PostgreSQL";
-
     // --- Database ---
     @FXML
-    private ComboBox<String> dbBackendCombo;
-    @FXML
     private TextField sqlitePathField;
-    @FXML
-    private javafx.scene.layout.VBox postgresConfigBox;
-    @FXML
-    private TextField postgresHostField;
-    @FXML
-    private TextField postgresPortField;
-    @FXML
-    private TextField postgresDatabaseField;
-    @FXML
-    private TextField postgresUserField;
-    @FXML
-    private PasswordField postgresPasswordField;
-    @FXML
-    private Button migrateSqliteToPostgresButton;
-    @FXML
-    private Button saveSettingsButton;
+
+    public static class LocalModelItem {
+        public final String name;
+        public final String path;
+
+        public LocalModelItem(String name, String path) {
+            this.name = name;
+            this.path = path;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            LocalModelItem that = (LocalModelItem) obj;
+            return java.util.Objects.equals(path, that.path);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(path);
+        }
+    }
 
     // --- Local AI ---
     @FXML
-    private TextField modelPathField;
+    private ComboBox<LocalModelItem> localModelCombo;
     @FXML
     private ComboBox<String> hardwareCombo;
+    @FXML
+    private VBox envContainer;
     @FXML
     private PasswordField hfTokenField;
 
@@ -80,18 +86,11 @@ public class SettingsController {
     @FXML
     private PasswordField claudeKeyField;
 
-    // --- Environments ---
-    @FXML
-    private javafx.scene.layout.VBox envContainer;
-    @FXML
-    private javafx.scene.control.TextArea logConsole;
-
     private final org.example.MediManage.service.ai.PythonEnvironmentManager envManager = AIServiceProvider
             .get().getEnvManager();
 
     private Preferences prefs;
     private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final DatabaseMigrationService migrationService = new DatabaseMigrationService();
 
     @FXML
     public void initialize() {
@@ -101,10 +100,12 @@ public class SettingsController {
         setupDatabaseSettings();
 
         // --- Local AI ---
-        modelPathField.setText(prefs.get("local_model_path", ""));
+        setupLocalModelsCombo();
 
-        hardwareCombo.getItems().addAll("Auto", "CUDA (NVIDIA)", "DirectML (AMD)", "CPU Only");
+        hardwareCombo.getItems().addAll("Auto", "Cloud Only (Base)", "CUDA (NVIDIA)", "CPU Only");
         hardwareCombo.setValue(prefs.get("ai_hardware", "Auto"));
+        
+        loadEnvironmentList();
 
         hfTokenField.setText(prefs.get("hf_token", ""));
 
@@ -134,22 +135,50 @@ public class SettingsController {
         openaiKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.OPENAI));
         claudeKeyField.setText(CloudApiKeyStore.get(CloudAIService.Provider.CLAUDE));
 
-        // Environment list
-        setupLogStreaming();
-        loadEnvironmentList();
-        applyPhaseZeroGovernanceGuards();
+    }
+
+    private void setupLocalModelsCombo() {
+        String savedPath = prefs.get("local_model_path", "");
+
+        AppExecutors.runBackground(() -> {
+            try {
+                org.example.MediManage.service.ai.AIOrchestrator orchestrator = new org.example.MediManage.service.ai.AIOrchestrator();
+                org.json.JSONArray installedModels = orchestrator.listLocalModels();
+                
+                javafx.application.Platform.runLater(() -> {
+                    boolean foundSaved = false;
+                    
+                    if (installedModels != null) {
+                        for (int i = 0; i < installedModels.length(); i++) {
+                            org.json.JSONObject model = installedModels.getJSONObject(i);
+                            String name = model.optString("name", "Unknown");
+                            String path = model.optString("path", "");
+                            LocalModelItem item = new LocalModelItem(name, path);
+                            localModelCombo.getItems().add(item);
+                            
+                            if (path.equals(savedPath)) {
+                                localModelCombo.setValue(item);
+                                foundSaved = true;
+                            }
+                        }
+                    }
+
+                    // If a custom path was saved that isn't in the models dir, add it manually
+                    if (!foundSaved && !savedPath.isEmpty()) {
+                        File f = new File(savedPath);
+                        LocalModelItem customItem = new LocalModelItem(f.exists() ? f.getName() : "Custom Path", savedPath);
+                        localModelCombo.getItems().add(customItem);
+                        localModelCombo.setValue(customItem);
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void setupDatabaseSettings() {
-        if (dbBackendCombo == null) {
-            return;
-        }
-
-        dbBackendCombo.getItems().setAll(DB_BACKEND_SQLITE, DB_BACKEND_POSTGRES);
         DatabaseConfig.ConnectionSettings current = DatabaseConfig.getCurrentSettings();
-        dbBackendCombo.setValue(current.backend() == DatabaseConfig.Backend.POSTGRESQL
-                ? DB_BACKEND_POSTGRES
-                : DB_BACKEND_SQLITE);
 
         if (sqlitePathField != null) {
             String sqlitePath = current.sqlitePath();
@@ -158,33 +187,32 @@ public class SettingsController {
             }
             sqlitePathField.setText(sqlitePath);
         }
-        if (postgresHostField != null) {
-            postgresHostField.setText(current.postgresHost());
-        }
-        if (postgresPortField != null) {
-            postgresPortField.setText(String.valueOf(current.postgresPort()));
-        }
-        if (postgresDatabaseField != null) {
-            postgresDatabaseField.setText(current.postgresDatabase());
-        }
-        if (postgresUserField != null) {
-            postgresUserField.setText(current.postgresUser());
-        }
-        if (postgresPasswordField != null) {
-            postgresPasswordField.setText(current.postgresPassword());
-        }
-
-        dbBackendCombo.setOnAction(event -> updateDatabaseFieldVisibility());
-        updateDatabaseFieldVisibility();
     }
 
-    private void updateDatabaseFieldVisibility() {
-        if (postgresConfigBox == null) {
-            return;
+    @FXML
+    private void handleBrowseDatabase() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select SQLite Database");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("SQLite Database Files (*.db, *.sqlite)", "*.db", "*.sqlite"));
+        
+        try {
+            String currentPath = prefs.get("db_path", "medimanage.db");
+            if (!currentPath.isEmpty()) {
+                File currentFile = new File(currentPath);
+                if (currentFile.exists() && currentFile.getParentFile() != null) {
+                    fileChooser.setInitialDirectory(currentFile.getParentFile());
+                } else {
+                    fileChooser.setInitialDirectory(new File(System.getProperty("user.dir")));
+                }
+            } else {
+                fileChooser.setInitialDirectory(new File(System.getProperty("user.dir")));
+            }
+        } catch (Exception ignored) {}
+
+        File selectedFile = fileChooser.showOpenDialog(sqlitePathField.getScene().getWindow());
+        if (selectedFile != null) {
+            sqlitePathField.setText(selectedFile.getAbsolutePath());
         }
-        boolean postgresSelected = DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue());
-        postgresConfigBox.setManaged(postgresSelected);
-        postgresConfigBox.setVisible(postgresSelected);
     }
 
     @FXML
@@ -214,7 +242,7 @@ public class SettingsController {
 
         AppExecutors.runBackground(() -> {
             try {
-                java.net.URL url = new java.net.URL("https://huggingface.co/api/whoami-v2");
+                java.net.URL url = new java.net.URI("https://huggingface.co/api/whoami-v2").toURL();
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Authorization", "Bearer " + token);
@@ -254,136 +282,22 @@ public class SettingsController {
         });
     }
 
-    @FXML
-    private void handleMigrateSqliteToPostgres() {
-        if (!FeatureFlags.isEnabled(FeatureFlag.POSTGRES_MIGRATION)) {
-            showAlert(Alert.AlertType.WARNING, "Migration Disabled",
-                    "SQLite to PostgreSQL migration is currently disabled by feature flag.");
-            return;
-        }
-        if (!enforcePermission(Permission.EXECUTE_DATABASE_MIGRATION)) {
-            return;
-        }
-        try {
-            if (!DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue())) {
-                showAlert(Alert.AlertType.WARNING, "Migration Not Available",
-                        "Select PostgreSQL as the target backend before starting migration.");
-                return;
-            }
 
-            DatabaseConfig.ConnectionSettings postgresSettings = buildDatabaseSettingsFromForm();
-            DatabaseConfig.ConnectionSettings sqliteSettings = buildSqliteSourceSettings();
-
-            DatabaseConfig.testConnection(sqliteSettings);
-            DatabaseConfig.testConnection(postgresSettings);
-
-            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-            confirm.setTitle("Confirm Migration");
-            confirm.setHeaderText("Migrate SQLite data to PostgreSQL?");
-            confirm.setContentText("This will replace all existing PostgreSQL table data with SQLite data.\n"
-                    + "A SQLite backup file will be created before migration.");
-            confirm.showAndWait().ifPresent(response -> {
-                if (response == javafx.scene.control.ButtonType.YES || response == javafx.scene.control.ButtonType.OK) {
-                    runMigrationAsync(sqliteSettings, postgresSettings);
-                }
-            });
-        } catch (Exception e) {
-            showAlert(Alert.AlertType.ERROR, "Migration Setup Error", e.getMessage());
-        }
-    }
-
-    private void runMigrationAsync(
-            DatabaseConfig.ConnectionSettings sqliteSettings,
-            DatabaseConfig.ConnectionSettings postgresSettings) {
-        AppExecutors.runBackground(() -> {
-            try {
-                DatabaseMigrationService.MigrationResult result = migrationService
-                        .migrateSqliteToPostgres(sqliteSettings, postgresSettings);
-                javafx.application.Platform.runLater(() -> {
-                    StringBuilder summary = new StringBuilder();
-                    summary.append("SQLite backup: ").append(result.backupPath()).append("\n\n");
-                    summary.append("Rows migrated:\n");
-                    result.migratedRowsByTable().forEach((table, rows) -> summary
-                            .append(" - ").append(table).append(": ").append(rows).append('\n'));
-                    summary.append(
-                            "\nMigration complete. Click Save Settings to persist PostgreSQL as active backend.");
-                    showAlert(Alert.AlertType.INFORMATION, "Migration Successful", summary.toString());
-                });
-            } catch (Exception migrationError) {
-                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Migration Failed",
-                        migrationError.getMessage()));
-            }
-        });
-    }
 
     private DatabaseConfig.ConnectionSettings buildDatabaseSettingsFromForm() {
-        DatabaseConfig.Backend backend = DB_BACKEND_POSTGRES.equals(dbBackendCombo.getValue())
-                ? DatabaseConfig.Backend.POSTGRESQL
-                : DatabaseConfig.Backend.SQLITE;
-
         String sqlitePath = sqlitePathField == null ? "" : sqlitePathField.getText().trim();
-        String pgHost = postgresHostField == null ? "" : postgresHostField.getText().trim();
-        String pgPortRaw = postgresPortField == null ? "" : postgresPortField.getText().trim();
-        String pgDatabase = postgresDatabaseField == null ? "" : postgresDatabaseField.getText().trim();
-        String pgUser = postgresUserField == null ? "" : postgresUserField.getText().trim();
-        String pgPassword = postgresPasswordField == null ? "" : postgresPasswordField.getText();
 
-        int pgPort = 5432;
-        if (!pgPortRaw.isBlank()) {
-            try {
-                pgPort = Integer.parseInt(pgPortRaw);
-            } catch (NumberFormatException ex) {
-                throw new IllegalArgumentException("PostgreSQL port must be a valid number.");
-            }
-        }
-        if (pgPort <= 0 || pgPort > 65535) {
-            throw new IllegalArgumentException("PostgreSQL port must be between 1 and 65535.");
-        }
-
-        return new DatabaseConfig.ConnectionSettings(
-                backend,
-                sqlitePath,
-                pgHost,
-                pgPort,
-                pgDatabase,
-                pgUser,
-                pgPassword);
-    }
-
-    private DatabaseConfig.ConnectionSettings buildSqliteSourceSettings() {
-        String sqlitePath = sqlitePathField == null ? "" : sqlitePathField.getText().trim();
         return new DatabaseConfig.ConnectionSettings(
                 DatabaseConfig.Backend.SQLITE,
-                sqlitePath,
-                "",
-                5432,
-                "",
-                "",
-                "");
+                sqlitePath);
     }
 
     private void saveDatabaseSettings(DatabaseConfig.ConnectionSettings settings) {
         prefs.put(DatabaseConfig.PREF_DB_BACKEND, settings.backend().name().toLowerCase());
         prefs.put(DatabaseConfig.PREF_DB_PATH, settings.sqlitePath() == null ? "" : settings.sqlitePath());
-        prefs.put(DatabaseConfig.PREF_PG_HOST, settings.postgresHost() == null ? "" : settings.postgresHost());
-        prefs.put(DatabaseConfig.PREF_PG_PORT, String.valueOf(settings.postgresPort()));
-        prefs.put(DatabaseConfig.PREF_PG_DATABASE,
-                settings.postgresDatabase() == null ? "" : settings.postgresDatabase());
-        prefs.put(DatabaseConfig.PREF_PG_USER, settings.postgresUser() == null ? "" : settings.postgresUser());
-        prefs.put(DatabaseConfig.PREF_PG_PASSWORD,
-                settings.postgresPassword() == null ? "" : settings.postgresPassword());
 
         System.setProperty(DatabaseConfig.DB_BACKEND_PROPERTY, settings.backend().name().toLowerCase());
         System.setProperty(DatabaseConfig.DB_PATH_PROPERTY, settings.sqlitePath() == null ? "" : settings.sqlitePath());
-        System.setProperty(DatabaseConfig.DB_PG_HOST_PROPERTY,
-                settings.postgresHost() == null ? "" : settings.postgresHost());
-        System.setProperty(DatabaseConfig.DB_PG_PORT_PROPERTY, String.valueOf(settings.postgresPort()));
-        System.setProperty(DatabaseConfig.DB_PG_DATABASE_PROPERTY,
-                settings.postgresDatabase() == null ? "" : settings.postgresDatabase());
-        System.setProperty(DatabaseConfig.DB_PG_USER_PROPERTY,
-                settings.postgresUser() == null ? "" : settings.postgresUser());
-        System.setProperty(DatabaseConfig.DB_PG_PASSWORD_PROPERTY,
-                settings.postgresPassword() == null ? "" : settings.postgresPassword());
     }
 
     private void populateModels(String providerName) {
@@ -427,26 +341,27 @@ public class SettingsController {
         return null;
     }
 
-    // --- Environment Management (unchanged) ---
-
-    private void setupLogStreaming() {
-        envManager.setLogCallback(msg -> {
-            javafx.application.Platform.runLater(() -> {
-                if (logConsole != null) {
-                    logConsole.appendText(msg + "\n");
-                }
-            });
-        });
-    }
+     // --- Environment Management ---      
 
     private void loadEnvironmentList() {
+        if (envContainer == null) return;
         envContainer.getChildren().clear();
-        String activeEnv = prefs.get("active_python_env", "cpu");
-        envManager.setActiveEnvironment(activeEnv);
 
-        for (java.util.Map<String, Object> env : envManager.listEnvironments()) {
-            envContainer.getChildren().add(createEnvCard(env, activeEnv));
-        }
+        AppExecutors.runBackground(() -> {
+            try {
+                java.util.List<java.util.Map<String, Object>> envs = envManager.getEnvironmentMetadata();
+                String activeEnvName = envManager.getActiveEnvironment();
+
+                javafx.application.Platform.runLater(() -> {
+                    envContainer.getChildren().clear();
+                    for (java.util.Map<String, Object> env : envs) {
+                        envContainer.getChildren().add(createEnvCard(env, activeEnvName));
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private javafx.scene.layout.HBox createEnvCard(java.util.Map<String, Object> env, String activeEnvName) {
@@ -513,7 +428,6 @@ public class SettingsController {
             popup.setStatus("📦 Installing " + org.example.MediManage.service.ai.PythonEnvironmentManager.ENV_LABELS
                     .getOrDefault(envName, envName) + "...");
             popup.appendLog("⏳ Setting up '" + envName + "' environment. This may take a few minutes.");
-            popup.appendLog("");
         }
 
         AppExecutors.runBackground(() -> {
@@ -529,19 +443,12 @@ public class SettingsController {
                 if (popup != null && !popup.isClosed()) {
                     popup.setStatus("✅ Environment '" + envName + "' ready!");
                     popup.setProgress(1.0);
-                    popup.appendLog("");
                     popup.appendLog("✅ Installation complete! This window will close shortly.");
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ignored) {
-                    }
+                    try { Thread.sleep(2000); } catch (Exception ignored) {}
                     popup.close();
                 }
 
-                javafx.application.Platform.runLater(() -> {
-                    loadEnvironmentList();
-                    setupLogStreaming();
-                });
+                javafx.application.Platform.runLater(this::loadEnvironmentList);
             } catch (Exception e) {
                 e.printStackTrace();
                 if (popup != null && !popup.isClosed()) {
@@ -582,8 +489,6 @@ public class SettingsController {
             if (response == javafx.scene.control.ButtonType.YES) {
                 MediManageApplication app = MediManageApplication.getInstance();
                 if (app != null) {
-                    if (logConsole != null)
-                        logConsole.appendText("🔄 Restarting AI Engine with '" + envName + "'...\n");
                     app.restartServer();
                     scheduleModelReload();
                 }
@@ -604,9 +509,9 @@ public class SettingsController {
             dirChooser.setInitialDirectory(modelsFolder);
         }
 
-        File selectedDir = dirChooser.showDialog(modelPathField.getScene().getWindow());
+        File selectedDir = dirChooser.showDialog(localModelCombo.getScene().getWindow());
         if (selectedDir != null) {
-            modelPathField.setText(selectedDir.getAbsolutePath());
+            addCustomLocalModelSelection(selectedDir.getAbsolutePath());
             return;
         }
 
@@ -618,10 +523,20 @@ public class SettingsController {
         if (modelsFolder.exists()) {
             fileChooser.setInitialDirectory(modelsFolder);
         }
-        File selectedFile = fileChooser.showOpenDialog(modelPathField.getScene().getWindow());
+        File selectedFile = fileChooser.showOpenDialog(localModelCombo.getScene().getWindow());
         if (selectedFile != null) {
-            modelPathField.setText(selectedFile.getAbsolutePath());
+            addCustomLocalModelSelection(selectedFile.getAbsolutePath());
         }
+    }
+
+    private void addCustomLocalModelSelection(String path) {
+        File f = new File(path);
+        LocalModelItem item = new LocalModelItem(f.getName(), path);
+        // Avoid duplicate
+        if (!localModelCombo.getItems().contains(item)) {
+            localModelCombo.getItems().add(item);
+        }
+        localModelCombo.setValue(item);
     }
 
     @FXML
@@ -640,10 +555,30 @@ public class SettingsController {
         }
     }
 
+    @FXML
+    private void handleViewEngineLogs() {
+        StartupProgressController popup = StartupProgressController.show();
+        if (popup != null) {
+            popup.setStatus("📋 Streaming AI Engine Logs...");
+            
+            // Prime background fetching to mirror log status onto the popup safely.
+            envManager.setLogCallback(msg -> {
+                if (popup != null && !popup.isClosed()) {
+                    popup.appendLog(msg);
+                }
+            });
+            
+            // Initial payload push since callbacks only trigger on new lines
+            popup.appendLog("Monitoring Active Engine Console.\n" +
+                            "Close this window to stop monitoring.\n" +
+                            "---------------------------------------\n");
+        }
+    }
+
     // --- Save Settings ---
 
     @FXML
-    private void handleSaveSettings() {
+    private void handleSaveDatabase() {
         if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
             return;
         }
@@ -660,39 +595,138 @@ public class SettingsController {
             return;
         }
 
-        // Local AI
-        prefs.put("local_model_path", modelPathField.getText());
-        prefs.put("ai_hardware", hardwareCombo.getValue());
-        prefs.put("hf_token", hfTokenField.getText().trim());
+        try { prefs.flush(); } catch (Exception ignored) {}
 
-        // Cloud AI — Provider & Model
+        showAlert(Alert.AlertType.INFORMATION, "Database Saved",
+                "Database configuration saved successfully.\n" +
+                "If the database backend changed, restart the application to reconnect cleanly.");
+        org.example.MediManage.util.ToastNotification.success("Database configuration saved.");
+    }
+
+    @FXML
+    private void handleSaveLocalAI() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
+
+        LocalModelItem selectedModel = localModelCombo.getValue();
+        prefs.put("local_model_path", selectedModel != null ? selectedModel.path : "");
+
+        String hardware = hardwareCombo.getValue();
+        prefs.put("ai_hardware", hardware);
+
+        String hfToken = hfTokenField.getText().trim();
+        prefs.put("hf_token", hfToken);
+
+        try { prefs.flush(); } catch (Exception ignored) {}
+
+        org.example.MediManage.util.ToastNotification.success("Local AI Settings Saved");
+
+        // Notify running server of config changes instantly
+        org.example.MediManage.service.ai.LocalAIService localAI = AIServiceProvider.get().getLocalService();
+        if (localAI != null) {
+            localAI.updateConfig(hfToken);
+        }
+
+        // Determine environment to setup based on Hardware Acceleration logic.
+        // "Auto" will determine via envManager.autoDetectBestEnv() at setup.
+        String targetEnv = "cpu"; // default safe fallback
+        if (hardware.contains("CUDA")) targetEnv = "gpu";
+        else if (hardware.contains("DirectML")) targetEnv = "gpu"; // Legacy mapped
+        else if (hardware.contains("Base") || hardware.contains("base")) targetEnv = "base";
+        
+        if ("Auto".equals(hardware)) {
+           targetEnv = envManager.autoDetectBestEnv();
+        }
+
+        final String finalEnv = targetEnv;
+        prefs.put("active_python_env", finalEnv);
+        envManager.setActiveEnvironment(finalEnv);
+
+        StartupProgressController popup = StartupProgressController.show();
+        if (popup != null) {
+            popup.setStatus("📦 Validating " + org.example.MediManage.service.ai.PythonEnvironmentManager.ENV_LABELS
+                    .getOrDefault(finalEnv, finalEnv) + " backend...");
+            popup.appendLog("⏳ Checking configuration for '" + finalEnv + "'...");
+        }
+
+        AppExecutors.runBackground(() -> {
+            try {
+                // Pipe installation logs to popup dialog
+                envManager.setLogCallback(msg -> {
+                    if (popup != null && !popup.isClosed()) {
+                        popup.appendLog(msg);
+                    }
+                });
+
+                // Run dependency pip installation / validation
+                envManager.ensureEnvironment(finalEnv);
+
+                if (popup != null && !popup.isClosed()) {
+                    popup.setStatus("✅ AI Environment Setup Complete");
+                    popup.setProgress(1.0);
+                    popup.appendLog("✓ Environment validated.");
+                    try { Thread.sleep(1000); } catch (Exception ignored) {}
+                    popup.close();
+                }
+                
+                // Restart server logic and trigger reloading of local models
+                javafx.application.Platform.runLater(() -> {
+                     loadEnvironmentList();
+                     MediManageApplication app = MediManageApplication.getInstance();
+                     if (app != null) {
+                         app.restartServer();
+                         if (!"base".equals(finalEnv)) {
+                             scheduleModelReload();
+                         }
+                     }
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                if (popup != null && !popup.isClosed()) {
+                    popup.appendLog("❌ Error: " + e.getMessage());
+                    popup.setStatus("❌ Installation failed");
+                }
+                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Backend Update Failed",
+                        "Failed to provision local environment: " + e.getMessage()));
+            }
+        });
+    }
+
+    @FXML
+    private void handleSaveCloudAI() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
+
         String provider = providerCombo.getValue();
         String modelId = getSelectedModelId();
         if (provider != null)
             prefs.put("cloud_provider", provider);
         if (modelId != null)
             prefs.put("cloud_model", modelId);
-
-        // Cloud AI — API Keys (secure store)
+            
+        // Save secure keys
         CloudApiKeyStore.put(CloudAIService.Provider.GEMINI, geminiKeyField.getText());
         CloudApiKeyStore.put(CloudAIService.Provider.GROQ, groqKeyField.getText());
         CloudApiKeyStore.put(CloudAIService.Provider.OPENROUTER, openrouterKeyField.getText());
         CloudApiKeyStore.put(CloudAIService.Provider.OPENAI, openaiKeyField.getText());
         CloudApiKeyStore.put(CloudAIService.Provider.CLAUDE, claudeKeyField.getText());
 
-        // Update the live CloudAIService via AIServiceProvider
+        try { prefs.flush(); } catch (Exception ignored) {}
+
+        // Propagate to internal orchestrator
         try {
             CloudAIService cloud = AIServiceProvider.get().getCloudService();
             CloudAIService.Provider p = CloudAIService.Provider.valueOf(provider);
-
-            // Set all keys
+            
             cloud.setApiKey(CloudAIService.Provider.GEMINI, geminiKeyField.getText());
             cloud.setApiKey(CloudAIService.Provider.GROQ, groqKeyField.getText());
             cloud.setApiKey(CloudAIService.Provider.OPENROUTER, openrouterKeyField.getText());
             cloud.setApiKey(CloudAIService.Provider.OPENAI, openaiKeyField.getText());
             cloud.setApiKey(CloudAIService.Provider.CLAUDE, claudeKeyField.getText());
 
-            // Set active provider + model
             String activeKey = switch (p) {
                 case GEMINI -> geminiKeyField.getText();
                 case GROQ -> groqKeyField.getText();
@@ -703,54 +737,6 @@ public class SettingsController {
             cloud.configure(p, modelId != null ? modelId : "", activeKey);
         } catch (Exception e) {
             e.printStackTrace();
-        }
-
-        showAlert(Alert.AlertType.INFORMATION, "Settings Saved",
-                "Configuration saved.\nDatabase: " + dbSettings.backend().name()
-                        + "\nCloud AI: " + provider + " / " + (modelId != null ? modelId : "default")
-                        + "\nIf database backend changed, restart the app to reconnect cleanly.");
-        org.example.MediManage.util.ToastNotification.success("Settings Saved");
-
-        // Trigger local model reload if path set
-        triggerModelReload();
-
-        // Sync the active Python env to match the hardware selection
-        String hardware = hardwareCombo.getValue();
-        String config = "auto";
-        if (hardware.contains("CUDA"))
-            config = "cuda";
-        else if (hardware.contains("DirectML"))
-            config = "directml";
-        else if (hardware.contains("CPU"))
-            config = "cpu";
-
-        if (!"auto".equals(config)) {
-            String envForHardware = org.example.MediManage.service.ai.PythonEnvironmentManager.mapBackendToEnv(config);
-            String currentEnv = envManager.getActiveEnvironment();
-            if (!envForHardware.equals(currentEnv)) {
-                envManager.setActiveEnvironment(envForHardware);
-                prefs.put("active_python_env", envForHardware);
-                loadEnvironmentList();
-
-                // Ask to restart server with new env
-                javafx.scene.control.Alert restart = new javafx.scene.control.Alert(
-                        javafx.scene.control.Alert.AlertType.CONFIRMATION,
-                        "Hardware changed to " + hardware + ".\nRestart AI Engine with '"
-                                + envForHardware + "' environment now?",
-                        javafx.scene.control.ButtonType.YES, javafx.scene.control.ButtonType.NO);
-                restart.setTitle("Environment Switch");
-                restart.setHeaderText("Restart AI Engine?");
-                restart.showAndWait().ifPresent(response -> {
-                    if (response == javafx.scene.control.ButtonType.YES) {
-                        MediManageApplication app = MediManageApplication.getInstance();
-                        if (app != null) {
-                            app.restartServer();
-                            // Reload model after new server is up
-                            scheduleModelReload();
-                        }
-                    }
-                });
-            }
         }
     }
 
@@ -764,28 +750,10 @@ public class SettingsController {
         }
     }
 
-    private boolean canCurrentUser(Permission permission) {
-        org.example.MediManage.model.User currentUser = UserSession.getInstance().getUser();
-        return currentUser != null && RbacPolicy.canAccess(currentUser.getRole(), permission);
-    }
-
-    private void applyPhaseZeroGovernanceGuards() {
-        boolean canManageSettings = canCurrentUser(Permission.MANAGE_SYSTEM_SETTINGS);
-        if (saveSettingsButton != null) {
-            saveSettingsButton.setDisable(!canManageSettings);
-        }
-
-        boolean migrationFlagEnabled = FeatureFlags.isEnabled(FeatureFlag.POSTGRES_MIGRATION);
-        boolean canMigrate = migrationFlagEnabled && canCurrentUser(Permission.EXECUTE_DATABASE_MIGRATION);
-        if (migrateSqliteToPostgresButton != null) {
-            migrateSqliteToPostgresButton.setManaged(migrationFlagEnabled);
-            migrateSqliteToPostgresButton.setVisible(migrationFlagEnabled);
-            migrateSqliteToPostgresButton.setDisable(!canMigrate);
-        }
-    }
-
+    // Cleaned up duplicate
     private void triggerModelReload() {
-        String modelPath = modelPathField.getText().trim();
+        LocalModelItem selectedModel = localModelCombo.getValue();
+        String modelPath = selectedModel != null ? selectedModel.path : "";
         if (modelPath.isEmpty()) {
             return;
         }

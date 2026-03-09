@@ -81,8 +81,8 @@ def _verify_checksums(model_path):
 
     if os.path.isfile(model_path):
         sha = _sha256_file(model_path)
-        checksums[os.path.basename(model_path)] = sha
-        logger.info(f"  ✓ {os.path.basename(model_path)}: {sha[:16]}...")
+        checksums[os.path.basename(model_path)] = str(sha)
+        logger.info(f"  ✓ {os.path.basename(model_path)}: {str(sha)[:16]}...")  # type: ignore
     elif os.path.isdir(model_path):
         for root, dirs, files in os.walk(model_path):
             for f in sorted(files):
@@ -91,8 +91,8 @@ def _verify_checksums(model_path):
                     fpath = os.path.join(root, f)
                     sha = _sha256_file(fpath)
                     rel = os.path.relpath(fpath, model_path)
-                    checksums[rel] = sha
-                    logger.info(f"  ✓ {rel}: {sha[:16]}...")
+                    checksums[rel] = str(sha)
+                    logger.info(f"  ✓ {rel}: {str(sha)[:16]}...")  # type: ignore
 
     return checksums
 
@@ -119,6 +119,7 @@ ADMIN_PROTECTED_ROUTES = {
     "/stop_download",
     "/delete_model",
     "/shutdown",
+    "/update_config",
 }
 ADMIN_TOKEN = (os.getenv(ADMIN_TOKEN_ENV, "") or "").strip()
 
@@ -143,9 +144,19 @@ def hardware():
     return jsonify(hardware_detect.get_hardware_info())
 
 
-
-
-
+@app.route('/update_config', methods=['POST'])
+def update_config():
+    """Dynamically update environment configurations like HF_TOKEN."""
+    data = request.json
+    if "hf_token" in data:
+        token = str(data["hf_token"]).strip()
+        if token:
+            os.environ["HF_TOKEN"] = token
+            logger.info("🔑 HF_TOKEN dynamically updated from UI configuration.")
+        else:
+            os.environ.pop("HF_TOKEN", None)
+            logger.info("🔑 HF_TOKEN removed from environment.")
+    return jsonify({"status": "success"})
 @app.route('/query_db', methods=['POST'])
 def query_db():
     """Return pharmacy database results INSTANTLY — no AI model needed.
@@ -267,6 +278,11 @@ def chat_rag():
         logger.error(f"RAG inference error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/cancel_chat', methods=['POST'])
+def cancel_chat():
+    engine.cancel_flag = True
+    return jsonify({"status": "cancelled"})
 
 # ======================== MODEL DOWNLOAD ========================
 
@@ -400,7 +416,7 @@ def model_info():
                     fp = os.path.join(root, f)
                     files.append({
                         "name": os.path.relpath(fp, model_path),
-                        "size_mb": round(os.path.getsize(fp) / 1024 / 1024, 2)
+                        "size_mb": round(float(os.path.getsize(fp)) / 1024 / 1024, 2)
                     })
             info["files"] = files
 
@@ -455,11 +471,11 @@ def _scan_model(path, name):
 
     if os.path.isdir(path):
         # Calculate total size
-        total_size = 0
+        total_size = 0.0
         for root, dirs, files in os.walk(path):
             for f in files:
-                total_size += os.path.getsize(os.path.join(root, f))
-        info["size_mb"] = round(total_size / 1024 / 1024, 2)
+                total_size = total_size + float(os.path.getsize(os.path.join(root, f)))
+        info["size_mb"] = round(total_size / 1024 / 1024, 2)  # type: ignore
 
         # Detect format
         dir_files = []
@@ -478,7 +494,7 @@ def _scan_model(path, name):
             info["format"] = "HuggingFace"
 
     elif os.path.isfile(path):
-        info["size_mb"] = round(os.path.getsize(path) / 1024 / 1024, 2)
+        info["size_mb"] = round(float(os.path.getsize(path)) / 1024 / 1024, 2)  # type: ignore
         if path.endswith(".xml"):
             info["format"] = "ONNX"
         elif path.endswith(".onnx"):
@@ -515,9 +531,9 @@ def benchmark():
     t1 = _time.time()
 
     stats = engine.get_performance_stats()
-    stats["benchmark_prompt"] = prompt[:100]
-    stats["benchmark_response_preview"] = response[:200] if response else ""
-    stats["benchmark_wall_time_s"] = round(t1 - t0, 2)
+    stats["benchmark_prompt"] = str(prompt)[:100]  # type: ignore
+    stats["benchmark_response_preview"] = str(response)[:200] if response else ""  # type: ignore
+    stats["benchmark_wall_time_s"] = round(float(t1 - t0), 2)  # type: ignore
 
     return jsonify(stats)
 

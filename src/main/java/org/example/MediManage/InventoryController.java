@@ -115,9 +115,6 @@ public class InventoryController {
         });
     }
 
-    private void loadData() {
-        loadData(currentPage);
-    }
 
     private void loadData(int page) {
         String query = searchField.getText() == null ? "" : searchField.getText().trim();

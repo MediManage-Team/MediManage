@@ -146,6 +146,9 @@ public class BillingService {
             throw new IllegalArgumentException("Credit requires a selected customer.");
         }
 
+        System.out.println("=== CHECKOUT HIT ===");
+        System.out.println("RAW CARE PROTOCOL: [" + careProtocol + "]");
+
         double total = calculateTotal(billItems);
         Integer customerId = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
         String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
@@ -153,8 +156,29 @@ public class BillingService {
         int billId = billDAO.generateInvoice(total, billItems, customerId, userId, paymentMode);
         DashboardKpiService.invalidateSalesMetrics();
 
+        // Save AI protocol to the database so the Dashboard History can rebuild the invoice PDFs later
+        if (careProtocol != null && !careProtocol.trim().isEmpty()) {
+            billDAO.saveAICareProtocol(billId, careProtocol);
+        }
+
         String pdfPath = "Invoice_" + billId + ".pdf";
-        reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, careProtocol);
+
+        // JasperReports text fields are simplest and most reliable with plain text,
+        // but since we updated JRXML to markup="html", we can convert markdown bold (**text**) to HTML (<b>text</b>)
+        String plainCareProtocol = "";
+        if (careProtocol != null) {
+            plainCareProtocol = careProtocol
+                .replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>") // Convert **bold** to <b>bold</b>
+                .replaceAll("(?m)^#+\\s+", "<b>")             // Convert headers to open bold tag
+                .replaceAll("(?m)^#+\\s+.*$", "$0</b>")       // Close header bold tags at end of line
+                .replaceAll("`", "")                          // Remove code blocks
+                .trim();
+        }
+
+        System.out.println("PLAIN CARE PROTOCOL SIZE: " + plainCareProtocol.length());
+        System.out.println("PLAIN CARE PROTOCOL START: [" + (plainCareProtocol.length() > 50 ? plainCareProtocol.substring(0, 50) : plainCareProtocol) + "]");
+
+        reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, plainCareProtocol);
 
         return new CheckoutResult(billId, pdfPath, total, customerName);
     }

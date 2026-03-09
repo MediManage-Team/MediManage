@@ -1,8 +1,7 @@
 package org.example.MediManage.config;
 
 public enum FeatureFlag {
-    AI_ASSISTANT("ai.assistant.enabled", true),
-    POSTGRES_MIGRATION("database.postgres.migration.enabled", true);
+    AI_ASSISTANT("ai.assistant.enabled", true);
 
     private final String key;
     private final boolean defaultEnabled;

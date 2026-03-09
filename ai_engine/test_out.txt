@@ -1,0 +1,13 @@
+gguf_init_from_file_impl: tensor 'blk.0.ffn_down.weight' of type 36 (TYPE_IQ4_NL_4_4 REMOVED, use IQ4_NL with runtime repacking) has 6912 elements per row, not a multiple of block size (0)
+gguf_init_from_file_impl: failed to read tensor info
+llama_model_load: error loading model: llama_model_loader: failed to load model from C:\Users\ksvik\MediManage\models\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf
+llama_model_load_from_file_impl: failed to load model
+Exception ignored in: <function LlamaModel.__del__ at 0x000002C4B07EBC70>
+Traceback (most recent call last):
+  File "C:\Users\ksvik\IdeaProjects\MediManage\ai_engine\envs\gpu\lib\site-packages\llama_cpp\_internals.py", line 86, in __del__
+    self.close()
+  File "C:\Users\ksvik\IdeaProjects\MediManage\ai_engine\envs\gpu\lib\site-packages\llama_cpp\_internals.py", line 78, in close
+    if self.sampler is not None:
+AttributeError: 'LlamaModel' object has no attribute 'sampler'
+Loading C:\Users\ksvik\MediManage\models\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf...
+Error: Failed to load model from file: C:\Users\ksvik\MediManage\models\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf

@@ -299,6 +299,90 @@ public class BillDAO {
         return sales;
     }
 
+    // For Business Intelligence: Sales by Revenue (Medicine)
+    public Map<String, Double> getItemizedRevenue(LocalDate start, LocalDate end) {
+        Map<String, Double> revenue = new LinkedHashMap<>();
+        String sql = "SELECT m.name, SUM(bi.total) as total_rev " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON bi.bill_id = b.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ? " +
+                "GROUP BY m.name " +
+                "ORDER BY total_rev DESC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, start + " 00:00:00");
+            ps.setString(2, end.plusDays(1) + " 00:00:00");
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    revenue.put(rs.getString("name"), rs.getDouble("total_rev"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return revenue;
+    }
+
+    // For Business Intelligence: Line Chart (Gross Profit by Day)
+    public Map<String, Double> getProfitBetweenDates(LocalDate start, LocalDate end) {
+        Map<String, Double> profit = new LinkedHashMap<>();
+        // Profit = (Total Sale Price) - (Purchase Price * Qty)
+        // Since sqlite requires grouping, we aggregate daily profit
+        String sql = "SELECT DATE(b.bill_date) as day, SUM(bi.total - (m.purchase_price * bi.quantity)) as daily_profit " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON bi.bill_id = b.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ? " +
+                "GROUP BY day ORDER BY day ASC";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, start + " 00:00:00");
+            ps.setString(2, end.plusDays(1) + " 00:00:00");
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    profit.put(rs.getString("day"), rs.getDouble("daily_profit"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return profit;
+    }
+
+    // For Business Intelligence: Payment Methods Donut Chart
+    public Map<String, Integer> getPaymentMethodDistribution(LocalDate start, LocalDate end) {
+        Map<String, Integer> distribution = new LinkedHashMap<>();
+        String sql = "SELECT payment_mode, COUNT(*) as txn_count " +
+                "FROM bills " +
+                "WHERE bill_date >= ? AND bill_date < ? " +
+                "GROUP BY payment_mode";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, start + " 00:00:00");
+            ps.setString(2, end.plusDays(1) + " 00:00:00");
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String mode = rs.getString("payment_mode");
+                    if (mode == null || mode.isBlank()) mode = "CASH";
+                    distribution.put(mode, rs.getInt("txn_count"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return distribution;
+    }
+
     public WeeklySalesMarginSummary getWeeklySalesMarginSummary(LocalDate weekStart, LocalDate weekEnd) {
         LocalDate safeWeekStart = weekStart == null ? LocalDate.now() : weekStart;
         LocalDate safeWeekEnd = weekEnd == null ? safeWeekStart.plusDays(6) : weekEnd;
@@ -311,14 +395,20 @@ public class BillDAO {
         String expenseRangeStart = safeWeekStart.toString();
         String expenseRangeEndExclusive = safeWeekEnd.plusDays(1).toString();
 
-        String billSql = "SELECT COUNT(*) AS bill_count, " +
-                "COALESCE(SUM(total_amount), 0) AS net_sales " +
-                "FROM bills WHERE bill_date >= ? AND bill_date < ?";
+        String billSql = "SELECT COUNT(DISTINCT b.bill_id) AS bill_count, " +
+                "COALESCE(SUM(bi.total), 0) AS net_sales, " +
+                "COALESCE(SUM(bi.quantity * COALESCE(m.purchase_price, 0)), 0) AS cogs " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON b.bill_id = bi.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ?";
+        
         String expenseSql = "SELECT COALESCE(SUM(amount), 0) AS total_expenses " +
                 "FROM expenses WHERE date >= ? AND date < ?";
 
         long billCount = 0L;
         double netSales = 0.0;
+        double cogs = 0.0;
         double totalExpenses = 0.0;
 
         try (Connection conn = DatabaseUtil.getConnection()) {
@@ -329,6 +419,7 @@ public class BillDAO {
                     if (rs.next()) {
                         billCount = rs.getLong("bill_count");
                         netSales = rs.getDouble("net_sales");
+                        cogs = rs.getDouble("cogs");
                     }
                 }
             }
@@ -348,7 +439,7 @@ public class BillDAO {
 
         netSales = round2(netSales);
         totalExpenses = round2(totalExpenses);
-        double grossMargin = round2(netSales - totalExpenses);
+        double grossMargin = round2(netSales - cogs);
         double grossMarginPercent = netSales <= 0.0 ? 0.0 : round2((grossMargin / netSales) * 100.0);
 
         return new WeeklySalesMarginSummary(
@@ -359,6 +450,37 @@ public class BillDAO {
                 grossMargin,
                 grossMarginPercent,
                 totalExpenses);
+    }
+
+    public double getMonthlyGrossProfit() {
+        LocalDate start = LocalDate.now().withDayOfMonth(1);
+        LocalDate end = start.plusMonths(1);
+        
+        String startStr = start.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String endStr = end.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        
+        String sql = "SELECT COALESCE(SUM(bi.total), 0) AS revenue, " +
+                     "COALESCE(SUM(bi.quantity * COALESCE(m.purchase_price, 0)), 0) AS cogs " +
+                     "FROM bills b " +
+                     "JOIN bill_items bi ON b.bill_id = bi.bill_id " +
+                     "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                     "WHERE b.bill_date >= ? AND b.bill_date < ?";
+                     
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, startStr);
+            stmt.setString(2, endStr);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    double revenue = rs.getDouble("revenue");
+                    double cogs = rs.getDouble("cogs");
+                    return round2(revenue - cogs);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0.0;
     }
 
     // ======================== AI CARE PROTOCOL ========================

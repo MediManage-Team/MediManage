@@ -9,16 +9,15 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.stage.FileChooser;
 import org.example.MediManage.dao.BillDAO;
-import org.example.MediManage.dao.ExpenseDAO;
 import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.BillHistoryRecord;
 import org.example.MediManage.model.Medicine;
-import org.example.MediManage.model.Expense;
+
 
 import java.io.File;
 import java.io.IOException;
-import java.sql.SQLException;
+
 import java.time.LocalDate;
 
 import java.util.ArrayList;
@@ -27,7 +26,7 @@ import java.util.List;
 import org.example.MediManage.service.ReportService;
 import org.example.MediManage.service.DashboardKpiService;
 import javafx.scene.layout.VBox;
-import javafx.scene.layout.GridPane;
+
 import javafx.geometry.Pos;
 import javafx.application.Platform;
 import org.example.MediManage.util.AppExecutors;
@@ -167,7 +166,7 @@ public class DashboardController {
     // ── SERVICES ──
     private final MedicineDAO medicineDAO = new MedicineDAO();
     private final BillDAO billDAO = new BillDAO();
-    private final ExpenseDAO expenseDAO = new ExpenseDAO();
+
 
     private final DashboardKpiService kpiService = DashboardKpiService.getInstance();
     private final ReportService reportService = new ReportService();
@@ -188,7 +187,7 @@ public class DashboardController {
 
         loadDashboard();
         loadHistory();
-        setupExpenseTab();
+
     }
 
     /**
@@ -524,8 +523,18 @@ public class DashboardController {
 
             if (file != null) {
                 try {
+                    String storedProtocol = billDAO.getAICareProtocol(bill.getBillId());
+                    if (storedProtocol == null) storedProtocol = "";
+                    else {
+                        storedProtocol = storedProtocol
+                            .replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>")
+                            .replaceAll("(?m)^#+\\s+", "<b>")
+                            .replaceAll("(?m)^#+\\s+.*$", "$0</b>")
+                            .replaceAll("`", "")
+                            .trim();
+                    }
                     reportService.generateInvoicePDF(items, bill.totalProperty().get(),
-                            bill.customerNameProperty().get(), file.getAbsolutePath());
+                            bill.customerNameProperty().get(), file.getAbsolutePath(), storedProtocol);
                     showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved.");
                 } catch (Exception ex) {
                     showAlert(Alert.AlertType.ERROR, "Error", "Failed to save PDF: " + ex.getMessage());
@@ -533,7 +542,27 @@ public class DashboardController {
             }
         });
 
-        javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10, btnDownload);
+        Button btnDownloadReceipt = new Button("Download Receipt");
+        btnDownloadReceipt.getStyleClass().add("button-secondary");
+        btnDownloadReceipt.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Save Receipt PDF");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+            fileChooser.setInitialFileName("Receipt_" + bill.getBillId() + ".pdf");
+            File file = fileChooser.showSaveDialog(dialog.getOwner());
+
+            if (file != null) {
+                try {
+                    reportService.generateReceiptPDF(items, bill.totalProperty().get(),
+                            bill.customerNameProperty().get(), file.getAbsolutePath());
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Receipt saved.");
+                } catch (Exception ex) {
+                    showAlert(Alert.AlertType.ERROR, "Error", "Failed to save Receipt: " + ex.getMessage());
+                }
+            }
+        });
+
+        javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10, btnDownloadReceipt, btnDownload);
         buttonBox.setAlignment(Pos.CENTER_RIGHT);
         buttonBox.setPadding(new javafx.geometry.Insets(10, 0, 0, 0));
 
@@ -656,81 +685,7 @@ public class DashboardController {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // EXPENSES (programmatic tab)
-    // ══════════════════════════════════════════════════════════════
 
-    private void setupExpenseTab() {
-        Tab expenseTab = new Tab("Expenses");
-        expenseTab.setClosable(false);
-
-        VBox content = new VBox(10);
-        content.setPadding(new javafx.geometry.Insets(15));
-
-        Button btnAdd = new Button("Record New Expense");
-        btnAdd.setOnAction(e -> handleAddExpense());
-
-        Label lblMonthly = new Label("Monthly Expenses: calculating...");
-
-        content.getChildren().addAll(new Label("Expense Manager"), btnAdd, lblMonthly);
-
-        expenseTab.setContent(content);
-        mainTabPane.getTabs().add(expenseTab);
-    }
-
-    private void handleAddExpense() {
-        Dialog<Expense> dialog = new Dialog<>();
-        dialog.setTitle("Add Expense");
-        dialog.setHeaderText("Record a new shop expense");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
-
-        TextField category = new TextField();
-        category.setPromptText("Rent, Salary, etc.");
-        TextField amount = new TextField();
-        amount.setPromptText("0.00");
-        TextField description = new TextField();
-        description.setPromptText("Optional details");
-
-        grid.add(new Label("Category:"), 0, 0);
-        grid.add(category, 1, 0);
-        grid.add(new Label("Amount:"), 0, 1);
-        grid.add(amount, 1, 1);
-        grid.add(new Label("Description:"), 0, 2);
-        grid.add(description, 1, 2);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                try {
-                    return new Expense(0, category.getText(), Double.parseDouble(amount.getText()),
-                            LocalDate.now().toString(), description.getText());
-                } catch (NumberFormatException e) {
-                    return null;
-                }
-            }
-            return null;
-        });
-
-        java.util.Optional<Expense> result = dialog.showAndWait();
-        result.ifPresent(exp -> {
-            try {
-                expenseDAO.addExpense(exp.getCategory(), exp.getAmount(), exp.getDate(), exp.getDescription());
-                DashboardKpiService.invalidateExpenseMetrics();
-                loadDashboard();
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Expense added.");
-            } catch (SQLException e) {
-                showAlert(Alert.AlertType.ERROR, "Error", "Failed to save expense.");
-            }
-        });
-    }
 
     // ══════════════════════════════════════════════════════════════
     // UTILS

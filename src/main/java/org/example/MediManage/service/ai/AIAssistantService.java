@@ -53,10 +53,10 @@ public class AIAssistantService {
     // ======================== REPORTS ANALYSIS ========================
 
     /**
-     * Generate an AI summary of sales report data.
+     * Generate an AI summary of sales report data and care assistance trends.
      */
-    public CompletableFuture<String> generateReportSummary(Map<String, Double> salesData, double totalRevenue) {
-        String prompt = AIPromptCatalog.salesSummaryPrompt(salesData, totalRevenue);
+    public CompletableFuture<String> generateReportSummary(Map<String, Double> salesData, double totalRevenue, Map<String, Integer> topItems) {
+        String prompt = AIPromptCatalog.salesSummaryPrompt(salesData, totalRevenue, topItems);
         return orchestrator.processQuery(prompt, false, false);
     }
 

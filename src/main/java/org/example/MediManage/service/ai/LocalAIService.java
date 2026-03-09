@@ -115,6 +115,33 @@ public class LocalAIService implements AIService {
         }
     }
 
+    // ======================== ENGINE CONFIGURATION ========================
+
+    public void updateConfig(String hfToken) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("hf_token", hfToken);
+
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/update_config"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        if (response.statusCode() == 200) {
+                            System.out.println("AI Engine config updated.");
+                        } else {
+                            System.err.println("Failed to update AI Engine config: " + response.body());
+                        }
+                    });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     // ======================== CHAT ========================
 
     @Override
@@ -376,5 +403,17 @@ public class LocalAIService implements AIService {
     @Override
     public String getProviderName() {
         return "Local AI (Python Engine)";
+    }
+
+    public void cancelGeneration() {
+        try {
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/cancel_chat"))
+                    .POST(HttpRequest.BodyPublishers.noBody());
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            client.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.discarding());
+        } catch (Exception e) {
+            System.err.println("Failed to send cancel signal to Local AI: " + e.getMessage());
+        }
     }
 }

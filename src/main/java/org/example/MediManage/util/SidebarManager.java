@@ -26,6 +26,8 @@ public class SidebarManager {
                     addButton(container, "\ud83d\udc64 Users", "users-view", switcher);
                     addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
                     addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
+                    addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
+                    addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
                     addButton(container, "\ud83d\udcc8 Reports", "reports-view", switcher);
                     addButton(container, "\ud83d\udd50 Attendance", "attendance-view", switcher);
                     addButton(container, "\ud83d\udcb3 Billing", "billing-view", switcher);
@@ -35,6 +37,8 @@ public class SidebarManager {
                 case MANAGER:
                     addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
                     addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
+                    addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
+                    addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
                     addButton(container, "\ud83d\udcc8 Reports", "reports-view", switcher);
                     addButton(container, "\ud83d\udd50 Attendance", "attendance-view", switcher);
                     addButton(container, "\u2699 Settings", "settings-view", switcher);

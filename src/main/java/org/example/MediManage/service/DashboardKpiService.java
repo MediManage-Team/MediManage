@@ -40,6 +40,7 @@ public class DashboardKpiService {
     private final Object lock = new Object();
     private double cachedDailySales;
     private long dailySalesCachedAt;
+    private double cachedMonthlyGrossProfit;
     private double cachedMonthlyExpenses;
     private long monthlyExpensesCachedAt;
     private int cachedPendingRxCount;
@@ -71,11 +72,12 @@ public class DashboardKpiService {
     public DashboardKpis getDashboardKpis(Collection<Medicine> inventorySnapshot) {
         double sales = getDailySales();
         double expenses = getMonthlyExpenses();
+        double grossProfit = getMonthlyGrossProfit();
         int pendingRx = getPendingRxCount();
         long lowStockCount = countLowStock(inventorySnapshot);
         ExpiryBuckets expiryBuckets = countExpiryBuckets(inventorySnapshot);
         refreshDailyBillStats();
-        double netProfit = (sales * 0.2) - expenses;
+        double netProfit = grossProfit - expenses;
         double avgMargin = computeAvgProfitMargin(inventorySnapshot);
         return new DashboardKpis(
                 sales,
@@ -120,6 +122,18 @@ public class DashboardKpiService {
         }
     }
 
+    private double getMonthlyGrossProfit() {
+        long now = System.currentTimeMillis();
+        synchronized (lock) {
+            if (!isExpired(monthlyExpensesCachedAt, now)) {
+                return cachedMonthlyGrossProfit;
+            }
+            cachedMonthlyGrossProfit = billDAO.getMonthlyGrossProfit();
+            // Sharing cache TTL with monthly expenses for simplicity and sync
+            return cachedMonthlyGrossProfit;
+        }
+    }
+
     private double getMonthlyExpenses() {
         long now = System.currentTimeMillis();
         synchronized (lock) {
@@ -127,6 +141,7 @@ public class DashboardKpiService {
                 return cachedMonthlyExpenses;
             }
             cachedMonthlyExpenses = expenseDAO.getMonthlyExpenses();
+            cachedMonthlyGrossProfit = billDAO.getMonthlyGrossProfit(); // refresh parallel metric
             monthlyExpensesCachedAt = now;
             return cachedMonthlyExpenses;
         }

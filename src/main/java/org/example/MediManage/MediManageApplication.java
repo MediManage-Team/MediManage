@@ -164,33 +164,11 @@ public class MediManageApplication extends Application {
                                                         "🔑 HF_TOKEN provided — authenticated HuggingFace downloads enabled.");
                                 }
 
-                                // Pass database config to Python AI engine
-                                String dbBackend = prefs.get(
-                                                org.example.MediManage.config.DatabaseConfig.PREF_DB_BACKEND,
-                                                "sqlite");
-                                pb.environment().put("MEDIMANAGE_DB_BACKEND", dbBackend);
-                                if ("postgresql".equals(dbBackend)) {
-                                        pb.environment().put("MEDIMANAGE_PG_HOST",
-                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_HOST,
-                                                                        "localhost"));
-                                        pb.environment().put("MEDIMANAGE_PG_PORT",
-                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_PORT,
-                                                                        "5432"));
-                                        pb.environment().put("MEDIMANAGE_PG_DATABASE",
-                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_DATABASE,
-                                                                        "medimanage"));
-                                        pb.environment().put("MEDIMANAGE_PG_USER",
-                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_USER,
-                                                                        "postgres"));
-                                        pb.environment().put("MEDIMANAGE_PG_PASSWORD",
-                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_PG_PASSWORD,
-                                                                        ""));
-                                } else {
-                                        pb.environment().put("MEDIMANAGE_DB_PATH",
-                                                        prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_DB_PATH,
-                                                                        System.getProperty("user.dir")
-                                                                                        + "/medimanage.db"));
-                                }
+                                pb.environment().put("MEDIMANAGE_DB_BACKEND", "sqlite");
+                                pb.environment().put("MEDIMANAGE_DB_PATH",
+                                                prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_DB_PATH,
+                                                                System.getProperty("user.dir")
+                                                                                + "/medimanage.db"));
 
                                 pythonProcess = pb.start();
 

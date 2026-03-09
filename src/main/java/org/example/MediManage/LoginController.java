@@ -2,7 +2,7 @@ package org.example.MediManage;
 
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.scene.Parent;
+
 import javafx.scene.Scene;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -15,7 +15,7 @@ import org.example.MediManage.model.UserRole;
 import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.util.UserSession;
 
-import java.util.Objects;
+
 
 public class LoginController {
 
@@ -145,19 +145,5 @@ public class LoginController {
         password.setDisable(false);
     }
 
-    private void openDashboard() {
-        try {
-            Parent root = FXMLLoader.load(
-                    Objects.requireNonNull(getClass().getResource(
-                            "/org/example/MediManage/dashboard-view.fxml")));
 
-            Stage stage = (Stage) username.getScene().getWindow();
-            stage.setScene(new Scene(root));
-            stage.setTitle("Dashboard");
-            stage.show();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 }

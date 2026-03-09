@@ -22,11 +22,9 @@ public class DatabaseUtil {
 
     public static void initDB() throws SQLException {
         try (Connection conn = getConnection()) {
-            if (DatabaseConfig.isSqlite(conn)) {
-                // Ensure SQLite FK checks are on for each new connection.
-                try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("PRAGMA foreign_keys = ON;");
-                }
+            // Ensure SQLite FK checks are on for each new connection.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA foreign_keys = ON;");
             }
 
             System.out.println("✅ Connected to Database successfully");
@@ -41,10 +39,8 @@ public class DatabaseUtil {
 
     public static void initDB(DatabaseConfig.ConnectionSettings settings) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection(settings)) {
-            if (DatabaseConfig.isSqlite(conn)) {
-                try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("PRAGMA foreign_keys = ON;");
-                }
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA foreign_keys = ON;");
             }
 
             System.out.println("✅ Connected to Database successfully");
@@ -150,7 +146,7 @@ public class DatabaseUtil {
     }
 
     private static String resolveSchemaResource(Connection conn) throws SQLException {
-        return DatabaseConfig.isPostgreSql(conn) ? "/db/schema_postgresql.sql" : "/db/schema.sql";
+        return "/db/schema.sql";
     }
 
     private static boolean shouldSkipAlterAddColumn(Connection conn, String sql) throws SQLException {

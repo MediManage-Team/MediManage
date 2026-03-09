@@ -53,9 +53,12 @@ class AIInferenceEngine:
     def __init__(self):
         self.model = None
         self.tokenizer = None
-        self.provider = None
-        self.framework = None
-        self._current_model_path = None
+        self.provider = ""
+        self.framework = ""
+        self._current_model_path = ""
+        self.session = None
+        self.gen_params = None
+        self.cancel_flag = False
         # Performance tracking
         self._last_tokens_generated = 0
         self._last_generation_time = 0.0
@@ -150,7 +153,7 @@ class AIInferenceEngine:
             self.framework = "genai"
             # Resolve to the actual subdirectory containing genai_config.json
             model_path = self._find_genai_model_path(model_path, hardware_config)
-            self._current_model_path = model_path
+            self._current_model_path = str(model_path)
         elif model_path.endswith(".onnx") or os.path.isdir(model_path):
             self.framework = "onnx_standard"
         else:
@@ -171,7 +174,7 @@ class AIInferenceEngine:
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            self._current_model_path = None
+            self._current_model_path = ""
             raise e
 
     def _load_gguf(self, model_path, hardware_config):
@@ -272,10 +275,10 @@ class AIInferenceEngine:
 
         self.tokenizer = og.Tokenizer(self.model)
         self.provider = f"GenAI:{ep}"
-        logger.info(f"Model device type: {self.model.device_type}")
+        logger.info(f"Model device type: {getattr(self.model, 'device_type', 'unknown')}")
 
         self.gen_params = og.GeneratorParams(self.model)
-        self.gen_params.set_search_options(do_sample=False)
+        self.gen_params.set_search_options(do_sample=False)  # type: ignore
 
 
     def _load_onnx_standard(self, model_path, hardware_config):
@@ -291,7 +294,7 @@ class AIInferenceEngine:
         providers.append("CPUExecutionProvider")
 
         self.session = ort.InferenceSession(model_path, providers=providers)
-        self.provider = self.session.get_providers()[0]
+        self.provider = self.session.get_providers()[0]  # type: ignore
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(os.path.dirname(model_path))
@@ -316,7 +319,7 @@ class AIInferenceEngine:
         Returns formatted context string, or empty string if no relevant data.
         """
         q = query.lower()
-        results = []
+        results: list[str] = list()
         ph = placeholder()  # '?' for SQLite, '%s' for PostgreSQL
 
         try:
@@ -485,6 +488,7 @@ class AIInferenceEngine:
 
     def generate(self, prompt, max_tokens=2000, use_search=False):
         """Runs inference using the loaded model. Tracks performance metrics."""
+        self.cancel_flag = False
         context = ""
         system_prompt = ""
 
@@ -526,16 +530,23 @@ class AIInferenceEngine:
 
             # --- GGUF / BitNet / llama.cpp Inference ---
             if self.framework == "gguf":
-                response = self.model.create_completion(
+                response_stream = self.model.create_completion(
                     full_prompt,
                     max_tokens=max_tokens,
                     temperature=0.7,
                     top_p=0.9,
-                    stop=["User:", "\n\n"]
+                    stop=["User:", "\n\n"],
+                    stream=True
                 )
-                result_text = response["choices"][0]["text"].strip()
-                # Estimate token count from response
-                tokens_generated = len(result_text.split()) * 4 // 3
+                for chunk in response_stream:
+                    if getattr(self, "cancel_flag", False):
+                        logger.info("GGUF Inference cancelled mid-thought.")
+                        break
+                    text_chunk = chunk["choices"][0].get("text", "")
+                    result_text += text_chunk
+                    tokens_generated += 1
+                
+                result_text = result_text.strip()
 
             # --- GenAI Inference (CUDA / CPU) ---
             elif self.framework == "genai":
@@ -552,6 +563,9 @@ class AIInferenceEngine:
                 generator = og.Generator(self.model, params)
                 generator.append_tokens(input_ids)
                 while not generator.is_done():
+                    if getattr(self, "cancel_flag", False):
+                        logger.info("Inference cancelled mid-thought.")
+                        break
                     generator.generate_next_token()
                     tokens_generated += 1
                 output_ids = generator.get_sequence(0)
@@ -572,11 +586,11 @@ class AIInferenceEngine:
             # --- Track performance ---
             gen_elapsed = time.time() - gen_start
             tok_per_sec = tokens_generated / gen_elapsed if gen_elapsed > 0 else 0
-            self._last_tokens_generated = tokens_generated
-            self._last_generation_time = gen_elapsed
-            self._last_tokens_per_sec = tok_per_sec
-            self._total_tokens_generated += tokens_generated
-            self._total_generation_time += gen_elapsed
+            self._last_tokens_generated = int(tokens_generated)  # type: ignore
+            self._last_generation_time = float(gen_elapsed)
+            self._last_tokens_per_sec = float(tok_per_sec)  # type: ignore
+            self._total_tokens_generated = self._total_tokens_generated + int(tokens_generated)  # type: ignore
+            self._total_generation_time += float(gen_elapsed)
             logger.info(f"Generated {tokens_generated} tokens in {gen_elapsed:.2f}s "
                         f"({tok_per_sec:.1f} tok/s) on {self.provider}")
 
@@ -641,15 +655,15 @@ def get_model_info(model_path):
 
     if os.path.isdir(model_path):
         # Calculate total size
-        total_size = 0
+        total_size: float = 0.0
         all_files = []
         for root, dirs, files in os.walk(model_path):
             for f in files:
                 fp = os.path.join(root, f)
-                total_size += os.path.getsize(fp)
+                total_size = float(total_size) + float(os.path.getsize(fp))  # type: ignore
                 all_files.append(f)
 
-        info["size_mb"] = round(total_size / 1024 / 1024, 2)
+        info["size_mb"] = round(total_size / 1024 / 1024, 2)  # type: ignore
 
         # Detect format by file contents
         if "genai_config.json" in all_files:
@@ -664,7 +678,7 @@ def get_model_info(model_path):
             info["format"] = "HuggingFace"
 
     elif os.path.isfile(model_path):
-        info["size_mb"] = round(os.path.getsize(model_path) / 1024 / 1024, 2)
+        info["size_mb"] = round(float(os.path.getsize(model_path)) / 1024 / 1024, 2)  # type: ignore
         ext = os.path.splitext(model_path)[1].lower()
         format_map = {".xml": "ONNX", ".onnx": "ONNX", ".gguf": "GGUF"}
         info["format"] = format_map.get(ext, "unknown")

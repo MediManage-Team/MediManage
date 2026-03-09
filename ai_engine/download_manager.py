@@ -86,8 +86,8 @@ class DownloadProgress:
 
         self._callback({
             "status": "downloading",
-            "percent": round(pct, 1),
-            "message": f"{round(pct, 1)}%  •  {size_str}{file_str}  •  {speed_str}  •  ETA: {eta_str}",
+            "percent": round(float(pct), 1),
+            "message": f"{round(float(pct), 1)}%  •  {size_str}{file_str}  •  {speed_str}  •  ETA: {eta_str}",
             "speed": speed_str
         })
 
@@ -126,11 +126,17 @@ def download_hf_model(repo_id, filename, local_dir, progress_callback):
     if unknown_sizes:
         progress_callback({"status": "downloading", "percent": 0,
                           "message": f"Resolving file sizes ({len(unknown_sizes)} files)...", "speed": ""})
+                          
+        hf_token = os.environ.get("HF_TOKEN", "").strip()
+        headers = {}
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+            
         for f in unknown_sizes:
             _check_cancel()
             try:
                 head_url = f"https://huggingface.co/{repo_id}/resolve/main/{f['filename']}"
-                head_resp = requests.head(head_url, allow_redirects=True, timeout=10)
+                head_resp = requests.head(head_url, headers=headers, allow_redirects=True, timeout=10)
                 cl = int(head_resp.headers.get("content-length", 0))
                 if cl > 0:
                     f["size"] = cl
@@ -156,7 +162,7 @@ def download_hf_model(repo_id, filename, local_dir, progress_callback):
     if small_files:
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
-                executor.submit(_download_single_file, repo_id, f, target_dir, progress): f
+                executor.submit(_download_single_file, repo_id, f, target_dir, progress): f  # type: ignore
                 for f in small_files
             }
             for future in as_completed(futures):
@@ -175,8 +181,13 @@ def _hf_list_files(repo_id, pattern=""):
     """Get file list with sizes from HuggingFace API."""
     api_url = f"https://huggingface.co/api/models/{repo_id}"
 
+    hf_token = os.environ.get("HF_TOKEN", "").strip()
+    headers = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+
     try:
-        resp = requests.get(api_url, timeout=15)
+        resp = requests.get(api_url, headers=headers, timeout=15)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
@@ -232,12 +243,26 @@ def _download_single_file(repo_id, file_info, target_dir, progress):
     url = f"https://huggingface.co/{repo_id}/resolve/main/{filename}"
 
     headers = {}
+    hf_token = os.environ.get("HF_TOKEN", "").strip()
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+        
     if existing_size > 0:
         headers["Range"] = f"bytes={existing_size}-"
 
     try:
         resp = requests.get(url, stream=True, timeout=30, headers=headers, allow_redirects=True)
         resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 416 and existing_size > 0:
+            logger.warning(f"  ⚠ 416 Range Not Satisfiable for {filename}. Retrying full download.")
+            headers.pop("Range", None)
+            existing_size = 0
+            resp = requests.get(url, stream=True, timeout=30, headers=headers, allow_redirects=True)
+            resp.raise_for_status()
+        else:
+            logger.error(f"  ✗ Failed to download {filename}: {e}")
+            raise
     except Exception as e:
         logger.error(f"  ✗ Failed to download {filename}: {e}")
         raise
@@ -260,7 +285,7 @@ def _download_single_file(repo_id, file_info, target_dir, progress):
             _check_cancel()
             if chunk:
                 f.write(chunk)
-                progress.update(len(chunk), filename)
+                progress.update(len(chunk), filename)  # type: ignore
 
     progress.file_done()
     logger.info(f"  ✓ {filename} ({file_info['size'] / 1024 / 1024:.1f} MB)")
@@ -358,7 +383,7 @@ def download_ollama_model(model_name, local_dir, progress_callback):
                 _check_cancel()
                 if chunk:
                     f.write(chunk)
-                    progress.update(len(chunk), out_filename)
+                    progress.update(len(chunk), out_filename)  # type: ignore
 
         progress.file_done()
         logger.info(f"  ✓ {out_filename} ({layer_size / 1024 / 1024:.1f} MB)")
@@ -389,7 +414,7 @@ def download_direct_url(url, local_dir, progress_callback):
             _check_cancel()
             if chunk:
                 f.write(chunk)
-                progress.update(len(chunk), filename)
+                progress.update(len(chunk), filename)  # type: ignore
 
     progress.file_done()
     return filepath

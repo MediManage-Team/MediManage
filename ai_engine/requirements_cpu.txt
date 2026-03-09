@@ -9,9 +9,11 @@ tqdm
 huggingface_hub
 transformers
 duckduckgo-search
+mcp[cli]
 
 # Database — PostgreSQL support (optional)
 psycopg2-binary
 
 # CPU inference — llama.cpp Python bindings
 llama-cpp-python
+onnxruntime_genai

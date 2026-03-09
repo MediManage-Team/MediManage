@@ -67,6 +67,14 @@ get_reorder_needed()                # Medicines below reorder threshold
 ### CSV Export on Dashboard
 - Add "Export CSV" button alongside existing "Export Excel"
 
+### Patient Care Assistance Insights
+- Greatly expand the AI `salesSummaryPrompt` to generate detailed, multi-paragraph Care Protocols, Dietary Advice, and Pharmacist Alerts based on recent sales.
+- Enlarge the `txtAISummary` UI container in `reports-view.fxml` so the generated clinic reports are fully readable without excessive scrolling.
+
+### Digital Invoices & Instructions
+- Add functionality to send digital invoices via WhatsApp and Email directly from the billing screen.
+- Include instructions on the usage of medicines (dosage, timing, care protocols) directly within the WhatsApp/Email messages.
+
 ---
 
 ## 🔵 Architecture Ideas

@@ -114,6 +114,32 @@ public class ReportService {
         generateInvoicePDF(items, totalAmount, customerName, filePath, ""); // Overload for backward compatibility
     }
 
+    public void generateReceiptPDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
+            throws JRException {
+        // Load Template
+        InputStream reportStream = getClass().getResourceAsStream("/reports/receipt.jrxml");
+        if (reportStream == null) {
+            throw new JRException("Receipt template not found!");
+        }
+
+        // Compile Report
+        JasperReport jasperReport = JasperCompileManager.compileReport(reportStream);
+
+        // Parameters
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("CustomerName", customerName);
+        parameters.put("TotalAmount", totalAmount);
+
+        // Data Source
+        JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
+
+        // Fill Report
+        JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
+
+        // Export to PDF
+        JasperExportManager.exportReportToPdfFile(jasperPrint, filePath);
+    }
+
     public void exportInventoryToExcel(List<Medicine> medicines, String filePath) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Inventory");

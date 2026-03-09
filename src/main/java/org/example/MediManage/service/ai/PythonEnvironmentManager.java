@@ -21,10 +21,12 @@ public class PythonEnvironmentManager {
     /** Available environment names */
     public static final String ENV_CPU = "cpu";
     public static final String ENV_GPU = "gpu";
+    public static final String ENV_BASE = "base";
 
-    public static final String[] ALL_ENVS = { ENV_CPU, ENV_GPU };
+    public static final String[] ALL_ENVS = { ENV_BASE, ENV_CPU, ENV_GPU };
 
     public static final Map<String, String> ENV_LABELS = Map.of(
+            ENV_BASE, "Cloud Only (Base)",
             ENV_CPU, "CPU (BitNet.cpp / llama.cpp)",
             ENV_GPU, "NVIDIA GPU (CUDA)");
 
@@ -148,17 +150,17 @@ public class PythonEnvironmentManager {
         return ENV_LABELS.getOrDefault(activeEnv, activeEnv);
     }
 
-    /**
-     * Map a hardware backend string to an environment name.
-     * "cuda" → "gpu", "directml" → "gpu", "cpu" → "cpu"
-     */
     public static String mapBackendToEnv(String backend) {
         if (backend == null)
             return ENV_CPU;
         switch (backend.toLowerCase()) {
             case "cuda":
+            case "gpu":
             case "directml":
                 return ENV_GPU;
+            case "cloud only (base)":
+            case "base":
+                return ENV_BASE;
             default:
                 return ENV_CPU;
         }
@@ -337,7 +339,7 @@ public class PythonEnvironmentManager {
         }
     }
 
-    private void writeDepTimestamp(String envName) {
+    private void writeDepTimestamp(String envName) {
         try {
             Path markerFile = getEnvPath(envName).resolve(".deps_installed");
             Files.writeString(markerFile, String.valueOf(System.currentTimeMillis()));
@@ -346,28 +348,6 @@ public class PythonEnvironmentManager {
     }
 
     // ======================== UTILITIES ========================
-
-    public boolean deleteEnvironment(String envName) {
-        Path envPath = getEnvPath(envName);
-        if (!Files.exists(envPath))
-            return false;
-
-        try {
-            // conda remove -p {path} --all -y (better than file deletion for cleanup)
-            // But if conda exe is not easily available here without checking,
-            // maybe manual delete is fine for local envs (since they are isolated -p).
-            // Let's try recursive delete.
-            Files.walk(envPath)
-                    .sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .forEach(File::delete);
-            log("🗑️ Environment '" + envName + "' deleted.");
-            return true;
-        } catch (Exception e) {
-            log("❌ Failed to delete environment: " + e.getMessage());
-            return false;
-        }
-    }
 
     private boolean isDevMode() {
         return Files.exists(Paths.get("ai_engine", "server.py"));
@@ -385,5 +365,35 @@ public class PythonEnvironmentManager {
     private void checkCancelled() throws InterruptedException {
         if (cancelled)
             throw new InterruptedException("Operation cancelled.");
+    }
+
+    private void deleteDirRecursively(File file) {
+        if (file.isDirectory()) {
+            File[] entries = file.listFiles();
+            if (entries != null) {
+                for (File entry : entries) {
+                    deleteDirRecursively(entry);
+                }
+            }
+        }
+        file.delete();
+    }
+
+    public boolean deleteEnvironment(String envName) {
+        try {
+            Path envPath = getEnvPath(envName);
+            if (Files.exists(envPath)) {
+                deleteDirRecursively(envPath.toFile());
+                log("🗑️ Deleted environment: " + envName);
+            }
+            return true;
+        } catch (Exception e) {
+            log("❌ Failed to delete environment " + envName + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<Map<String, Object>> getEnvironmentMetadata() {
+        return listEnvironments();
     }
 }

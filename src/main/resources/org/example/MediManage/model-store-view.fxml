@@ -24,7 +24,7 @@
                         <TextField fx:id="searchField" promptText="Search models by name, repo, hardware, or format..." HBox.hgrow="ALWAYS"/>
                         <Button text="Search" onAction="#handleSearch" styleClass="button-primary"/>
                     </HBox>
-                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: transparent; -fx-background-color: transparent;">
                         <VBox fx:id="modelsContainer" spacing="20" style="-fx-padding: 5;"/>
                     </ScrollPane>
                 </VBox>
@@ -40,7 +40,7 @@
                         <Button text="Refresh" onAction="#handleRefreshInstalled" styleClass="button-primary"/>
                         <Button text="Open Folder" onAction="#handleOpenModelsFolder" styleClass="button-outlined"/>
                     </HBox>
-                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: transparent; -fx-background-color: transparent;">
                         <VBox fx:id="installedModelsContainer" spacing="10" style="-fx-padding: 5;"/>
                     </ScrollPane>
                 </VBox>
