@@ -71,9 +71,21 @@ get_reorder_needed()                # Medicines below reorder threshold
 - Greatly expand the AI `salesSummaryPrompt` to generate detailed, multi-paragraph Care Protocols, Dietary Advice, and Pharmacist Alerts based on recent sales.
 - Enlarge the `txtAISummary` UI container in `reports-view.fxml` so the generated clinic reports are fully readable without excessive scrolling.
 
+#### Implementation Steps:
+1. **Modify `AIPromptCatalog.java`**: Update the `salesSummaryPrompt` template string. Instruct the LLM to output at least 3-4 comprehensive sentences per section, covering "Public Health Trend", "Care Assistance Advice", and "Inventory Recommendations". Emphasize clinical accuracy.
+2. **Update `reports-view.fxml`**: Increase the `minHeight` setting of the `txtAISummary` TextArea from `200` to `400` pixels.
+3. **Validate**: Run `mvn clean compile javafx:run`, navigate to the Reports tab, and generate a new summary to verify the enlarged UI and the rich text response.
+
 ### Digital Invoices & Instructions
 - Add functionality to send digital invoices via WhatsApp and Email directly from the billing screen.
 - Include instructions on the usage of medicines (dosage, timing, care protocols) directly within the WhatsApp/Email messages.
+
+#### Implementation Steps:
+1. **Email Integration**: Add `javax.mail` dependency to `pom.xml`. Create `EmailService.java` to format the invoice details into an HTML email template, attaching a PDF generated from JasperReports.
+2. **WhatsApp Integration**: Use a cloud API (Twilio or WhatsApp Business API) in a new `WhatsAppService.java` to send text-based invoice summaries and a download link.
+3. **Usage Instructions**: Query the `AIAssistantService` for a concise patient care protocol based on the `billItems` being sold, and append this block of instructions into the message body.
+4. **UI Updates (`billing-view.fxml`)**: Add "Email Invoice" and "WhatsApp Invoice" buttons in the checkout/success modal.
+5. **Controller Logic**: Bind the buttons to their respective service methods, prompting the user for an email address or phone number if not already present in the customer record.
 
 ---
 
