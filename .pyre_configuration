@@ -1,8 +1,0 @@
-{
-  "source_directories": ["."],
-  "search_path": [
-    "ai_engine/.venv_gpu/Lib/site-packages",
-    "ai_engine/envs/gpu/Lib/site-packages",
-    "ai_engine/envs/cpu/Lib/site-packages"
-  ]
-}
