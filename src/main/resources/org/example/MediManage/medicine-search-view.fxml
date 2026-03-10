@@ -7,12 +7,12 @@
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.MedicineSearchController">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.MedicineSearchController">
 
     <top>
         <VBox spacing="10" styleClass="card" style="-fx-background-radius: 0;">
             <Label text="Medicine Search" styleClass="page-title"/>
-            <TextField fx:id="txtSearch" promptText="Search by Name, Company, or Brand..." style="-fx-font-size: 14px; -fx-padding: 10;"/>
+            <TextField fx:id="txtSearch" promptText="Search by Name, Company, or Generic..." style="-fx-font-size: 14px; -fx-padding: 10;"/>
         </VBox>
     </top>
 
@@ -21,7 +21,7 @@
             <columns>
                 <TableColumn fx:id="colName" text="Medicine Name" prefWidth="200"/>
                 <TableColumn fx:id="colCompany" text="Company" prefWidth="150"/>
-                <TableColumn fx:id="colLocation" text="Loc" prefWidth="80"/>
+                <TableColumn fx:id="colLocation" text="Generic" prefWidth="120"/>
                 <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
                 <TableColumn fx:id="colExpiry" text="Expiry Date" prefWidth="100"/>
             </columns>
@@ -50,7 +50,7 @@
             <VBox spacing="5">
                 <Label text="Clinical Info" styleClass="text-muted"/>
                 <Label fx:id="lblDetailGeneric" text="Generic: -" wrapText="true"/>
-                <Label fx:id="lblDetailSideEffects" text="Notes: -" wrapText="true"/>
+                <Label fx:id="lblDetailSideEffects" text="Status: -" wrapText="true"/>
             </VBox>
 
             <Region VBox.vgrow="ALWAYS"/>

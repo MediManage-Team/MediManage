@@ -29,10 +29,6 @@ public class BillItem {
         return expiry;
     }
 
-    public String getExpiry() {
-        return expiry.get();
-    }
-
     public IntegerProperty qtyProperty() {
         return qty;
     }
@@ -53,6 +49,14 @@ public class BillItem {
         return medicineId;
     }
 
+    public String getName() {
+        return name.get();
+    }
+
+    public String getExpiry() {
+        return expiry.get();
+    }
+
     public int getQty() {
         return qty.get();
     }
@@ -61,15 +65,14 @@ public class BillItem {
         return price.get();
     }
 
+    public double getGst() {
+        return gst.get();
+    }
+
     public double getTotal() {
         return total.get();
     }
 
-    public String getName() {
-        return name.get();
-    }
-
-    // Setters if needed for updates
     public void setQty(int q) {
         this.qty.set(q);
     }

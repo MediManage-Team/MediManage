@@ -6,7 +6,7 @@
 <?import javafx.scene.text.Font?>
 
 <StackPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.LoginController" style="-fx-background-color: transparent; -fx-padding: 30;" alignment="CENTER" prefWidth="500" prefHeight="400">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.LoginController" style="-fx-background-color: transparent; -fx-padding: 30;" alignment="CENTER" prefWidth="500" prefHeight="400">
 
     <VBox alignment="CENTER" spacing="20" styleClass="login-card">
 

@@ -8,7 +8,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 public class InventoryAIService {
 
@@ -28,11 +27,10 @@ public class InventoryAIService {
      * 2. Search DB for that generic.
      */
     public CompletableFuture<String> findSubstitutes(String brandName) {
-        String prompt = "What is the generic composition of the medicine '" + brandName + "'? " +
-                "Provide ONLY the generic name(s) in a comma-separated list. Do not accept any other text.";
+        org.json.JSONObject data = new org.json.JSONObject().put("brand_name", brandName);
 
         // Use AI to get generic name
-        return aiOrchestrator.processQuery(prompt, true, false) // Precision required for drug info
+        return aiOrchestrator.processOrchestration("generic_composition", data, "cloud_only", false) // Precision required for drug info
                 .thenApply(genericResponse -> {
                     // AI might return extra text, try to clean it or just use it as search keyword
                     // Simple heuristic: take the first line or comma separated values
@@ -87,14 +85,10 @@ public class InventoryAIService {
         sales.entrySet().stream().limit(50).forEach(entry -> context.append("- ").append(entry.getKey())
                 .append(": ").append(entry.getValue()).append(" units\n"));
 
-        String prompt = "Analyze the sales trends. " +
-                "1. Identify top-selling and slow-moving items.\n" +
-                "2. Suggest seasonal stock adjustments.\n" +
-                "3. Generate a 'To-Buy List' for the distributor with recommended quantities.";
+        org.json.JSONObject data = new org.json.JSONObject().put("sales_data", context.toString());
 
-        // Explicit: Local AI with RAG context (falls back to Cloud if local
-        // unavailable)
-        return aiOrchestrator.localQueryWithContext(prompt, context.toString());
+        // Explicit: Local AI with RAG context (falls back to Cloud if local unavailable)
+        return aiOrchestrator.processOrchestration("inventory_trend", data, "local_fallback", false);
     }
 
     /**
@@ -118,13 +112,12 @@ public class InventoryAIService {
                 .append(" | Stock: ").append(m.getStock())
                 .append(" | Price: ₹").append(m.getPrice()).append("\n"));
 
-        String prompt = "For these expiring medicines:\n" +
-                "1. Suggest discount strategies to clear stock before expiry.\n" +
-                "2. Provide chemical-specific disposal instructions for safety.\n" +
-                "3. Flag any controlled or hazardous substances requiring special handling.";
+        org.json.JSONObject data = new org.json.JSONObject()
+            .put("prompt", "Analyze expiring medicines and suggest medical disposal strategies")
+            .put("business_context", context.toString());
 
         // Combined: Local analyzes stock data → Cloud adds medical disposal precision
-        return aiOrchestrator.combinedQuery(prompt, context.toString());
+        return aiOrchestrator.processOrchestration("combined_analysis", data, "cloud_only", false);
     }
 
     /**
@@ -169,6 +162,10 @@ public class InventoryAIService {
                             .append(", Stock: ").append(m.getStock()).append(")\n"));
         }
 
-        return aiOrchestrator.localQueryWithContext(question, context.toString());
+        org.json.JSONObject data = new org.json.JSONObject()
+            .put("prompt", question)
+            .put("business_context", context.toString());
+
+        return aiOrchestrator.processOrchestration("raw_chat", data, "local_fallback", false);
     }
 }

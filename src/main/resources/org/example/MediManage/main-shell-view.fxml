@@ -9,7 +9,7 @@
 
 <BorderPane fx:id="mainLayout" prefHeight="600.0" prefWidth="900.0"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.MainShellController">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.MainShellController">
     <top>
         <HBox alignment="CENTER_LEFT" styleClass="header-bar" BorderPane.alignment="CENTER">
             <children>

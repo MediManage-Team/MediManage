@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox spacing="12" styleClass="dark-panel"
+    xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.AttendanceController">
+    <padding>
+        <Insets top="16" right="16" bottom="16" left="16"/>
+    </padding>
+
+    <Label text="🕐 Employee Attendance" styleClass="page-title"/>
+
+    <!-- Check-in / Check-out Toolbar -->
+    <HBox spacing="10" alignment="CENTER_LEFT" styleClass="billing-section">
+        <Label fx:id="lblStatus" text="Status: Not checked in" styleClass="label-strong"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button fx:id="btnCheckIn" text="✅ Check In" onAction="#handleCheckIn" styleClass="button-success" prefHeight="38"/>
+        <Button fx:id="btnCheckOut" text="🔴 Check Out" onAction="#handleCheckOut" styleClass="button-outlined" prefHeight="38"/>
+    </HBox>
+
+    <!-- Date Filter -->
+    <HBox spacing="10" alignment="CENTER_LEFT">
+        <Label text="Date:" styleClass="text-muted"/>
+        <DatePicker fx:id="datePicker"/>
+        <Button text="Load" onAction="#handleLoadDate" styleClass="button-primary"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="lblSummary" text="" styleClass="text-muted"/>
+    </HBox>
+
+    <!-- Attendance Table -->
+    <TableView fx:id="attendanceTable" VBox.vgrow="ALWAYS">
+        <columns>
+            <TableColumn fx:id="colUser" text="Employee" prefWidth="150"/>
+            <TableColumn fx:id="colRole" text="Role" prefWidth="100"/>
+            <TableColumn fx:id="colCheckIn" text="Check In" prefWidth="160"/>
+            <TableColumn fx:id="colCheckOut" text="Check Out" prefWidth="160"/>
+            <TableColumn fx:id="colHours" text="Hours" prefWidth="80"/>
+        </columns>
+        <columnResizePolicy>
+            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+        </columnResizePolicy>
+    </TableView>
+</VBox>

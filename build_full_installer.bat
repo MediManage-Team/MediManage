@@ -1,6 +1,28 @@
 @echo off
-set "JAVA_HOME=C:\Program Files\Java\jdk-25"
+setlocal
+
+if "%JAVA_HOME%"=="" (
+    for /f "delims=" %%D in ('dir /b /ad /o-n "C:\Program Files\Java\jdk-*" 2^>nul') do (
+        set "JAVA_HOME=C:\Program Files\Java\%%D"
+        goto :java_home_found
+    )
+)
+
+:java_home_found
+if "%JAVA_HOME%"=="" (
+    echo ERROR: JAVA_HOME is not set and no JDK was found under C:\Program Files\Java.
+    echo Please install JDK 21+ or set JAVA_HOME manually and re-run this script.
+    exit /b 1
+)
+
+if not exist "%JAVA_HOME%\bin\java.exe" (
+    echo ERROR: JAVA_HOME is not set to a valid JDK path.
+    echo Please set JAVA_HOME to JDK 21+ and re-run this script.
+    exit /b 1
+)
+
 set "PATH=%JAVA_HOME%\bin;%PATH%"
+echo Using JAVA_HOME=%JAVA_HOME%
 
 echo ==========================================
 echo 1. Cleaning and Building with Maven...

@@ -5,7 +5,7 @@
 <?import javafx.geometry.Insets?>
 
 <BorderPane xmlns="http://javafx.com/javafx"
-    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.ModelStoreController" prefHeight="650.0" prefWidth="900.0">
+    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.controller.ModelStoreController" prefHeight="650.0" prefWidth="900.0">
 
     <top>
         <VBox spacing="10" alignment="CENTER_LEFT" styleClass="card" style="-fx-background-radius: 0;">
@@ -21,10 +21,10 @@
             <Tab text="📥 Download Models">
                 <VBox spacing="15" style="-fx-padding: 15;">
                     <HBox spacing="10" alignment="CENTER_LEFT">
-                        <TextField fx:id="searchField" promptText="Search Hugging Face Models..." HBox.hgrow="ALWAYS"/>
+                        <TextField fx:id="searchField" promptText="Search models by name, repo, hardware, or format..." HBox.hgrow="ALWAYS"/>
                         <Button text="Search" onAction="#handleSearch" styleClass="button-primary"/>
                     </HBox>
-                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: transparent; -fx-background-color: transparent;">
                         <VBox fx:id="modelsContainer" spacing="20" style="-fx-padding: 5;"/>
                     </ScrollPane>
                 </VBox>
@@ -40,7 +40,7 @@
                         <Button text="Refresh" onAction="#handleRefreshInstalled" styleClass="button-primary"/>
                         <Button text="Open Folder" onAction="#handleOpenModelsFolder" styleClass="button-outlined"/>
                     </HBox>
-                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: transparent; -fx-background-color: transparent;">
                         <VBox fx:id="installedModelsContainer" spacing="10" style="-fx-padding: 5;"/>
                     </ScrollPane>
                 </VBox>

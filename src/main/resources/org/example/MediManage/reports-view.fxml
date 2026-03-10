@@ -5,52 +5,124 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox spacing="20"
-    xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.ReportsController" styleClass="dark-panel">
+<ScrollPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.ReportsController" fitToWidth="true" fitToHeight="true" pannable="true">
+    <content>
+        <VBox spacing="20" styleClass="dark-panel">
+            <padding>
+                <Insets top="20" right="20" bottom="20" left="20"/>
+            </padding>
 
-    <!-- Header -->
-    <HBox spacing="15" alignment="CENTER_LEFT" styleClass="card">
-        <Label text="Sales Reports" styleClass="page-title"/>
-        <Region HBox.hgrow="ALWAYS"/>
-        <Label text="From:"/>
-        <DatePicker fx:id="dateStart" prefWidth="120"/>
-        <Label text="To:"/>
-        <DatePicker fx:id="dateEnd" prefWidth="120"/>
-        <Button text="Generate Report" onAction="#handleGenerate" styleClass="button-primary"/>
-    </HBox>
-
-    <HBox spacing="20" VBox.vgrow="ALWAYS">
-        <!-- Summary Card -->
-        <VBox spacing="10" minWidth="250" styleClass="card">
-            <Label text="Total Revenue (Selected Period)" styleClass="text-muted"/>
-            <Label fx:id="lblTotalRevenue" text="₹ 0.00" styleClass="total-value"/>
-            <Separator/>
-            <Label text="Top Categories (Coming Soon)" styleClass="text-muted" style="-fx-font-style: italic;"/>
-        </VBox>
-
-        <!-- Chart -->
-        <VBox styleClass="card" HBox.hgrow="ALWAYS">
-            <Label text="Sales Trend" styleClass="section-title"/>
-            <LineChart fx:id="salesChart" title="Daily Sales">
-                <xAxis>
-                    <CategoryAxis fx:id="xAxis" label="Date"/>
-                </xAxis>
-                <yAxis>
-                    <NumberAxis fx:id="yAxis" label="Revenue (₹)"/>
-                </yAxis>
-            </LineChart>
-        </VBox>
-    </HBox>
-
-    <!-- AI Sales Analysis -->
-    <TitledPane text="🤖 AI Sales Analysis" expanded="false" animated="true" styleClass="card">
-        <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <Button fx:id="btnAISummary" text="✨ Analyze Sales with AI" onAction="#handleAISummary" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
-                <ProgressIndicator fx:id="spinnerSummary" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
+            <!-- Header -->
+            <HBox spacing="15" alignment="CENTER_LEFT" styleClass="card">
+                <Label text="Advanced Analytics" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="From:"/>
+                <DatePicker fx:id="dateStart" prefWidth="120"/>
+                <Label text="To:"/>
+                <DatePicker fx:id="dateEnd" prefWidth="120"/>
+                <Button text="Generate Report" onAction="#handleGenerate" styleClass="button-primary"/>
             </HBox>
-            <TextArea fx:id="txtAISummary" editable="false" wrapText="true" prefHeight="120" promptText="AI-generated sales insights will appear here..." styleClass="ai-panel-text"/>
+
+            <!-- KPI Cards Row -->
+            <HBox spacing="15">
+                <VBox styleClass="card kpi-card kpi-card-sales" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Total Revenue" styleClass="card-title text-muted"/>
+                    <Label fx:id="lblTotalRevenue" text="₹0.00" styleClass="card-value"/>
+                </VBox>
+                <VBox styleClass="card kpi-card kpi-card-profit" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Net Profit" styleClass="card-title text-muted"/>
+                    <Label fx:id="lblNetProfit" text="₹0.00" styleClass="card-value"/>
+                </VBox>
+                <VBox styleClass="card kpi-card" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Total Bills" styleClass="card-title text-muted"/>
+                    <Label fx:id="lblTotalBills" text="0" styleClass="card-value"/>
+                </VBox>
+                <VBox styleClass="card kpi-card" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Avg Order Value" styleClass="card-title text-muted"/>
+                    <Label fx:id="lblAvgOrderValue" text="₹0.00" styleClass="card-value"/>
+                </VBox>
+                <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Avg Margin" styleClass="card-title text-muted"/>
+                    <Label fx:id="lblAvgMargin" text="0.0%" styleClass="card-value"/>
+                </VBox>
+            </HBox>
+
+            <!-- Charts Row 1 (Trends & Distribution) -->
+            <HBox spacing="20" VBox.vgrow="ALWAYS" minHeight="300">
+                <!-- Line Chart: Revenue vs Profit -->
+                <VBox styleClass="card" HBox.hgrow="ALWAYS" prefWidth="600">
+                    <Label text="Revenue &amp; Profit Trend" styleClass="section-title"/>
+                    <LineChart fx:id="salesChart" VBox.vgrow="ALWAYS" createSymbols="true">
+                        <xAxis>
+                            <CategoryAxis fx:id="xAxis" label="Date"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis fx:id="yAxis" label="Amount (₹)"/>
+                        </yAxis>
+                    </LineChart>
+                </VBox>
+                <!-- Pie Chart: Payment Methods -->
+                <VBox styleClass="card" HBox.hgrow="ALWAYS" prefWidth="350">
+                    <Label text="Payment Methods" styleClass="section-title"/>
+                    <PieChart fx:id="paymentModesChart" VBox.vgrow="ALWAYS" legendSide="BOTTOM"/>
+                </VBox>
+            </HBox>
+
+            <!-- Charts Row 2 (Item Analytics) -->
+            <HBox spacing="20" VBox.vgrow="ALWAYS" minHeight="300">
+                <!-- Bar Chart: Top Items by Volume -->
+                <VBox styleClass="card" HBox.hgrow="ALWAYS" prefWidth="450">
+                    <Label text="Top 5 Sellers (Volume)" styleClass="section-title"/>
+                    <BarChart fx:id="topVolumeChart" VBox.vgrow="ALWAYS" legendVisible="false">
+                        <xAxis>
+                            <CategoryAxis label="Medicine"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis label="Units Sold"/>
+                        </yAxis>
+                    </BarChart>
+                </VBox>
+                <!-- Bar Chart: Top Items by Revenue -->
+                <VBox styleClass="card" HBox.hgrow="ALWAYS" prefWidth="450">
+                    <Label text="Top 5 Sellers (Revenue)" styleClass="section-title"/>
+                    <BarChart fx:id="topRevenueChart" VBox.vgrow="ALWAYS" legendVisible="false">
+                        <xAxis>
+                            <CategoryAxis label="Medicine"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis label="Revenue (₹)"/>
+                        </yAxis>
+                    </BarChart>
+                </VBox>
+            </HBox>
+
+            <!-- Data Table Row (Detailed Item Analytics) -->
+            <VBox styleClass="card" VBox.vgrow="ALWAYS" minHeight="300">
+                <Label text="Detailed Item Analytics" styleClass="section-title"/>
+                <TableView fx:id="itemTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                    <columns>
+                        <TableColumn fx:id="colItemName" text="Medicine Name" prefWidth="350"/>
+                        <TableColumn fx:id="colItemQty" text="Units Sold" prefWidth="150"/>
+                        <TableColumn fx:id="colItemRevenue" text="Total Revenue (₹)" prefWidth="150"/>
+                    </columns>
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                    </columnResizePolicy>
+                </TableView>
+            </VBox>
+
+            <!-- AI Sales Analysis -->
+            <TitledPane text="🤖 Patient Care Assistance Insights" expanded="true" animated="true" styleClass="card">
+                <VBox spacing="10" styleClass="content-pad-10 ai-panel">
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Button fx:id="btnAISummary" text="✨ Generate Care Assistance Report" onAction="#handleAISummary" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
+                        <ProgressIndicator fx:id="spinnerSummary" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
+                    </HBox>
+                    <TextArea fx:id="txtAISummary" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="AI-generated Patient Care Assistance insights will appear here..." styleClass="ai-panel-text" minHeight="400"/>
+                </VBox>
+            </TitledPane>
+
         </VBox>
-    </TitledPane>
-</VBox>
+    </content>
+</ScrollPane>

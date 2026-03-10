@@ -7,7 +7,7 @@
 
 <VBox spacing="10"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.InventoryController" styleClass="dark-panel">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.InventoryController" styleClass="dark-panel">
 
     <!-- Top Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT">
@@ -19,6 +19,13 @@
                 <FontIcon iconLiteral="fas-file-excel"/>
             </graphic>
         </Button>
+    </HBox>
+
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="lblPageInfo" text="Rows 0-0 of 0 (Page 1/1)"/>
+        <Button fx:id="btnPrevPage" text="Prev" onAction="#handlePrevPage"/>
+        <Button fx:id="btnNextPage" text="Next" onAction="#handleNextPage"/>
     </HBox>
 
     <SplitPane dividerPositions="0.7" VBox.vgrow="ALWAYS">
@@ -64,6 +71,16 @@
                         <TextField fx:id="txtStock" promptText="Qty"/>
                     </VBox>
                 </HBox>
+                <HBox spacing="10">
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="Cost Price (₹)"/>
+                        <TextField fx:id="txtPurchasePrice" promptText="0.00"/>
+                    </VBox>
+                    <VBox spacing="5" HBox.hgrow="ALWAYS">
+                        <Label text="Reorder Threshold"/>
+                        <TextField fx:id="txtReorderThreshold" promptText="10"/>
+                    </VBox>
+                </HBox>
 
                 <Region VBox.vgrow="ALWAYS"/>
 
@@ -75,7 +92,7 @@
 
                 <Separator/>
                 <TitledPane text="🤖 AI Restock Suggestions" expanded="false" animated="true">
-                    <VBox spacing="10" style="-fx-padding: 10;" styleClass="ai-panel">
+                    <VBox spacing="10" styleClass="content-pad-10 ai-panel">
                         <HBox spacing="10" alignment="CENTER_LEFT">
                             <Button fx:id="btnAIRestock" text="✨ Get AI Suggestions" onAction="#handleAIRestock" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
                             <ProgressIndicator fx:id="spinnerRestock" prefWidth="24" prefHeight="24" visible="false" managed="false"/>

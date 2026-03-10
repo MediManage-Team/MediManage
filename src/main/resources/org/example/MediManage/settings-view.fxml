@@ -2,25 +2,62 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
     <VBox spacing="20" styleClass="dark-panel">
         <Label text="System Settings" styleClass="page-title"/>
+
+        <!-- Database Configuration -->
+        <TitledPane text="Database Configuration" collapsible="false">
+            <VBox spacing="10">
+                <VBox spacing="6">
+                    <Label text="SQLite Database File" style="-fx-font-weight: bold;"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <TextField fx:id="sqlitePathField" promptText="Path to medimanage.db" HBox.hgrow="ALWAYS"/>
+                        <Button text="Browse" onAction="#handleBrowseDatabase"/>
+                    </HBox>
+                </VBox>
+
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
+                    <Button text="Test Database Connection" onAction="#handleTestDatabaseConnection" styleClass="button-outlined"/>
+                    <Button text="Save Database Settings" onAction="#handleSaveDatabase" styleClass="button-success"/>
+                </HBox>
+            </VBox>
+        </TitledPane>
 
         <!-- Local AI Configuration -->
         <TitledPane text="Local AI Configuration" collapsible="false">
             <VBox spacing="10">
                 <Button text="Download New Models (Model Store)" onAction="#handleOpenModelStore" styleClass="button-purple"/>
-                <Label text="Current Model Path: (.onnx or .xml)" style="-fx-font-weight: bold;"/>
+                <Label text="Current Model:" style="-fx-font-weight: bold;"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
-                    <TextField fx:id="modelPathField" promptText="Select local model file..." HBox.hgrow="ALWAYS"/>
-                    <Button text="Browse" onAction="#handleBrowseModel"/>
+                    <ComboBox fx:id="localModelCombo" promptText="Select local model..." HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button text="Browse" onAction="#handleBrowseModel" style="-fx-min-width: 80px;"/>
                 </HBox>
 
                 <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
                 <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
                 <Label text="Select 'Auto' to let the system decide, or force a specific provider." styleClass="text-muted"/>
+
+                <VBox fx:id="envContainer" spacing="8" style="-fx-padding: 10 0 0 0;">
+                    <!-- Environment cards dynamically injected here -->
+                </VBox>
+
+                <Separator/>
+
+                <Label text="HuggingFace Token (Optional — for faster downloads)" style="-fx-font-weight: bold;"/>
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <PasswordField fx:id="hfTokenField" promptText="hf_xxxxxxxxxxxxxxx" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button text="Test" onAction="#handleTestHfToken" styleClass="button-primary" style="-fx-min-width: 60;"/>
+                </HBox>
+                <Label text="Get a free token at: huggingface.co/settings/tokens" styleClass="text-muted" wrapText="true"/>
+
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
+                    <Button text="View Engine Logs" onAction="#handleViewEngineLogs" styleClass="button-outlined"/>
+                    <Button text="Save Local AI Settings" onAction="#handleSaveLocalAI" styleClass="button-success"/>
+                </HBox>
             </VBox>
         </TitledPane>
 
@@ -76,22 +113,63 @@
                 </GridPane>
 
                 <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
-                    <Button text="Save Settings" onAction="#handleSaveSettings" styleClass="button-success"/>
+                    <Button text="Save Cloud AI Settings" onAction="#handleSaveCloudAI" styleClass="button-success"/>
                 </HBox>
             </VBox>
         </TitledPane>
 
-        <TitledPane text="Python Environments" collapsible="false">
+        <!-- Communication Configuration -->
+        <TitledPane text="Communication Configuration" collapsible="false">
             <VBox spacing="10">
-                <Label text="Manage separate environments for each hardware backend." styleClass="text-muted"/>
-                <ScrollPane fitToWidth="true" style="-fx-max-height: 250px;">
-                    <VBox fx:id="envContainer" spacing="10" style="-fx-padding: 5;"/>
-                </ScrollPane>
-            </VBox>
-        </TitledPane>
+                <HBox spacing="20">
+                    <!-- Email Settings -->
+                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;">
+                        <Label text="Email Settings (SMTP)" style="-fx-font-weight: bold;"/>
+                        <Label text="Used for sending PDF Invoices." styleClass="text-muted" wrapText="true"/>
+                        
+                        <GridPane hgap="10" vgap="8">
+                            <Label text="SMTP Host:" GridPane.rowIndex="0" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="smtpHostField" promptText="smtp.gmail.com" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="SMTP Port:" GridPane.rowIndex="1" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="smtpPortField" promptText="587" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="Username:" GridPane.rowIndex="2" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="smtpUserField" promptText="pharmacy@gmail.com" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="Password:" GridPane.rowIndex="3" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <PasswordField fx:id="smtpPassField" promptText="App Password" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="80" prefWidth="85"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+                        </GridPane>
+                    </VBox>
 
-        <TitledPane text="Installation Logs" expanded="false">
-            <TextArea fx:id="logConsole" editable="false" wrapText="true" prefHeight="150" styleClass="console-text"/>
+                    <!-- WhatsApp Bridge Settings -->
+                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;" alignment="TOP_CENTER">
+                        <Label text="Local WhatsApp Bridge" style="-fx-font-weight: bold;"/>
+                        <Label text="Uses whatsapp-web.js to send free invoices." styleClass="text-muted" wrapText="true"/>
+                        
+                        <HBox alignment="CENTER" spacing="10" style="-fx-padding: 10 0 10 0;">
+                            <Label text="Status:" style="-fx-font-weight: bold;"/>
+                            <Label fx:id="lblWhatsAppStatus" text="Checking..." style="-fx-text-fill: #e8c66a; -fx-font-weight: bold;"/>
+                        </HBox>
+
+                        <StackPane style="-fx-background-color: white; -fx-padding: 5; -fx-border-color: #ccc; -fx-border-radius: 5;" maxWidth="-Infinity">
+                            <ImageView fx:id="imgQRCode" fitWidth="180" fitHeight="180" preserveRatio="true"/>
+                        </StackPane>
+                        
+                        <Label text="If disconnected, scan the QR code using WhatsApp -> Linked Devices." styleClass="text-muted" wrapText="true" textAlignment="CENTER"/>
+                        
+                        <Button fx:id="btnRefreshWhatsApp" text="Refresh Status" onAction="#handleRefreshWhatsApp" styleClass="button-outlined" maxWidth="Infinity" style="-fx-margin-top: 10;"/>
+                    </VBox>
+                </HBox>
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
+                    <Button text="Save Communication Settings" onAction="#handleSaveCommunication" styleClass="button-success"/>
+                </HBox>
+            </VBox>
         </TitledPane>
     </VBox>
 </ScrollPane>

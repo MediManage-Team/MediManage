@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import org.json.JSONObject;
 import org.json.JSONArray;
+import org.example.MediManage.security.LocalAdminTokenManager;
 
 /**
  * HTTP client for the Python AI Engine (localhost:5000).
@@ -16,7 +17,7 @@ import org.json.JSONArray;
 public class LocalAIService implements AIService {
     private static final String BASE_URL = "http://127.0.0.1:5000";
     private static final String API_URL = BASE_URL + "/chat";
-    private static final String RAG_URL = BASE_URL + "/chat/rag";
+    private static final String ORCHESTRATE_URL = BASE_URL + "/orchestrate";
     private static final String HEALTH_URL = BASE_URL + "/health";
     private final HttpClient client;
 
@@ -42,7 +43,7 @@ public class LocalAIService implements AIService {
     public void loadModel() {
         try {
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                    .userNodeForPackage(org.example.MediManage.SettingsController.class);
+                    .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
             String modelPath = prefs.get("local_model_path", "");
             String hardware = prefs.get("ai_hardware", "Auto");
 
@@ -66,11 +67,12 @@ public class LocalAIService implements AIService {
             json.put("model_path", modelPath);
             json.put("hardware_config", config);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(BASE_URL + "/load_model"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
 
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
@@ -93,11 +95,12 @@ public class LocalAIService implements AIService {
             json.put("model_path", modelPath);
             json.put("hardware_config", hardwareConfig);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(BASE_URL + "/load_model"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
 
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
@@ -105,6 +108,33 @@ public class LocalAIService implements AIService {
                             System.out.println("Model loaded: " + response.body());
                         } else {
                             System.err.println("Failed to load model: " + response.body());
+                        }
+                    });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ======================== ENGINE CONFIGURATION ========================
+
+    public void updateConfig(String hfToken) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("hf_token", hfToken);
+
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/update_config"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        if (response.statusCode() == 200) {
+                            System.out.println("AI Engine config updated.");
+                        } else {
+                            System.err.println("Failed to update AI Engine config: " + response.body());
                         }
                     });
         } catch (Exception e) {
@@ -142,28 +172,35 @@ public class LocalAIService implements AIService {
     }
 
     /**
-     * Chat with business context (RAG). Java injects DB data as context
-     * so the local model can reason over real inventory/sales/expiry data.
+     * Unified Orchestration Endpoint. Handles both local and cloud AI generation via Python.
      */
-    public CompletableFuture<String> chatWithContext(String prompt, String businessContext) {
+    public CompletableFuture<String> orchestrate(String action, JSONObject data, JSONObject cloudConfig, String routing, boolean useSearch) {
         JSONObject json = new JSONObject();
-        json.put("prompt", prompt);
-        json.put("context", businessContext);
-        json.put("use_search", false);
+        json.put("action", action);
+        if (data != null) json.put("data", data);
+        if (cloudConfig != null) json.put("cloud_config", cloudConfig);
+        if (routing != null) json.put("routing", routing);
+        json.put("use_search", useSearch);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(RAG_URL))
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                .uri(URI.create(ORCHESTRATE_URL))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(120))
-                .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+        LocalAdminTokenManager.applyHeader(requestBuilder);
+
+        HttpRequest request = requestBuilder.build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
                     if (response.statusCode() == 200) {
                         return new JSONObject(response.body()).getString("response");
                     } else {
-                        throw new RuntimeException("AI Engine RAG Error: " + response.statusCode());
+                        String errMsg = "AI Orchestration Error: " + response.statusCode();
+                        try {
+                            errMsg += " - " + new JSONObject(response.body()).optString("error", "");
+                        } catch (Exception ignored) {}
+                        throw new RuntimeException(errMsg);
                     }
                 });
     }
@@ -209,11 +246,12 @@ public class LocalAIService implements AIService {
             String localDir = System.getProperty("user.home") + "/MediManage/models";
             json.put("local_dir", localDir);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(BASE_URL + "/download_model"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
 
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
@@ -246,11 +284,12 @@ public class LocalAIService implements AIService {
      */
     public void stopDownload() {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(BASE_URL + "/stop_download"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.noBody());
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
 
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
@@ -317,11 +356,12 @@ public class LocalAIService implements AIService {
             JSONObject json = new JSONObject();
             json.put("model_path", modelPath);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(BASE_URL + "/delete_model"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            HttpRequest request = requestBuilder.build();
 
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             return response.statusCode() == 200;
@@ -332,6 +372,26 @@ public class LocalAIService implements AIService {
     }
 
     // ======================== HEALTH CHECK ========================
+
+    public JSONObject getHealth() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(HEALTH_URL))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return new JSONObject(response.body());
+            }
+            return new JSONObject()
+                    .put("status", "error")
+                    .put("message", "Health endpoint returned " + response.statusCode());
+        } catch (Exception e) {
+            return new JSONObject()
+                    .put("status", "error")
+                    .put("message", e.getMessage());
+        }
+    }
 
     @Override
     public boolean isAvailable() {
@@ -350,5 +410,17 @@ public class LocalAIService implements AIService {
     @Override
     public String getProviderName() {
         return "Local AI (Python Engine)";
+    }
+
+    public void cancelGeneration() {
+        try {
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/cancel_chat"))
+                    .POST(HttpRequest.BodyPublishers.noBody());
+            LocalAdminTokenManager.applyHeader(requestBuilder);
+            client.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.discarding());
+        } catch (Exception e) {
+            System.err.println("Failed to send cancel signal to Local AI: " + e.getMessage());
+        }
     }
 }

@@ -10,7 +10,7 @@ import java.util.function.Consumer;
  *
  * Each environment has its own:
  * - conda env directory: ai_engine/envs/{name}/
- * - requirements file: requirements_{name}.txt
+ * - requirements file: requirements/requirements_{name}.txt
  *
  * Locations:
  * - Dev mode (IDE): {project}/ai_engine/envs/{name}/
@@ -21,16 +21,14 @@ public class PythonEnvironmentManager {
     /** Available environment names */
     public static final String ENV_CPU = "cpu";
     public static final String ENV_GPU = "gpu";
-    public static final String ENV_NPU_AMD = "npu_amd";
-    public static final String ENV_NPU_INTEL = "npu_intel";
+    public static final String ENV_BASE = "base";
 
-    public static final String[] ALL_ENVS = { ENV_CPU, ENV_GPU, ENV_NPU_AMD, ENV_NPU_INTEL };
+    public static final String[] ALL_ENVS = { ENV_BASE, ENV_CPU, ENV_GPU };
 
     public static final Map<String, String> ENV_LABELS = Map.of(
+            ENV_BASE, "Cloud Only (Base)",
             ENV_CPU, "CPU (BitNet.cpp / llama.cpp)",
-            ENV_GPU, "NVIDIA GPU (CUDA)",
-            ENV_NPU_AMD, "AMD NPU (Ryzen AI / DirectML)",
-            ENV_NPU_INTEL, "Intel NPU (OpenVINO / Intel AI)");
+            ENV_GPU, "NVIDIA GPU (CUDA)");
 
     private final boolean devMode;
     private final Path aiEngineDir; // ai_engine/ directory
@@ -114,7 +112,7 @@ public class PythonEnvironmentManager {
     }
 
     public Path getRequirementsPath(String envName) {
-        return aiEngineDir.resolve("requirements_" + envName + ".txt");
+        return aiEngineDir.resolve("requirements").resolve("requirements_" + envName + ".txt");
     }
 
     public String getPythonExePath(String envName) {
@@ -152,22 +150,17 @@ public class PythonEnvironmentManager {
         return ENV_LABELS.getOrDefault(activeEnv, activeEnv);
     }
 
-    /**
-     * Map a hardware backend string (from hardware_detect.py) to an environment
-     * name.
-     * "cuda" → "gpu", "directml" → "npu_amd", "openvino" → "npu_intel", "cpu" →
-     * "cpu"
-     */
     public static String mapBackendToEnv(String backend) {
         if (backend == null)
             return ENV_CPU;
         switch (backend.toLowerCase()) {
             case "cuda":
-                return ENV_GPU;
+            case "gpu":
             case "directml":
-                return ENV_NPU_AMD;
-            case "openvino":
-                return ENV_NPU_INTEL;
+                return ENV_GPU;
+            case "cloud only (base)":
+            case "base":
+                return ENV_BASE;
             default:
                 return ENV_CPU;
         }
@@ -175,9 +168,8 @@ public class PythonEnvironmentManager {
 
     /**
      * Auto-detect the best Python environment based on available hardware.
-     * Checks for NVIDIA GPU (→ gpu), AMD iGPU (→ npu_amd), fallback to CPU.
-     * Only returns envs that are already installed — avoids triggering setup
-     * for an env the user hasn't explicitly installed.
+     * Checks for NVIDIA GPU (→ gpu), fallback to CPU.
+     * Only returns envs that are already installed.
      */
     public String autoDetectBestEnv() {
         // 1. Check NVIDIA GPU via nvidia-smi
@@ -185,12 +177,7 @@ public class PythonEnvironmentManager {
             log("🎯 Auto-detected NVIDIA GPU — selecting '" + ENV_GPU + "' environment");
             return ENV_GPU;
         }
-        // 2. Check AMD iGPU (common on Ryzen mobile processors)
-        if (isEnvReady(ENV_NPU_AMD) && hasAmdGpu()) {
-            log("🎯 Auto-detected AMD iGPU — selecting '" + ENV_NPU_AMD + "' environment");
-            return ENV_NPU_AMD;
-        }
-        // 3. Fallback to CPU
+        // 2. Fallback to CPU
         log("ℹ️ No GPU env ready — using CPU environment");
         return ENV_CPU;
     }
@@ -204,23 +191,6 @@ public class PythonEnvironmentManager {
             int exitCode = p.waitFor();
             if (exitCode == 0 && !output.isEmpty()) {
                 log("🟢 NVIDIA GPU found: " + output.split("\\n")[0].trim());
-                return true;
-            }
-        } catch (Exception ignore) {
-        }
-        return false;
-    }
-
-    /** Check if an AMD GPU/iGPU is present via wmic. */
-    private boolean hasAmdGpu() {
-        try {
-            Process p = new ProcessBuilder("wmic", "path", "Win32_VideoController",
-                    "get", "Name").redirectErrorStream(true).start();
-            String output = new String(p.getInputStream().readAllBytes());
-            int exitCode = p.waitFor();
-            if (exitCode == 0 && output.toLowerCase().contains("amd")
-                    && output.toLowerCase().contains("radeon")) {
-                log("🟢 AMD iGPU found in display adapters");
                 return true;
             }
         } catch (Exception ignore) {
@@ -303,74 +273,13 @@ public class PythonEnvironmentManager {
 
     /**
      * Get the right Python version for the given environment.
-     * XDNA 2 (Ryzen AI 300) requires Python 3.12; XDNA 1 uses 3.10.
      */
     private String getPythonVersionForEnv(String envName) {
-        if (ENV_NPU_AMD.equals(envName)) {
-            String xdnaGen = detectXdnaGeneration();
-            if ("xdna2".equals(xdnaGen)) {
-                log("🔹 XDNA 2 detected — using Python 3.12");
-                return "3.12";
-            }
-        }
-        return "3.10"; // Default for all other envs
-    }
-
-    /**
-     * Detect AMD XDNA NPU generation from CPU name.
-     * Returns "xdna1", "xdna2", or null.
-     */
-    public String detectXdnaGeneration() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    "powershell", "-Command",
-                    "(Get-CimInstance Win32_Processor).Name");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String cpuName;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-                cpuName = reader.readLine();
-            }
-            p.waitFor();
-
-            if (cpuName == null)
-                return null;
-            cpuName = cpuName.trim().toLowerCase();
-
-            // XDNA 2: Ryzen AI 300 series (Strix/Krackan Point)
-            if (cpuName.contains("ai 9 hx") || cpuName.contains("ai 7 pro") ||
-                    cpuName.contains("ai 5 pro") || cpuName.contains("ai 7 350") ||
-                    cpuName.contains("ai 5 340") || cpuName.contains("ai 9 365") ||
-                    cpuName.contains("ryzen ai 300") || cpuName.contains("strix") ||
-                    cpuName.contains("krackan")) {
-                return "xdna2";
-            }
-            // XDNA 1: Ryzen 7x40/8x40 series (Phoenix/Hawk Point)
-            if (cpuName.contains("7840") || cpuName.contains("7640") ||
-                    cpuName.contains("7940") || cpuName.contains("8840") ||
-                    cpuName.contains("8640") || cpuName.contains("8845") ||
-                    cpuName.contains("8940") || cpuName.contains(" z1")) {
-                return "xdna1";
-            }
-        } catch (Exception e) {
-            log("⚠️ Could not detect XDNA generation: " + e.getMessage());
-        }
-        return null;
+        return "3.10"; // Default for all envs
     }
 
     private void installDependencies(String envName) throws Exception {
-        // For npu_amd, check for XDNA-specific requirements first
         Path reqPath = getRequirementsPath(envName);
-        if (ENV_NPU_AMD.equals(envName)) {
-            String xdnaGen = detectXdnaGeneration();
-            if (xdnaGen != null) {
-                Path xdnaReq = aiEngineDir.resolve("requirements_npu_amd_" + xdnaGen + ".txt");
-                if (Files.exists(xdnaReq)) {
-                    log("📋 Using XDNA-specific requirements: " + xdnaReq.getFileName());
-                    reqPath = xdnaReq;
-                }
-            }
-        }
 
         if (!Files.exists(reqPath)) {
             log("⚠️ Requirements file not found: " + reqPath);
@@ -383,12 +292,6 @@ public class PythonEnvironmentManager {
         cmd.add("install");
         cmd.add("-r");
         cmd.add(reqPath.toAbsolutePath().toString());
-
-        // For AMD NPU env, add AMD's pip index
-        if (ENV_NPU_AMD.equals(envName)) {
-            cmd.add("--extra-index-url");
-            cmd.add("https://pypi.amd.com/simple");
-        }
 
         runCommand(cmd, "pip install " + envName);
         writeDepTimestamp(envName);
@@ -436,6 +339,7 @@ public class PythonEnvironmentManager {
         }
     }
 
+
     private void writeDepTimestamp(String envName) {
         try {
             Path markerFile = getEnvPath(envName).resolve(".deps_installed");
@@ -446,30 +350,8 @@ public class PythonEnvironmentManager {
 
     // ======================== UTILITIES ========================
 
-    public boolean deleteEnvironment(String envName) {
-        Path envPath = getEnvPath(envName);
-        if (!Files.exists(envPath))
-            return false;
-
-        try {
-            // conda remove -p {path} --all -y (better than file deletion for cleanup)
-            // But if conda exe is not easily available here without checking,
-            // maybe manual delete is fine for local envs (since they are isolated -p).
-            // Let's try recursive delete.
-            Files.walk(envPath)
-                    .sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .forEach(File::delete);
-            log("🗑️ Environment '" + envName + "' deleted.");
-            return true;
-        } catch (Exception e) {
-            log("❌ Failed to delete environment: " + e.getMessage());
-            return false;
-        }
-    }
-
     private boolean isDevMode() {
-        return Files.exists(Paths.get("ai_engine", "server.py"));
+        return Files.exists(Paths.get("ai_engine", "server", "server.py"));
     }
 
     public void cancel() {
@@ -484,5 +366,35 @@ public class PythonEnvironmentManager {
     private void checkCancelled() throws InterruptedException {
         if (cancelled)
             throw new InterruptedException("Operation cancelled.");
+    }
+
+    private void deleteDirRecursively(File file) {
+        if (file.isDirectory()) {
+            File[] entries = file.listFiles();
+            if (entries != null) {
+                for (File entry : entries) {
+                    deleteDirRecursively(entry);
+                }
+            }
+        }
+        file.delete();
+    }
+
+    public boolean deleteEnvironment(String envName) {
+        try {
+            Path envPath = getEnvPath(envName);
+            if (Files.exists(envPath)) {
+                deleteDirRecursively(envPath.toFile());
+                log("🗑️ Deleted environment: " + envName);
+            }
+            return true;
+        } catch (Exception e) {
+            log("❌ Failed to delete environment " + envName + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<Map<String, Object>> getEnvironmentMetadata() {
+        return listEnvironments();
     }
 }

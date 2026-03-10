@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DatabaseUtil;
+import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.model.Prescription;
 
 import java.sql.*;
@@ -78,6 +78,25 @@ public class PrescriptionDAO {
             System.err.println("PrescriptionDAO.getByStatus: " + e.getMessage());
         }
         return list;
+    }
+
+    /**
+     * Count prescriptions by status without loading full rows.
+     */
+    public int countByStatus(String status) {
+        String sql = "SELECT COUNT(*) FROM prescriptions WHERE status = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("PrescriptionDAO.countByStatus: " + e.getMessage());
+        }
+        return 0;
     }
 
     /**

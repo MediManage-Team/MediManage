@@ -6,7 +6,7 @@
 
 <VBox spacing="10"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.PrescriptionsController" styleClass="dark-panel">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.PrescriptionsController" styleClass="dark-panel">
 
     <!-- Top Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT">
@@ -58,9 +58,12 @@
                     <Separator/>
 
                     <VBox spacing="4">
-                        <Label text="AI Validation" styleClass="section-title" style="-fx-font-size: 13px;"/>
+                        <Label text="AI Validation" styleClass="section-title-compact"/>
                         <TextArea fx:id="txtAIValidation" editable="false" prefRowCount="3" promptText="AI validation result will appear here..." wrapText="true"/>
-                        <Button text="🤖 Validate with AI" onAction="#handleAIValidate" styleClass="button-outlined" maxWidth="Infinity"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button fx:id="btnAIValidate" text="🤖 Validate with AI" onAction="#handleAIValidate" styleClass="button-outlined" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                            <ProgressIndicator fx:id="spinnerAIValidation" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
+                        </HBox>
                     </VBox>
 
                     <Separator/>

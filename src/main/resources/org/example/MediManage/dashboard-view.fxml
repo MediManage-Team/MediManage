@@ -6,68 +6,185 @@
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.DashboardController" stylesheets="@css/admin.css" prefWidth="1200" prefHeight="800">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.DashboardController" prefWidth="1200" prefHeight="800">
 
     <!-- Main Content -->
     <center>
         <TabPane fx:id="mainTabPane" tabClosingPolicy="UNAVAILABLE">
+
+            <!-- ==================== TAB 1: DASHBOARD ==================== -->
             <Tab text="Dashboard">
-                <VBox spacing="20" styleClass="dark-panel">
+                <ScrollPane fitToWidth="true" fitToHeight="true" pannable="true" styleClass="edge-to-edge">
+                    <content>
+                        <VBox spacing="16" styleClass="dark-panel">
+                            <padding>
+                                <Insets top="16" right="20" bottom="16" left="20"/>
+                            </padding>
 
-                    <!-- Header -->
-                    <Label text="Overview" styleClass="page-title"/>
+                            <!-- ── Page Header ── -->
+                            <Label text="Overview" styleClass="page-title"/>
 
-                    <!-- Stats Cards -->
-                    <HBox spacing="16">
-                        <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                            <Label text="Daily Sales" styleClass="card-title"/>
-                            <Label fx:id="dailySales" text="₹0.00" styleClass="card-value"/>
+                            <!-- ══════════ ROW 1: KPI CARDS (4 across) ══════════ -->
+                            <HBox spacing="14">
+                                <VBox styleClass="card kpi-card kpi-card-sales" HBox.hgrow="ALWAYS">
+                                    <Label text="Daily Sales" styleClass="card-title"/>
+                                    <Label fx:id="dailySales" text="₹0.00" styleClass="card-value"/>
+                                </VBox>
+                                <VBox styleClass="card kpi-card kpi-card-warning" HBox.hgrow="ALWAYS">
+                                    <Label text="Low Stock" styleClass="card-title"/>
+                                    <Label fx:id="lowStock" text="0" styleClass="card-value"/>
+                                </VBox>
+                                <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS">
+                                    <Label text="Pending Rxs" styleClass="card-title"/>
+                                    <Label fx:id="pendingRx" text="0" styleClass="card-value"/>
+                                </VBox>
+                                <VBox styleClass="card kpi-card kpi-card-profit" HBox.hgrow="ALWAYS">
+                                    <Label text="Monthly Profit" styleClass="card-title"/>
+                                    <Label fx:id="totalProfit" text="₹0.00" styleClass="card-value"/>
+                                </VBox>
+                                <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS">
+                                    <Label text="Avg Margin" styleClass="card-title"/>
+                                    <Label fx:id="avgMargin" text="0.0%" styleClass="card-value"/>
+                                </VBox>
+                            </HBox>
+
+                            <!-- ══════════ ROW 2: EXPIRY + SUBSCRIPTIONS (2 bento cells) ══════════ -->
+                            <HBox spacing="14">
+                                <!-- Expiry Buckets -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="⏰  Expiry Buckets" styleClass="section-title"/>
+                                    <HBox spacing="16">
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Expired" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiryExpired" text="0" styleClass="card-value text-danger"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="0–30d" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiry0To30" text="0" styleClass="card-value text-warning"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="31–60d" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiry31To60" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="61–90d" styleClass="text-muted"/>
+                                            <Label fx:id="lblExpiry61To90" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                    </HBox>
+                                </VBox>
+
+                                <!-- Today's Summary -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📊  Today's Summary" styleClass="section-title"/>
+                                    <HBox spacing="16">
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Bills" styleClass="text-muted"/>
+                                            <Label fx:id="lblTodayBills" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Customers" styleClass="text-muted"/>
+                                            <Label fx:id="lblTodayCustomers" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Monthly Exp." styleClass="text-muted"/>
+                                            <Label fx:id="lblMonthlyExpenses" text="₹0.00" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Returns" styleClass="text-muted"/>
+                                            <Label fx:id="lblTodayReturns" text="0" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Reorder" styleClass="text-muted"/>
+                                            <Label fx:id="lblReorderNeeded" text="0" styleClass="card-value text-warning"/>
+                                        </VBox>
+                                    </HBox>
+                                </VBox>
+                            </HBox>
+
+                            <!-- ══════════ ROW 3: STOCK HEALTH + SALES (2 bento cells) ══════════ -->
+                            <HBox spacing="14">
+                                <!-- Stock Health -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📦  Stock Health" styleClass="section-title"/>
+                                    <TableView fx:id="stockHealthTable" minHeight="200" prefHeight="240" styleClass="dashboard-table">
+                                        <columns>
+                                            <TableColumn fx:id="colStockHealthMedicine" text="Medicine" prefWidth="160"/>
+                                            <TableColumn fx:id="colStockHealthCompany" text="Company" prefWidth="120"/>
+                                            <TableColumn fx:id="colStockHealthIssue" text="Issue" prefWidth="100"/>
+                                            <TableColumn fx:id="colStockHealthStock" text="Stock" prefWidth="70"/>
+                                            <TableColumn fx:id="colStockHealthDetail" text="Detail" prefWidth="130"/>
+                                        </columns>
+                                        <columnResizePolicy>
+                                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                        </columnResizePolicy>
+                                    </TableView>
+                                </VBox>
+
+                                <!-- Sales & Margin -->
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📈  Sales and Margin" styleClass="section-title"/>
+                                    <HBox spacing="16">
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Gross Sales" styleClass="text-muted"/>
+                                            <Label fx:id="lblGrossSales" text="₹0.00" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Net Sales" styleClass="text-muted"/>
+                                            <Label fx:id="lblNetSales" text="₹0.00" styleClass="card-value"/>
+                                        </VBox>
+                                        <VBox HBox.hgrow="ALWAYS" alignment="CENTER">
+                                            <Label text="Margin" styleClass="text-muted"/>
+                                            <Label fx:id="lblGrossMargin" text="0.00%" styleClass="card-value"/>
+                                        </VBox>
+                                    </HBox>
+                                    <Separator/>
+                                    <Label text="Top Movers (30d)" styleClass="text-muted"/>
+                                    <TableView fx:id="topMoversTable" minHeight="130" prefHeight="150" styleClass="dashboard-table">
+                                        <columns>
+                                            <TableColumn fx:id="colTopMoverMedicine" text="Medicine" prefWidth="180"/>
+                                            <TableColumn fx:id="colTopMoverUnitsSold" text="Units" prefWidth="80"/>
+                                            <TableColumn fx:id="colTopMoverRevenue" text="Revenue (₹)" prefWidth="110"/>
+                                        </columns>
+                                        <columnResizePolicy>
+                                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                        </columnResizePolicy>
+                                    </TableView>
+                                </VBox>
+                            </HBox>
+
+                            <!-- ══════════ ROW 4: INVENTORY (full width) ══════════ -->
+                            <VBox spacing="8" styleClass="card">
+                                <HBox alignment="CENTER_LEFT" spacing="10">
+                                    <Label text="📋  Inventory" styleClass="section-title"/>
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <TextField fx:id="searchMedicine" promptText="Search medicines..." prefWidth="250"/>
+                                    <Button text="Export Excel" onAction="#handleExportExcel" styleClass="button-outlined">
+                                        <graphic>
+                                            <FontIcon iconLiteral="fas-file-excel"/>
+                                        </graphic>
+                                    </Button>
+                                </HBox>
+                                <TableView fx:id="inventoryTable" minHeight="260" prefHeight="360" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="150"/>
+                                        <TableColumn fx:id="colCompany" text="Company" prefWidth="100"/>
+                                        <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
+                                        <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
+                                        <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
+                                        <TableColumn fx:id="colMargin" text="Margin %" prefWidth="80"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </VBox>
+
                         </VBox>
-                        <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                            <Label text="Low Stock" styleClass="card-title"/>
-                            <Label fx:id="lowStock" text="0" styleClass="card-value"/>
-                        </VBox>
-                        <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                            <Label text="Pending Rxs" styleClass="card-title"/>
-                            <Label fx:id="pendingRx" text="0" styleClass="card-value"/>
-                        </VBox>
-                        <VBox styleClass="card" HBox.hgrow="ALWAYS">
-                            <Label text="Total Profit" styleClass="card-title"/>
-                            <Label fx:id="totalProfit" text="₹0.00" styleClass="card-value"/>
-                        </VBox>
-                    </HBox>
-
-                    <!-- Inventory Overview -->
-                    <VBox spacing="15" styleClass="card" VBox.vgrow="ALWAYS">
-                        <!-- Inventory Header -->
-                        <HBox alignment="CENTER_LEFT" spacing="10">
-                            <Label text="Inventory Overview" styleClass="section-title"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Button text="Export Excel" onAction="#handleExportExcel" styleClass="button-outlined">
-                                <graphic>
-                                    <FontIcon iconLiteral="fas-file-excel"/>
-                                </graphic>
-                            </Button>
-                            <TextField fx:id="searchMedicine" promptText="Search medicines..." prefWidth="250"/>
-                        </HBox>
-
-                        <TableView fx:id="inventoryTable" VBox.vgrow="ALWAYS">
-                            <columns>
-                                <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="150"/>
-                                <TableColumn fx:id="colCompany" text="Company" prefWidth="100"/>
-                                <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
-                                <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
-                                <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
-                            </columns>
-                            <columnResizePolicy>
-                                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                            </columnResizePolicy>
-                        </TableView>
-                    </VBox>
-
-                </VBox>
+                    </content>
+                </ScrollPane>
             </Tab>
 
+            <!-- ==================== TAB 2: HISTORY ==================== -->
             <Tab text="History">
                 <VBox spacing="20" styleClass="dark-panel">
                     <Label text="Bill History" styleClass="page-title"/>
@@ -83,9 +200,16 @@
                             <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
                         </columnResizePolicy>
                     </TableView>
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="lblHistoryPageInfo" text="Rows 0-0 of 0 (Page 1/1)"/>
+                        <Button fx:id="btnHistoryPrev" text="Prev" onAction="#handleHistoryPrevPage"/>
+                        <Button fx:id="btnHistoryNext" text="Next" onAction="#handleHistoryNextPage"/>
+                    </HBox>
                 </VBox>
             </Tab>
 
+            <!-- ==================== TAB 3: BUSINESS INTELLIGENCE ==================== -->
             <Tab text="Business Intelligence">
                 <VBox spacing="20" styleClass="dark-panel">
                     <Label text="Inventory Intelligence (AI)" styleClass="page-title"/>
@@ -115,6 +239,7 @@
                 </VBox>
             </Tab>
 
+            <!-- ==================== TAB 4: AI ASSISTANT ==================== -->
             <Tab fx:id="aiTab" text="AI Assistant">
                 <content>
                     <fx:include source="ai-view.fxml"/>

@@ -7,11 +7,19 @@
 
 <SplitPane dividerPositions="0.6"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.BillingController">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.BillingController">
     <!-- Left: Cart -->
     <items>
         <VBox spacing="10" styleClass="dark-panel">
             <Label text="Current Bill" styleClass="page-title"/>
+
+            <!-- Hold / Recall Toolbar -->
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Button fx:id="btnHoldOrder" text="⏸ Hold" onAction="#handleHoldOrder" styleClass="button-outlined" prefHeight="32"/>
+                <Button fx:id="btnRecallOrder" text="📋 Recall" onAction="#handleRecallOrder" styleClass="button-outlined" prefHeight="32"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="lblHeldCount" text="" styleClass="text-muted"/>
+            </HBox>
 
             <TableView fx:id="billingTable" VBox.vgrow="ALWAYS">
                 <columns>
@@ -35,7 +43,7 @@
         <VBox spacing="16" styleClass="billing-controls">
             <!-- Customer Section -->
             <VBox spacing="5" styleClass="billing-section">
-                <Label text="Customer Details" style="-fx-font-weight: bold;"/>
+                <Label text="Customer Details" styleClass="label-strong"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <TextField fx:id="txtSearchCustomer" promptText="Phone / Name" HBox.hgrow="ALWAYS"/>
                     <Button text="🔍" onAction="#handleCustomerSearch"/>
@@ -43,16 +51,28 @@
                 </HBox>
                 <GridPane hgap="10" vgap="5">
                     <Label text="Name:" GridPane.columnIndex="0" GridPane.rowIndex="0" styleClass="text-muted"/>
-                    <Label fx:id="lblCustomerName" text="Walk-in Customer" GridPane.columnIndex="1" GridPane.rowIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblCustomerName" text="Walk-in Customer" GridPane.columnIndex="1" GridPane.rowIndex="0" styleClass="customer-name-muted"/>
 
                     <Label text="Phone:" GridPane.columnIndex="0" GridPane.rowIndex="1" styleClass="text-muted"/>
                     <Label fx:id="lblCustomerPhone" text="-" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+
+                    <Label text="Points:" GridPane.columnIndex="0" GridPane.rowIndex="2" styleClass="text-muted"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                        <Label fx:id="lblLoyaltyPoints" text="-" styleClass="card-value"/>
+                        <Button fx:id="btnRedeemPoints" text="Redeem 5%" onAction="#handleRedeemPoints" styleClass="button-success" visible="false" managed="false"/>
+                    </HBox>
                 </GridPane>
             </VBox>
 
             <!-- Item Entry Section -->
             <VBox spacing="10" styleClass="billing-section" VBox.vgrow="ALWAYS">
-                <Label text="Add Item" style="-fx-font-weight: bold;"/>
+                <Label text="Add Item" styleClass="label-strong"/>
+
+                <!-- Barcode Scanner Input -->
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="🔖"/>
+                    <TextField fx:id="txtBarcode" promptText="Scan or type barcode..." HBox.hgrow="ALWAYS"/>
+                </HBox>
 
                 <VBox spacing="2">
                     <Label text="Search Medicine"/>
@@ -74,22 +94,24 @@
                 <Region VBox.vgrow="ALWAYS"/>
 
                 <Label text="Shortcuts:" styleClass="text-muted"/>
-                <Label text="Enter on Search → Select List" styleClass="text-muted"/>
-                <Label text="Enter on Qty → Add Item" styleClass="text-muted"/>
+                <Label text="Ctrl+F → Search | Ctrl+L → Customer" styleClass="text-muted"/>
+                <Label text="Ctrl+Enter → Checkout | Esc → Clear" styleClass="text-muted"/>
             </VBox>
 
             <!-- Patient Care Assistant (Cloud AI) -->
             <TitledPane text="🤖 Patient Care Assistant (AI)" expanded="false" animated="true">
-                <VBox spacing="10" style="-fx-padding: 10;">
+                <VBox spacing="10" styleClass="content-pad-10">
                     <ScrollPane fitToWidth="true" prefHeight="350" VBox.vgrow="ALWAYS">
-                        <VBox fx:id="careProtocolContainer" spacing="8" style="-fx-padding: 10;"/>
+                        <VBox fx:id="careProtocolContainer" spacing="8" styleClass="content-pad-10"/>
                     </ScrollPane>
                     <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="38" styleClass="button-purple"/>
                 </VBox>
             </TitledPane>
 
+
+
             <!-- Checkout Button -->
-            <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success" style="-fx-font-size: 18px;"/>
+            <Button fx:id="btnCheckout" text="CHECKOUT (PRINT)" onAction="#handleCheckout" maxWidth="Infinity" prefHeight="60" styleClass="button-success button-xl"/>
         </VBox>
     </items>
 </SplitPane>

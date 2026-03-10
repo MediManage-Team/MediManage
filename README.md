@@ -41,7 +41,7 @@ A robust, enterprise-grade Desktop application for managing pharmacy inventory, 
 ## 🛠️ Technology Stack
 
 - **Language**: Java 21 LTS
-- **UI Framework**: JavaFX 21 + [AtlantaFX](https://github.com/mkpaz/atlantafx) (PrimerLight Theme)
+- **UI Framework**: JavaFX 21 LTS + [AtlantaFX](https://github.com/mkpaz/atlantafx) 2.0.1 (PrimerDark Theme)
 - **Database**: SQLite (Embedded, Zero-configuration) with `sqlite-jdbc`
 - **Build Tool**: Maven
 - **Reporting**: JasperReports 6.21

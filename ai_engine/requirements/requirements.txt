@@ -1,0 +1,25 @@
+# Core dependencies
+flask
+numpy
+requests
+tqdm
+huggingface_hub
+transformers
+duckduckgo-search
+mcp[cli]
+
+# Database — PostgreSQL support (optional)
+psycopg2-binary
+
+# Agent optimization (Microsoft Agent Lightning — Linux only)
+# pip install agentlightning
+
+# GGUF / BitNet CPU inference (llama.cpp Python bindings)
+llama-cpp-python
+
+# Hardware acceleration (install the one matching your hardware)
+# For NVIDIA GPU:
+# pip install onnxruntime-gpu
+# pip install onnxruntime-genai-cuda
+# For AMD GPU (DirectML):
+# pip install onnxruntime-directml

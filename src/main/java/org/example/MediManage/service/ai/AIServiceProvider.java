@@ -2,20 +2,18 @@ package org.example.MediManage.service.ai;
 
 /**
  * Singleton service provider for all AI services.
- * Prevents duplicate instantiation of LocalAIService, CloudAIService, and
+ * Prevents duplicate instantiation of LocalAIService and
  * AIOrchestrator.
  * 
  * Usage:
  * AIServiceProvider.get().getOrchestrator()
  * AIServiceProvider.get().getLocalService()
- * AIServiceProvider.get().getCloudService()
  */
 public class AIServiceProvider {
 
     private static volatile AIServiceProvider instance;
 
     private final LocalAIService localService;
-    private final CloudAIService cloudService;
     private final AIOrchestrator orchestrator;
     private final PythonEnvironmentManager envManager;
 
@@ -25,14 +23,8 @@ public class AIServiceProvider {
         // Single LocalAIService — no auto-load (server may not be ready yet)
         this.localService = new LocalAIService(false);
 
-        // Single CloudAIService — loads API key from prefs
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                .userNodeForPackage(org.example.MediManage.SettingsController.class);
-        String apiKey = prefs.get("cloud_api_key", "");
-        this.cloudService = new CloudAIService(apiKey);
-
-        // Single AIOrchestrator — reuses the above services
-        this.orchestrator = new AIOrchestrator(localService, cloudService);
+        // Single AIOrchestrator — reuses the above local python service
+        this.orchestrator = new AIOrchestrator(localService);
 
         // Single PythonEnvironmentManager
         this.envManager = new PythonEnvironmentManager();
@@ -58,10 +50,6 @@ public class AIServiceProvider {
         return localService;
     }
 
-    public CloudAIService getCloudService() {
-        return cloudService;
-    }
-
     public AIOrchestrator getOrchestrator() {
         return orchestrator;
     }
@@ -71,25 +59,9 @@ public class AIServiceProvider {
     }
 
     /**
-     * Update the cloud API key at runtime (e.g. from Settings).
-     * Legacy method — sets the Gemini key. Use configureCloudProvider for full
-     * control.
-     */
-    public void setCloudApiKey(String key) {
-        cloudService.setApiKey(key);
-    }
-
-    /**
-     * Configure the active cloud provider, model, and API key at runtime.
-     */
-    public void configureCloudProvider(CloudAIService.Provider provider, String model, String apiKey) {
-        cloudService.configure(provider, model, apiKey);
-    }
-
-    /**
      * Trigger model reload (e.g. after settings change).
      */
     public void reloadModel() {
-        localService.loadModel();
+        orchestrator.loadLocalModel();
     }
 }

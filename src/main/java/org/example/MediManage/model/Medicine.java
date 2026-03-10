@@ -9,10 +9,16 @@ public class Medicine {
     private final StringProperty expiry;
     private final IntegerProperty stock;
     private final DoubleProperty price;
+    private final DoubleProperty purchasePrice;
 
     private final StringProperty genericName;
 
     public Medicine(int id, String name, String genericName, String company, String expiry, int stock, double price) {
+        this(id, name, genericName, company, expiry, stock, price, 0.0);
+    }
+
+    public Medicine(int id, String name, String genericName, String company, String expiry, int stock, double price,
+            double purchasePrice) {
         this.id = new SimpleIntegerProperty(id);
         this.name = new SimpleStringProperty(name);
         this.genericName = new SimpleStringProperty(genericName != null ? genericName : "");
@@ -20,26 +26,11 @@ public class Medicine {
         this.expiry = new SimpleStringProperty(expiry);
         this.stock = new SimpleIntegerProperty(stock);
         this.price = new SimpleDoubleProperty(price);
+        this.purchasePrice = new SimpleDoubleProperty(purchasePrice);
     }
 
-    // Legacy constructor overload if needed, or update calls.
-    // Updating main constructor is better, but need to check usage sites.
-    // DashboardController and MedicineDAO use constructor.
-    // I will add a second constructor or update the existing one.
-    // Let's overload for backward compatibility to minimize refactoring noise in
-    // tests if any,
-    // but here I should update the main usage in DAO.
-
-    // Simplest: Add field, init in main constructor, provide an overloaded
-    // constructor for legacy calls?
-    // User asked to update the app. I will update main constructor.
-    // Oops, I need to update all usages.
-    // Let's add a secondary constructor for existing code if I don't want to break
-    // everything immediately,
-    // but the task is to update everything.
-
     public Medicine(int id, String name, String company, String expiry, int stock, double price) {
-        this(id, name, "", company, expiry, stock, price);
+        this(id, name, "", company, expiry, stock, price, 0.0);
     }
 
     public StringProperty genericNameProperty() {
@@ -132,6 +123,32 @@ public class Medicine {
 
     public void setPrice(double price) {
         this.price.set(price);
+    }
+
+    // Purchase price
+    public DoubleProperty purchasePriceProperty() {
+        return purchasePrice;
+    }
+
+    public double getPurchasePrice() {
+        return purchasePrice.get();
+    }
+
+    public void setPurchasePrice(double purchasePrice) {
+        this.purchasePrice.set(purchasePrice);
+    }
+
+    /**
+     * Computes profit margin as a percentage: ((price - purchasePrice) / price) *
+     * 100.
+     * Returns 0.0 if price is zero or purchasePrice is not set.
+     */
+    public double getProfitMarginPercent() {
+        double sell = getPrice();
+        double cost = getPurchasePrice();
+        if (sell <= 0 || cost <= 0)
+            return 0.0;
+        return ((sell - cost) / sell) * 100.0;
     }
 
 }
