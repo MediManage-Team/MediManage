@@ -6,7 +6,7 @@
 
 <VBox spacing="12" styleClass="dark-panel"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.AttendanceController">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.AttendanceController">
     <padding>
         <Insets top="16" right="16" bottom="16" left="16"/>
     </padding>

@@ -6,7 +6,7 @@
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.DashboardController" prefWidth="1200" prefHeight="800">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.DashboardController" prefWidth="1200" prefHeight="800">
 
     <!-- Main Content -->
     <center>

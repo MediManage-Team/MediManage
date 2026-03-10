@@ -14,6 +14,7 @@ import javafx.scene.effect.DropShadow;
 import javafx.scene.paint.Color;
 import org.example.MediManage.security.LocalAdminTokenManager;
 import org.example.MediManage.util.AppExecutors;
+import org.example.MediManage.controller.*;
 
 import java.util.concurrent.TimeUnit;
 
@@ -76,7 +77,7 @@ public class MediManageApplication extends Application {
 
                                 // Read user preference for active environment
                                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                                                .userNodeForPackage(org.example.MediManage.SettingsController.class);
+                                                .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
                                 String envPref = prefs.get("active_python_env", "cpu");
 
                                 // Auto-detect best GPU environment when hardware is set to "Auto"
@@ -151,7 +152,7 @@ public class MediManageApplication extends Application {
 
                                 final String pythonExeFinal = pythonExe;
                                 System.out.println("🚀 Starting AI Engine (server.py)...");
-                                ProcessBuilder pb = new ProcessBuilder(pythonExe, "ai_engine/server.py");
+                                ProcessBuilder pb = new ProcessBuilder(pythonExe, "ai_engine/server/server.py");
                                 pb.redirectErrorStream(true);
                                 pb.environment().put(LocalAdminTokenManager.ENV_NAME,
                                                 LocalAdminTokenManager.getOrCreateToken());
@@ -282,7 +283,7 @@ public class MediManageApplication extends Application {
                                 }
 
                                 System.out.println("🔌 Starting MCP Server (port 5001)...");
-                                ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, "ai_engine/mcp_server.py");
+                                ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, "ai_engine/server/mcp_server.py");
                                 mcpPb.redirectErrorStream(true);
                                 mcpProcess = mcpPb.start();
 

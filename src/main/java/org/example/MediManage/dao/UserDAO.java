@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DatabaseUtil;
+import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.model.User;
 import org.example.MediManage.model.UserRole;
 import org.example.MediManage.security.PasswordHasher;

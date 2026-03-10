@@ -2,6 +2,7 @@ package org.example.MediManage;
 
 import org.example.MediManage.dao.UserDAO;
 import org.example.MediManage.model.User;
+import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.security.PasswordHasher;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;

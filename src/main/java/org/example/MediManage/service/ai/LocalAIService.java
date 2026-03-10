@@ -17,7 +17,7 @@ import org.example.MediManage.security.LocalAdminTokenManager;
 public class LocalAIService implements AIService {
     private static final String BASE_URL = "http://127.0.0.1:5000";
     private static final String API_URL = BASE_URL + "/chat";
-    private static final String RAG_URL = BASE_URL + "/chat/rag";
+    private static final String ORCHESTRATE_URL = BASE_URL + "/orchestrate";
     private static final String HEALTH_URL = BASE_URL + "/health";
     private final HttpClient client;
 
@@ -43,7 +43,7 @@ public class LocalAIService implements AIService {
     public void loadModel() {
         try {
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                    .userNodeForPackage(org.example.MediManage.SettingsController.class);
+                    .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
             String modelPath = prefs.get("local_model_path", "");
             String hardware = prefs.get("ai_hardware", "Auto");
 
@@ -172,28 +172,35 @@ public class LocalAIService implements AIService {
     }
 
     /**
-     * Chat with business context (RAG). Java injects DB data as context
-     * so the local model can reason over real inventory/sales/expiry data.
+     * Unified Orchestration Endpoint. Handles both local and cloud AI generation via Python.
      */
-    public CompletableFuture<String> chatWithContext(String prompt, String businessContext) {
+    public CompletableFuture<String> orchestrate(String action, JSONObject data, JSONObject cloudConfig, String routing, boolean useSearch) {
         JSONObject json = new JSONObject();
-        json.put("prompt", prompt);
-        json.put("context", businessContext);
-        json.put("use_search", false);
+        json.put("action", action);
+        if (data != null) json.put("data", data);
+        if (cloudConfig != null) json.put("cloud_config", cloudConfig);
+        if (routing != null) json.put("routing", routing);
+        json.put("use_search", useSearch);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(RAG_URL))
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                .uri(URI.create(ORCHESTRATE_URL))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(120))
-                .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
+        LocalAdminTokenManager.applyHeader(requestBuilder);
+
+        HttpRequest request = requestBuilder.build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
                     if (response.statusCode() == 200) {
                         return new JSONObject(response.body()).getString("response");
                     } else {
-                        throw new RuntimeException("AI Engine RAG Error: " + response.statusCode());
+                        String errMsg = "AI Orchestration Error: " + response.statusCode();
+                        try {
+                            errMsg += " - " + new JSONObject(response.body()).optString("error", "");
+                        } catch (Exception ignored) {}
+                        throw new RuntimeException(errMsg);
                     }
                 });
     }

@@ -14,7 +14,7 @@
 <?import javafx.scene.layout.FlowPane?>
 
 <VBox xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.AIController" spacing="8" styleClass="dark-panel">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.AIController" spacing="8" styleClass="dark-panel">
 
     <!-- Header Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 8 12;">
@@ -32,7 +32,7 @@
         
         <Region HBox.hgrow="ALWAYS"/>
         
-        <Label fx:id="modelStatusLabel" text="⏳ Checking..." style="-fx-text-fill: #888; -fx-font-size: 11px;"/>
+        <javafx.scene.control.ComboBox fx:id="modelSelector" promptText="⏳ Checking..." onAction="#handleModelSelection" style="-fx-background-color: transparent; -fx-text-fill: #43e97b; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;"/>
         <Button text="🗑 Clear" onAction="#handleClearChat" style="-fx-background-color: transparent; -fx-text-fill: #888; -fx-border-color: #555; -fx-border-radius: 12; -fx-background-radius: 12; -fx-padding: 3 10; -fx-font-size: 10px; -fx-cursor: hand;"/>
     </HBox>
 

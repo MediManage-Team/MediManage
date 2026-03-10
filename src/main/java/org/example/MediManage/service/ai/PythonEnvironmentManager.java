@@ -10,7 +10,7 @@ import java.util.function.Consumer;
  *
  * Each environment has its own:
  * - conda env directory: ai_engine/envs/{name}/
- * - requirements file: requirements_{name}.txt
+ * - requirements file: requirements/requirements_{name}.txt
  *
  * Locations:
  * - Dev mode (IDE): {project}/ai_engine/envs/{name}/
@@ -112,7 +112,7 @@ public class PythonEnvironmentManager {
     }
 
     public Path getRequirementsPath(String envName) {
-        return aiEngineDir.resolve("requirements_" + envName + ".txt");
+        return aiEngineDir.resolve("requirements").resolve("requirements_" + envName + ".txt");
     }
 
     public String getPythonExePath(String envName) {
@@ -339,7 +339,8 @@ public class PythonEnvironmentManager {
         }
     }
 
-    private void writeDepTimestamp(String envName) {
+
+    private void writeDepTimestamp(String envName) {
         try {
             Path markerFile = getEnvPath(envName).resolve(".deps_installed");
             Files.writeString(markerFile, String.valueOf(System.currentTimeMillis()));
@@ -350,7 +351,7 @@ public class PythonEnvironmentManager {
     // ======================== UTILITIES ========================
 
     private boolean isDevMode() {
-        return Files.exists(Paths.get("ai_engine", "server.py"));
+        return Files.exists(Paths.get("ai_engine", "server", "server.py"));
     }
 
     public void cancel() {

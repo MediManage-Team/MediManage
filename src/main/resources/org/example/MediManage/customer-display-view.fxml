@@ -7,7 +7,7 @@
 
 <VBox spacing="0" alignment="CENTER"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.CustomerDisplayController" style="-fx-background-color: #0f1218;">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.CustomerDisplayController" style="-fx-background-color: #0f1218;">
     <padding>
         <Insets top="30" right="40" bottom="30" left="40"/>
     </padding>

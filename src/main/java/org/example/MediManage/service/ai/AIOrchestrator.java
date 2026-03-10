@@ -1,28 +1,24 @@
 package org.example.MediManage.service.ai;
 
-import org.example.MediManage.security.CloudApiKeyStore;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Semaphore;
+import java.util.prefs.Preferences;
 
 /**
- * Routes queries between Local AI (business tasks) and Cloud AI (medical
- * precision).
+ * Unified AI Orchestrator that proxies requests to the Python AI Engine.
  * 
  * Features:
- * - Intelligent routing (precision → Cloud, business → Local, fallback)
  * - LRU response cache (5-minute TTL, max 100 entries)
  * - Rate limiting (max 5 concurrent AI requests via Semaphore)
- * - JSON-structured output routing
+ * - Feeds UI Cloud Configurations (Provider, Keys) directly to Python
  */
 public class AIOrchestrator {
-    private final LocalAIService localService;
-    private final CloudAIService cloudService;
+    private final LocalAIService pythonService;
     private boolean forceCloud = false;
 
     // ======================== CACHE ========================
@@ -48,28 +44,15 @@ public class AIOrchestrator {
 
     // ======================== CONSTRUCTORS ========================
 
-    /**
-     * Default constructor — creates services with auto-configuration.
-     */
     public AIOrchestrator() {
-        this.localService = new LocalAIService();
-        String apiKey = CloudApiKeyStore.get(CloudAIService.Provider.GEMINI);
-        this.cloudService = new CloudAIService(apiKey);
+        this.pythonService = new LocalAIService();
     }
 
-    /**
-     * Constructor with injected services — prevents redundant instantiation.
-     */
-    public AIOrchestrator(LocalAIService localService, CloudAIService cloudService) {
-        this.localService = localService;
-        this.cloudService = cloudService;
+    public AIOrchestrator(LocalAIService pythonService) {
+        this.pythonService = pythonService;
     }
 
     // ======================== CONFIGURATION ========================
-
-    public void setCloudApiKey(String key) {
-        this.cloudService.setApiKey(key);
-    }
 
     public void setForceCloud(boolean force) {
         this.forceCloud = force;
@@ -79,165 +62,72 @@ public class AIOrchestrator {
         return forceCloud;
     }
 
+    private JSONObject buildCloudConfig() {
+        Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+        String provider = prefs.get("cloud_provider", "GEMINI");
+        String model = prefs.get("cloud_model", "");
+        String apiKey = "";
+        
+        try {
+            // Re-fetch using the enum name pattern for backwards compatibility with the keystore
+            apiKey = org.example.MediManage.security.CloudApiKeyStore.get(org.example.MediManage.security.CloudApiKeyStore.Provider.valueOf(provider));
+        } catch (Exception e) {
+            // Fallback for custom logic if needed
+        }
+
+        JSONObject config = new JSONObject();
+        config.put("provider", provider);
+        config.put("model", model);
+        config.put("api_key", apiKey);
+        return config;
+    }
+
     // ======================== MAIN ROUTING ========================
 
-    public CompletableFuture<String> processQuery(String query, boolean requiresPrecision, boolean useSearch) {
-        // Check cache first
-        String cacheKey = "process:" + query.hashCode() + ":" + requiresPrecision + ":" + useSearch;
+    /**
+     * Entry point for standard or specific orchestrated actions evaluated in Python.
+     */
+    public CompletableFuture<String> processOrchestration(String action, JSONObject data, String routingOverride, boolean useSearch) {
+        String cacheKey = "process:" + action + ":" + (data != null ? data.toString() : "") + ":" + routingOverride + ":" + useSearch;
         String cached = getCached(cacheKey);
-        if (cached != null)
-            return CompletableFuture.completedFuture(cached);
+        if (cached != null) return CompletableFuture.completedFuture(cached);
 
-        return withRateLimit(() -> {
-            if (requiresPrecision || forceCloud) {
-                if (cloudService.isAvailable()) {
-                    return cloudService.chat(query).thenApply(r -> cacheAndReturn(cacheKey, r));
-                } else if (localService.isAvailable()) {
-                    return localService.chat(query, useSearch).thenApply(r -> cacheAndReturn(cacheKey, r));
-                }
-                return CompletableFuture.failedFuture(
-                        new RuntimeException(
-                                "Cloud AI required but not available. Please configure API key in Settings."));
-            }
+        String activeRouting = forceCloud ? "cloud_only" : (routingOverride != null ? routingOverride : "auto");
 
-            if (localService.isAvailable()) {
-                return localService.chat(query, useSearch)
-                        .thenApply(r -> cacheAndReturn(cacheKey, r))
-                        .handle((result, ex) -> {
-                            if (ex == null) {
-                                return CompletableFuture.completedFuture(result);
-                            }
-                            if (cloudService.isAvailable()) {
-                                return cloudService.chat(query).thenApply(r -> cacheAndReturn(cacheKey, r));
-                            }
-                            return CompletableFuture.completedFuture(
-                                    "Error: Local AI failed and Cloud AI unavailable. " + rootCauseMessage(ex));
-                        })
-                        .thenCompose(future -> future);
-            } else if (cloudService.isAvailable()) {
-                return cloudService.chat(query).thenApply(r -> cacheAndReturn(cacheKey, r));
-            } else {
-                return CompletableFuture.completedFuture(
-                        "AI Service Unavailable. Please start Local Engine or configure Cloud API key in Settings.");
-            }
-        });
+        return withRateLimit(() -> pythonService.orchestrate(action, data, buildCloudConfig(), activeRouting, useSearch)
+                .thenApply(r -> cacheAndReturn(cacheKey, r)));
+    }
+
+    public CompletableFuture<String> processQuery(String query, boolean requiresPrecision, boolean useSearch) {
+        JSONObject data = new JSONObject().put("prompt", query);
+        String routing = requiresPrecision ? "cloud_only" : "auto";
+        return processOrchestration("raw_chat", data, routing, useSearch);
     }
 
     // ======================== EXPLICIT ROUTING ========================
 
-    /**
-     * Always use Cloud AI. For billing care protocols, drug info, medical
-     * precision.
-     */
     public CompletableFuture<String> cloudQuery(String prompt) {
-        String cacheKey = "cloud:" + prompt.hashCode();
-        String cached = getCached(cacheKey);
-        if (cached != null)
-            return CompletableFuture.completedFuture(cached);
-
-        if (cloudService.isAvailable()) {
-            return withRateLimit(() -> cloudService.chat(prompt).thenApply(r -> cacheAndReturn(cacheKey, r)));
-        }
-        return CompletableFuture.failedFuture(
-                new RuntimeException("Cloud AI not available. Please configure API key in Settings."));
+        JSONObject data = new JSONObject().put("prompt", prompt);
+        return processOrchestration("raw_chat", data, "cloud_only", false);
     }
 
-    /**
-     * Cloud query expecting structured JSON response.
-     */
-    public CompletableFuture<String> cloudQueryWithJson(String prompt, String jsonSchemaHint) {
-        if (cloudService.isAvailable()) {
-            return withRateLimit(() -> cloudService.chatWithJsonSchema(prompt, jsonSchemaHint));
-        }
-        return CompletableFuture.failedFuture(
-                new RuntimeException("Cloud AI not available. Please configure API key in Settings."));
-    }
-
-    /**
-     * Always use Local AI with business context (RAG).
-     * Falls back to Cloud if local is unavailable.
-     */
     public CompletableFuture<String> localQueryWithContext(String prompt, String businessContext) {
-        String cacheKey = "local:" + prompt.hashCode() + ":" + businessContext.hashCode();
-        String cached = getCached(cacheKey);
-        if (cached != null)
-            return CompletableFuture.completedFuture(cached);
-
-        return withRateLimit(() -> {
-            if (forceCloud) {
-                if (cloudService.isAvailable()) {
-                    String augmented = "### Business Data\n" + businessContext + "\n\n### Query\n" + prompt;
-                    return cloudService.chat(augmented).thenApply(r -> cacheAndReturn(cacheKey, r));
-                }
-                return CompletableFuture.failedFuture(
-                        new RuntimeException(
-                                "Cloud AI required but not available. Please configure API key in Settings."));
-            }
-
-            if (localService.isAvailable()) {
-                return localService.chatWithContext(prompt, businessContext)
-                        .thenApply(r -> cacheAndReturn(cacheKey, r));
-            }
-            if (cloudService.isAvailable()) {
-                String augmented = "### Business Data\n" + businessContext + "\n\n### Query\n" + prompt;
-                return cloudService.chat(augmented).thenApply(r -> cacheAndReturn(cacheKey, r));
-            }
-            return CompletableFuture.failedFuture(
-                    new RuntimeException(
-                            "No AI service available. Please start local engine or configure Cloud API key."));
-        });
+        JSONObject data = new JSONObject()
+                .put("prompt", prompt)
+                .put("business_context", businessContext);
+        return processOrchestration("raw_chat", data, "local_fallback", false);
     }
 
-    /**
-     * Execute a structured database query via the local AI engine.
-     * This path is intentionally local-only.
-     */
-    public CompletableFuture<String> queryDatabase(String query) {
-        if (localService.isAvailable()) {
-            return localService.queryDatabase(query);
-        }
-        return CompletableFuture.failedFuture(
-                new RuntimeException("Local AI engine unavailable for database query."));
+    public CompletableFuture<String> queryDatabase(String actionKey) {
+        // e.g. actionKey = "sales_db_query"
+        return pythonService.orchestrate(actionKey, null, null, "local_only", false);
     }
 
-    /**
-     * Combined query: Local AI analyzes business data → Cloud AI adds medical
-     * precision.
-     */
     public CompletableFuture<String> combinedQuery(String prompt, String businessContext) {
-        if (!localService.isAvailable() && !cloudService.isAvailable()) {
-            return CompletableFuture.failedFuture(
-                    new RuntimeException("No AI service available."));
-        }
-
-        return withRateLimit(() -> {
-            if (forceCloud) {
-                if (cloudService.isAvailable()) {
-                    String augmented = "### Business Data\n" + businessContext + "\n\n### Query\n" + prompt;
-                    return cloudService.chat(augmented);
-                }
-                return CompletableFuture.failedFuture(
-                        new RuntimeException("Cloud AI required but not available. Please configure API key in Settings."));
-            }
-
-            CompletableFuture<String> localAnalysis;
-            if (localService.isAvailable()) {
-                localAnalysis = localService.chatWithContext(
-                        AIPromptCatalog.combinedBusinessSummaryPrompt(prompt),
-                        businessContext);
-            } else {
-                localAnalysis = CompletableFuture.completedFuture(
-                        AIPromptCatalog.combinedBusinessFallbackPrompt(businessContext));
-            }
-
-            return localAnalysis.thenCompose(localResult -> {
-                if (cloudService.isAvailable()) {
-                    String cloudPrompt = AIPromptCatalog.combinedMedicalPrecisionPrompt(localResult, prompt);
-                    return cloudService.chat(cloudPrompt);
-                }
-                return CompletableFuture.completedFuture(localResult);
-            });
-        });
+        JSONObject data = new JSONObject()
+                .put("prompt", prompt)
+                .put("business_context", businessContext);
+        return processOrchestration("combined_analysis", data, "auto", false);
     }
 
     // ======================== CACHE UTILITIES ========================
@@ -249,7 +139,7 @@ public class AIOrchestrator {
             return entry.response();
         }
         if (entry != null) {
-            responseCache.remove(key); // Evict expired
+            responseCache.remove(key);
         }
         return null;
     }
@@ -259,9 +149,6 @@ public class AIOrchestrator {
         return response;
     }
 
-    /**
-     * Manually clear the response cache.
-     */
     public synchronized void clearCache() {
         responseCache.clear();
         System.out.println("🗑️ AI response cache cleared.");
@@ -290,59 +177,47 @@ public class AIOrchestrator {
         });
     }
 
-    private static String rootCauseMessage(Throwable throwable) {
-        Throwable cause = throwable;
-        while (cause instanceof CompletionException && cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        return cause.getMessage() != null ? cause.getMessage() : cause.toString();
-    }
-
     // ======================== STATUS ========================
 
     public boolean isLocalAvailable() {
-        return localService.isAvailable();
-    }
-
-    public boolean isCloudAvailable() {
-        return cloudService.isAvailable();
+        return pythonService.isAvailable();
     }
 
     // ======================== LOCAL MODEL MANAGEMENT ========================
 
     public void loadLocalModel() {
-        localService.loadModel();
+        pythonService.loadModel();
     }
 
     public void loadLocalModel(String modelPath, String hardwareConfig) {
-        localService.loadModel(modelPath, hardwareConfig);
+        pythonService.loadModel(modelPath, hardwareConfig);
     }
 
     public JSONObject getLocalHealth() {
-        return localService.getHealth();
+        return pythonService.getHealth();
     }
 
     public void startModelDownload(String repoId, String filename, String source) {
-        localService.startDownload(repoId, filename, source);
+        pythonService.startDownload(repoId, filename, source);
     }
 
     public JSONObject getModelDownloadStatus() {
-        return localService.getDownloadStatus();
+        return pythonService.getDownloadStatus();
     }
 
     public void stopModelDownload() {
-        localService.stopDownload();
+        pythonService.stopDownload();
     }
 
     public JSONArray listLocalModels() {
-        return localService.listModels();
+        return pythonService.listModels();
     }
 
     public boolean deleteLocalModel(String modelPath) {
-        return localService.deleteModel(modelPath);
+        return pythonService.deleteModel(modelPath);
     }
 
     public void cancelLocalGeneration() {
-        localService.cancelGeneration();
+        pythonService.cancelGeneration();
     }
 }

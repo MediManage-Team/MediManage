@@ -1,6 +1,8 @@
 package org.example.MediManage.service.ai;
 
 import org.example.MediManage.model.BillItem;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.List;
 import java.util.Map;
@@ -9,8 +11,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Centralized AI assistant service routing all AI operations through
  * AIOrchestrator.
- * Replaces direct GeminiService usage and provides domain-specific AI
- * endpoints.
+ * Now securely forwards data structures to Python's /orchestrate endpoint.
  */
 public class AIAssistantService {
 
@@ -26,7 +27,11 @@ public class AIAssistantService {
      * Generate a Patient Care Protocol for a list of bill items.
      */
     public CompletableFuture<String> generateCareProtocol(List<BillItem> items) {
-        return orchestrator.cloudQuery(AIPromptCatalog.detailedCareProtocolPrompt(items));
+        JSONObject data = new JSONObject();
+        JSONArray meds = new JSONArray();
+        for (BillItem item : items) meds.put(item.getName());
+        data.put("medicines", meds);
+        return orchestrator.processOrchestration("detailed_protocol", data, "cloud_only", false);
     }
 
     // ======================== PRESCRIPTION VALIDATION ========================
@@ -36,8 +41,8 @@ public class AIAssistantService {
      */
     public CompletableFuture<String> validatePrescription(List<String> medicineNames) {
         String medicines = String.join(", ", medicineNames);
-        String prompt = AIPromptCatalog.prescriptionValidationPrompt(medicines);
-        return orchestrator.processQuery(prompt, true, false);
+        JSONObject data = new JSONObject().put("medicines_text", medicines);
+        return orchestrator.processOrchestration("validate_prescription", data, "cloud_only", false);
     }
 
     // ======================== CUSTOMER ANALYSIS ========================
@@ -46,8 +51,10 @@ public class AIAssistantService {
      * Analyze a customer's medication history and provide insights.
      */
     public CompletableFuture<String> analyzeCustomerHistory(int customerId, String customerName, String diseases) {
-        String prompt = AIPromptCatalog.customerHistoryAnalysisPrompt(customerName, diseases);
-        return orchestrator.processQuery(prompt, true, false);
+        JSONObject data = new JSONObject()
+            .put("customer_name", customerName)
+            .put("diseases", diseases);
+        return orchestrator.processOrchestration("customer_history", data, "auto", false);
     }
 
     // ======================== REPORTS ANALYSIS ========================
@@ -56,8 +63,11 @@ public class AIAssistantService {
      * Generate an AI summary of sales report data and care assistance trends.
      */
     public CompletableFuture<String> generateReportSummary(Map<String, Double> salesData, double totalRevenue, Map<String, Integer> topItems) {
-        String prompt = AIPromptCatalog.salesSummaryPrompt(salesData, totalRevenue, topItems);
-        return orchestrator.processQuery(prompt, false, false);
+        JSONObject data = new JSONObject()
+            .put("sales_data", salesData.toString())
+            .put("total_revenue", totalRevenue)
+            .put("top_items", topItems.toString());
+        return orchestrator.processOrchestration("sales_summary", data, "cloud_only", false);
     }
 
     // ======================== INVENTORY SUGGESTIONS ========================
@@ -66,7 +76,7 @@ public class AIAssistantService {
      * Generate AI-powered restock suggestions based on inventory data.
      */
     public CompletableFuture<String> suggestRestock(String inventorySnapshot) {
-        String prompt = AIPromptCatalog.restockSuggestionPrompt(inventorySnapshot);
-        return orchestrator.processQuery(prompt, false, false);
+        JSONObject data = new JSONObject().put("inventory_snapshot", inventorySnapshot);
+        return orchestrator.processOrchestration("restock_suggestion", data, "auto", false);
     }
 }

@@ -1,6 +1,6 @@
 package org.example.MediManage.service;
 
-import org.example.MediManage.DatabaseUtil;
+import org.example.MediManage.util.DatabaseUtil;
 import javafx.concurrent.Task;
 
 import java.util.concurrent.ExecutorService;

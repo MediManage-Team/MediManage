@@ -8,9 +8,7 @@ import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.service.ai.AIOrchestrator;
-import org.example.MediManage.service.ai.AIPromptCatalog;
 import org.example.MediManage.service.ai.AIServiceProvider;
-import org.example.MediManage.service.ai.CloudAIService;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -40,7 +38,6 @@ public class BillingService {
     private final BillDAO billDAO;
     private final ReportService reportService;
     private final AIOrchestrator aiOrchestrator;
-    private final CloudAIService cloudService;
     private final BillingCareProtocolFallbackRulesEngine careProtocolFallbackRulesEngine;
 
     public BillingService() {
@@ -49,8 +46,7 @@ public class BillingService {
                 new CustomerDAO(),
                 new BillDAO(),
                 new ReportService(),
-                AIServiceProvider.get().getOrchestrator(),
-                AIServiceProvider.get().getCloudService());
+                AIServiceProvider.get().getOrchestrator());
     }
 
     BillingService(
@@ -58,14 +54,12 @@ public class BillingService {
             CustomerDAO customerDAO,
             BillDAO billDAO,
             ReportService reportService,
-            AIOrchestrator aiOrchestrator,
-            CloudAIService cloudService) {
+            AIOrchestrator aiOrchestrator) {
         this.medicineDAO = medicineDAO;
         this.customerDAO = customerDAO;
         this.billDAO = billDAO;
         this.reportService = reportService;
         this.aiOrchestrator = aiOrchestrator;
-        this.cloudService = cloudService;
         this.careProtocolFallbackRulesEngine = new BillingCareProtocolFallbackRulesEngine();
     }
 
@@ -188,13 +182,17 @@ public class BillingService {
     // ═══════════════════════════════════════════════
 
     public CompletableFuture<String> generateCheckoutCareProtocol(List<BillItem> billItems) {
-        String prompt = AIPromptCatalog.checkoutCareProtocolPrompt(billItems);
         if (aiOrchestrator == null) {
             return CompletableFuture.completedFuture(
                     fallbackCheckoutCareProtocol(billItems, "AI orchestrator unavailable"));
         }
         try {
-            return aiOrchestrator.processQuery(prompt, true, false)
+            org.json.JSONObject data = new org.json.JSONObject();
+            org.json.JSONArray meds = new org.json.JSONArray();
+            for (BillItem item : billItems) meds.put(item.getName());
+            data.put("medicines", meds);
+
+            return aiOrchestrator.processOrchestration("checkout_protocol", data, "cloud_only", false)
                     .handle((response, ex) -> {
                         if (ex != null || !isUsableCareProtocol(response)) {
                             String reason = ex == null ? "AI response unusable" : ex.getMessage();
@@ -209,11 +207,16 @@ public class BillingService {
     }
 
     public CompletableFuture<String> generateDetailedCareProtocol(List<BillItem> billItems) {
-        return aiOrchestrator.cloudQuery(AIPromptCatalog.detailedCareProtocolPrompt(billItems));
+        org.json.JSONObject data = new org.json.JSONObject();
+        org.json.JSONArray meds = new org.json.JSONArray();
+        for (BillItem item : billItems) meds.put(item.getName());
+        data.put("medicines", meds);
+        return aiOrchestrator.processOrchestration("detailed_protocol", data, "cloud_only", false);
     }
 
     public String getCloudProviderInfo() {
-        return cloudService.getProviderName() + " — " + cloudService.getActiveModel();
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+        return prefs.get("cloud_provider", "GEMINI") + " — " + prefs.get("cloud_model", "Auto");
     }
 
     // ═══════════════════════════════════════════════

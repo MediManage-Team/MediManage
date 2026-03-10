@@ -1,6 +1,6 @@
 package org.example.MediManage.service;
 
-import org.example.MediManage.DatabaseUtil;
+import org.example.MediManage.util.DatabaseUtil;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;

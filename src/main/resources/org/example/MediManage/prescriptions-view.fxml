@@ -6,7 +6,7 @@
 
 <VBox spacing="10"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.PrescriptionsController" styleClass="dark-panel">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.PrescriptionsController" styleClass="dark-panel">
 
     <!-- Top Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT">

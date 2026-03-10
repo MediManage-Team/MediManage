@@ -7,7 +7,7 @@
 
 <SplitPane dividerPositions="0.6"
     xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.BillingController">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.BillingController">
     <!-- Left: Cart -->
     <items>
         <VBox spacing="10" styleClass="dark-panel">

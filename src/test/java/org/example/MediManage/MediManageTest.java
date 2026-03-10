@@ -2,6 +2,7 @@ package org.example.MediManage;
 
 import org.example.MediManage.model.*;
 import org.example.MediManage.util.UserSession;
+import org.example.MediManage.util.DatabaseUtil;
 
 import org.junit.jupiter.api.*;
 
@@ -123,7 +124,7 @@ public class MediManageTest {
     @DisplayName("Database Connection Check")
     void testDBConnection() {
         assertNotNull(testDbPath, "Test DB path should be initialized");
-        try (Connection conn = org.example.MediManage.DatabaseUtil.getConnection()) {
+        try (Connection conn = org.example.MediManage.util.DatabaseUtil.getConnection()) {
             assertNotNull(conn, "Connection should not be null if DB is running");
             assertTrue(Files.exists(testDbPath), "Isolated test DB file should exist");
         } catch (Exception e) {

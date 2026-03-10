@@ -1,6 +1,6 @@
 package org.example.MediManage.dao;
 
-import org.example.MediManage.DatabaseUtil;
+import org.example.MediManage.util.DatabaseUtil;
 
 import java.sql.*;
 import java.time.LocalDate;

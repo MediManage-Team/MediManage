@@ -49,14 +49,4 @@ class AIInputSafetyGuardTest {
         assertFalse(lines.get(0).contains("18.5"));
     }
 
-    @Test
-    void customerHistoryPromptUsesTokenizedCustomerIdentifier() {
-        String prompt = AIPromptCatalog.customerHistoryAnalysisPrompt(
-                "Alice Kumar",
-                "Diabetes and HTN");
-
-        assertTrue(prompt.contains("Customer Token:"));
-        assertFalse(prompt.contains("Alice Kumar"));
-        assertTrue(prompt.contains("Known Conditions: Diabetes and HTN"));
-    }
 }

@@ -4,7 +4,7 @@
 <?import javafx.scene.layout.*?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
     <VBox spacing="20" styleClass="dark-panel">
         <Label text="System Settings" styleClass="page-title"/>
 
@@ -113,6 +113,63 @@
 
                 <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
                     <Button text="Save Cloud AI Settings" onAction="#handleSaveCloudAI" styleClass="button-success"/>
+                </HBox>
+            </VBox>
+        </TitledPane>
+
+        <!-- Communication Configuration -->
+        <TitledPane text="Communication Configuration" collapsible="false">
+            <VBox spacing="10">
+                <HBox spacing="20">
+                    <!-- Email Settings -->
+                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;">
+                        <Label text="Email Settings (SMTP)" style="-fx-font-weight: bold;"/>
+                        <Label text="Used for sending PDF Invoices." styleClass="text-muted" wrapText="true"/>
+                        
+                        <GridPane hgap="10" vgap="8">
+                            <Label text="SMTP Host:" GridPane.rowIndex="0" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="smtpHostField" promptText="smtp.gmail.com" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="SMTP Port:" GridPane.rowIndex="1" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="smtpPortField" promptText="587" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="Username:" GridPane.rowIndex="2" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="smtpUserField" promptText="pharmacy@gmail.com" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="Password:" GridPane.rowIndex="3" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <PasswordField fx:id="smtpPassField" promptText="App Password" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="80" prefWidth="85"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+                        </GridPane>
+                    </VBox>
+
+                    <!-- WhatsApp Settings -->
+                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;">
+                        <Label text="WhatsApp Settings (Twilio)" style="-fx-font-weight: bold;"/>
+                        <Label text="Used for sending Invoice Summary." styleClass="text-muted" wrapText="true"/>
+                        
+                        <GridPane hgap="10" vgap="8">
+                            <Label text="Account SID:" GridPane.rowIndex="0" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="twilioSidField" promptText="AC..." GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="Auth Token:" GridPane.rowIndex="1" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <PasswordField fx:id="twilioTokenField" promptText="Your Secret Token" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <Label text="Sender No:" GridPane.rowIndex="2" GridPane.columnIndex="0" styleClass="text-muted"/>
+                            <TextField fx:id="twilioSenderField" promptText="whatsapp:+14155238886" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+                            
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="80" prefWidth="85"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+                        </GridPane>
+                    </VBox>
+                </HBox>
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
+                    <Button text="Save Communication Settings" onAction="#handleSaveCommunication" styleClass="button-success"/>
                 </HBox>
             </VBox>
         </TitledPane>

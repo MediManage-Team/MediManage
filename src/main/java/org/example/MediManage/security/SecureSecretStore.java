@@ -1,7 +1,7 @@
 package org.example.MediManage.security;
 
 import com.sun.jna.platform.win32.Crypt32Util;
-import org.example.MediManage.SettingsController;
+
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -18,7 +18,7 @@ public final class SecureSecretStore {
     private static final String PLAIN_PREFIX = "plain:";
     private static final boolean IS_WINDOWS = System.getProperty("os.name", "")
             .toLowerCase(Locale.ROOT).contains("win");
-    private static final Preferences PREFS = Preferences.userNodeForPackage(SettingsController.class);
+    private static final Preferences PREFS = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
 
     private SecureSecretStore() {
     }

@@ -5,7 +5,7 @@
 <?import javafx.geometry.Insets?>
 
 <BorderPane xmlns="http://javafx.com/javafx"
-    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.ModelStoreController" prefHeight="650.0" prefWidth="900.0">
+    xmlns:fx="http://javafx.com/fxml" fx:controller="org.example.MediManage.controller.ModelStoreController" prefHeight="650.0" prefWidth="900.0">
 
     <top>
         <VBox spacing="10" alignment="CENTER_LEFT" styleClass="card" style="-fx-background-radius: 0;">
