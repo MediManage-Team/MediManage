@@ -57,14 +57,42 @@ public class CustomerService {
         return null;
     }
 
+
     public SaveResult saveCustomer(Customer formCustomer, Customer selectedCustomer) throws SQLException {
         if (selectedCustomer != null) {
             formCustomer.setCustomerId(selectedCustomer.getCustomerId());
             customerStore.updateCustomer(formCustomer);
+            
+            // Check for profile updates for notifications
+            boolean phoneChanged = !String.valueOf(formCustomer.getPhoneNumber()).equals(String.valueOf(selectedCustomer.getPhoneNumber()));
+            boolean emailChanged = !String.valueOf(formCustomer.getEmail()).equals(String.valueOf(selectedCustomer.getEmail()));
+            
+            if (phoneChanged && formCustomer.getPhoneNumber() != null && !formCustomer.getPhoneNumber().isBlank()) {
+                String msg = "Hello " + formCustomer.getName() + ",\n\nYour contact phone number has been successfully updated in your MediManage Pharmacy profile. If you did not request this, please contact us immediately.";
+                WhatsAppService.sendNotificationWhatsApp(formCustomer.getPhoneNumber(), msg);
+            }
+            if (emailChanged && formCustomer.getEmail() != null && !formCustomer.getEmail().isBlank()) {
+                String subject = "MediManage Profile Update";
+                String body = "Hello " + formCustomer.getName() + ",\n\nYour contact email address has been successfully updated in your MediManage Pharmacy profile. If you did not request this, please contact us immediately.";
+                EmailService.sendNotificationEmail(formCustomer.getEmail(), subject, body);
+            }
+
             return new SaveResult(SaveOperation.UPDATED, "Customer updated successfully.");
         }
 
         customerStore.addCustomer(formCustomer);
+        
+        // Welcome New Customer
+        if (formCustomer.getPhoneNumber() != null && !formCustomer.getPhoneNumber().isBlank()) {
+            String welcomeMsg = "👋 Welcome to *MediManage Pharmacy*, " + formCustomer.getName() + "!\n\nYour profile has been successfully created. We look forward to serving you with the best care possible. Stay healthy! 🌿";
+            WhatsAppService.sendNotificationWhatsApp(formCustomer.getPhoneNumber(), welcomeMsg);
+        }
+        if (formCustomer.getEmail() != null && !formCustomer.getEmail().isBlank()) {
+            String subject = "Welcome to MediManage Pharmacy!";
+            String body = "Hello " + formCustomer.getName() + ",\n\nWelcome to MediManage Pharmacy! Your profile has been successfully created. We look forward to serving you with the best care possible.\n\nStay healthy!";
+            EmailService.sendNotificationEmail(formCustomer.getEmail(), subject, body);
+        }
+        
         return new SaveResult(SaveOperation.ADDED, "Customer added successfully.");
     }
 

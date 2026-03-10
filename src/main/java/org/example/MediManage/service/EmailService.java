@@ -53,17 +53,15 @@ public class EmailService {
                 // Body text part
                 MimeBodyPart textPart = new MimeBodyPart();
                 StringBuilder sb = new StringBuilder();
-                sb.append("Dear ").append(customerName).append(",\n\n");
-                sb.append("Thank you for your purchase. Your total was ₹").append(String.format("%.2f", totalAmount)).append(".\n\n");
-                sb.append("Please find your invoice attached to this email.\n\n");
+                sb.append("Hello ").append(customerName).append(",\n\n");
+                sb.append("Thank you for choosing MediManage Pharmacy! Your invoice for ₹").append(String.format("%.2f", totalAmount)).append(" is attached below as a PDF document.\n\n");
                 
                 if (careProtocol != null && !careProtocol.isBlank()) {
-                    sb.append("--- Patient Care Protocol ---\n");
-                    sb.append(careProtocol).append("\n\n");
+                    sb.append("💡 Note: A personalized Patient Care Protocol for your medicines has been included at the end of the attached PDF. Please review it for dosage guidelines, interactions, and dietary advice.\n\n");
                 }
                 
-                sb.append("Stay healthy!\n- MediManage Pharmacy System");
-                textPart.setText(sb.toString());
+                sb.append("Stay healthy,\nMediManage Team");
+                textPart.setText(sb.toString(), "UTF-8");
                 multipart.addBodyPart(textPart);
 
                 // Attachment part
@@ -83,6 +81,49 @@ public class EmailService {
             } catch (Exception e) {
                 e.printStackTrace();
                 throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    /**
+     * Sends a simple text email (no PDF) for generic notifications.
+     */
+    public static CompletableFuture<Boolean> sendNotificationEmail(String toAddress, String subject, String bodyText) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String host = prefs.get("smtp_host", "smtp.gmail.com");
+                String port = prefs.get("smtp_port", "587");
+                String username = prefs.get("smtp_user", "");
+                String password = SecureSecretStore.get("smtp_pass");
+
+                if (username.isBlank() || password.isBlank()) {
+                    throw new IllegalArgumentException("SMTP Credentials not configured in Settings.");
+                }
+
+                Properties props = new Properties();
+                props.put("mail.smtp.auth", "true");
+                props.put("mail.smtp.starttls.enable", "true");
+                props.put("mail.smtp.host", host);
+                props.put("mail.smtp.port", port);
+
+                Session session = Session.getInstance(props, new Authenticator() {
+                    @Override
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(username, password);
+                    }
+                });
+
+                Message message = new MimeMessage(session);
+                message.setFrom(new InternetAddress(username, "MediManage Pharmacy"));
+                message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toAddress));
+                message.setSubject(subject);
+                message.setText(bodyText);
+
+                Transport.send(message);
+                return true;
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw new RuntimeException("Email Notification failed: " + e.getMessage(), e);
             }
         });
     }

@@ -303,7 +303,16 @@ public class BillingController {
     private void handleAddCustomer() {
         TextInputDialog phoneDialog = new TextInputDialog(txtSearchCustomer.getText());
         phoneDialog.setTitle("New Customer");
-        phoneDialog.setHeaderText("Enter Customer Phone");
+        phoneDialog.setHeaderText("Enter Customer Phone (+91...)");
+        
+        // Add text formatter to restrict to digits and '+', max 15 chars
+        TextField phoneField = phoneDialog.getEditor();
+        phoneField.setTextFormatter(new TextFormatter<>(change -> {
+            if (change.getControlNewText().length() > 15) return null;
+            if (change.getText().matches("[^0-9+]")) return null;
+            return change;
+        }));
+        
         java.util.Optional<String> phoneResult = phoneDialog.showAndWait();
         if (phoneResult.isPresent() && !phoneResult.get().trim().isEmpty()) {
             String phone = phoneResult.get().trim();
@@ -451,15 +460,20 @@ public class BillingController {
         dialog.setTitle("Checkout Successful");
         dialog.setHeaderText("Bill #" + result.billId() + " Generated successfully!\nSaved to: " + result.pdfPath());
         
+        ButtonType btnBoth = new ButtonType("📨 Send Both");
         ButtonType btnEmail = new ButtonType("📧 Email Invoice");
         ButtonType btnWhatsApp = new ButtonType("💬 WhatsApp Invoice");
         ButtonType btnClose = new ButtonType("Close", ButtonBar.ButtonData.CANCEL_CLOSE);
 
-        dialog.getButtonTypes().setAll(btnEmail, btnWhatsApp, btnClose);
+        dialog.getButtonTypes().setAll(btnBoth, btnEmail, btnWhatsApp, btnClose);
 
         java.util.Optional<ButtonType> choice = dialog.showAndWait();
         if (choice.isPresent()) {
-            if (choice.get() == btnEmail) {
+            if (choice.get() == btnBoth) {
+                // To keep it simple, we just ask for email then ask for phone.
+                handleSendEmail(result, customer, totalAmount, careProtocol);
+                handleSendWhatsApp(result, customer, totalAmount, careProtocol);
+            } else if (choice.get() == btnEmail) {
                 handleSendEmail(result, customer, totalAmount, careProtocol);
             } else if (choice.get() == btnWhatsApp) {
                 handleSendWhatsApp(result, customer, totalAmount, careProtocol);
@@ -493,6 +507,15 @@ public class BillingController {
         TextInputDialog phoneDialog = new TextInputDialog(customer != null ? customer.getPhone() : "");
         phoneDialog.setTitle("Send WhatsApp");
         phoneDialog.setHeaderText("Enter Customer WhatsApp Number (+CCxxxxxxxxxx)");
+        
+        // Add text formatter to restrict to digits and '+', max 15 chars
+        TextField phoneField = phoneDialog.getEditor();
+        phoneField.setTextFormatter(new TextFormatter<>(change -> {
+            if (change.getControlNewText().length() > 15) return null;
+            if (change.getText().matches("[^0-9+]")) return null;
+            return change;
+        }));
+        
         java.util.Optional<String> phoneResult = phoneDialog.showAndWait();
 
         if (phoneResult.isPresent() && !phoneResult.get().trim().isEmpty()) {
@@ -501,7 +524,7 @@ public class BillingController {
             
             org.example.MediManage.util.ToastNotification.info("Sending WhatsApp to " + toPhone + "...");
             
-            WhatsAppService.sendInvoiceWhatsApp(toPhone, name, totalAmount, careProtocol, result.billId())
+            WhatsAppService.sendInvoiceWhatsApp(toPhone, name, totalAmount, careProtocol, result.billId(), result.pdfPath())
                 .thenAccept(success -> Platform.runLater(() -> 
                     org.example.MediManage.util.ToastNotification.success("WhatsApp message sent successfully!")))
                 .exceptionally(ex -> {

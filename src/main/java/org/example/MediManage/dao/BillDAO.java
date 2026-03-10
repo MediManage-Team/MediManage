@@ -538,6 +538,26 @@ public class BillDAO {
         return "CASH";
     }
 
+    /**
+     * Get customer email for a bill.
+     */
+    public String getCustomerEmailByBillId(int billId) {
+        String sql = "SELECT c.email FROM bills b JOIN customers c ON b.customer_id = c.customer_id WHERE b.bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String email = rs.getString("email");
+                    return email != null ? email : "";
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to get customer email for bill " + billId + ": " + e.getMessage());
+        }
+        return "";
+    }
+
     private int normalizeHistoryLimit(int limit) {
         if (limit <= 0) {
             return DEFAULT_HISTORY_LIMIT;

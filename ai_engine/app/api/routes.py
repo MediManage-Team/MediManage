@@ -3,16 +3,16 @@ import threading
 import hashlib
 import os
 import signal
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-from app.services.inference import engine
-from app.services import download as download_manager
-from app.core import hardware as hardware_detect
-from app.services.cloud import cloud_api_client
-from app.services import prompts
-from app.api.middleware import set_progress, get_progress, _download_cancel
+from app.services.inference import engine  # type: ignore
+from app.services import download as download_manager  # type: ignore
+from app.core import hardware as hardware_detect  # type: ignore
+from app.services.cloud import cloud_api_client  # type: ignore
+from app.services import prompts  # type: ignore
+from app.api.middleware import set_progress, get_progress, _download_cancel  # type: ignore
 
 # Default models directory
 MODELS_DIR = os.path.join(os.path.expanduser("~"), "MediManage", "models")
@@ -168,7 +168,7 @@ def chat():
 
 def _auto_load_model():
     """Auto-detect and load the best available model from the models directory."""
-    from inference import list_local_models
+    from app.services.inference import list_local_models  # type: ignore
     models = list_local_models(MODELS_DIR)
     if not models:
         logger.warning("No models found in %s for auto-load", MODELS_DIR)
@@ -454,7 +454,7 @@ def model_info():
                     fp = os.path.join(root, f)
                     files.append({
                         "name": os.path.relpath(fp, model_path),
-                        "size_mb": round(float(os.path.getsize(fp)) / 1024 / 1024, 2)
+                        "size_mb": round(float(os.path.getsize(fp)) / (1024 * 1024), 2)  # type: ignore
                     })
             info["files"] = files
 
@@ -509,11 +509,13 @@ def _scan_model(path, name):
 
     if os.path.isdir(path):
         # Calculate total size
-        total_size = 0.0
+        total_size = float(0.0)
         for root, dirs, files in os.walk(path):
             for f in files:
-                total_size = total_size + float(os.path.getsize(os.path.join(root, f)))
-        info["size_mb"] = round(total_size / 1024 / 1024, 2)  # type: ignore
+                sz = os.path.getsize(os.path.join(root, f))
+                total_size = float(total_size) + float(sz)  # pyre-ignore
+        size_megabytes = float(total_size) / float(1024 * 1024)
+        info["size_mb"] = float(f"{size_megabytes:.2f}")
 
         # Detect format
         dir_files = []
@@ -589,7 +591,7 @@ def mcp_status():
     # Check if mcp package is installed in current env
     mcp_installed = False
     try:
-        import mcp
+        import mcp  # type: ignore
         mcp_installed = True
     except ImportError:
         pass

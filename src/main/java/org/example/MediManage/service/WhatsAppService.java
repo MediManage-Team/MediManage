@@ -1,66 +1,102 @@
 package org.example.MediManage.service;
 
-import com.twilio.Twilio;
-import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.type.PhoneNumber;
-
-import org.example.MediManage.security.SecureSecretStore;
-
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.concurrent.CompletableFuture;
-import java.util.prefs.Preferences;
 
 public class WhatsAppService {
 
-    private static final Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
-
     /**
-     * Sends a WhatsApp message via Twilio with the invoice summary and care protocol.
+     * Sends a WhatsApp message via local Node.js bridge (whatsapp-web.js) with the invoice summary, care protocol and PDF attachment.
      */
-    public static CompletableFuture<Boolean> sendInvoiceWhatsApp(String toPhone, String customerName, double totalAmount, String careProtocol, int billId) {
+    public static CompletableFuture<Boolean> sendInvoiceWhatsApp(String toPhone, String customerName, double totalAmount, String careProtocol, int billId, String pdfPath) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String sid = prefs.get("twilio_sid", "");
-                String token = SecureSecretStore.get("twilio_token");
-                String senderNo = prefs.get("twilio_sender", "");
-
-                if (sid.isBlank() || token.isBlank() || senderNo.isBlank()) {
-                    throw new IllegalArgumentException("Twilio WhatsApp credentials not configured in Settings.");
-                }
-
-                // Make sure recipient and sender have "whatsapp:" prefix
-                String formattedTo = toPhone.startsWith("whatsapp:") ? toPhone : "whatsapp:" + toPhone;
-                String formattedFrom = senderNo.startsWith("whatsapp:") ? senderNo : "whatsapp:" + senderNo;
-
-                Twilio.init(sid, token);
-
-                StringBuilder body = new StringBuilder();
-                body.append("🏥 *MediManage Pharmacy*\n\n");
-                body.append("Dear ").append(customerName).append(",\n");
-                body.append("Thank you for your purchase. Invoice #").append(billId).append(" total: *₹")
-                    .append(String.format("%.2f", totalAmount)).append("*.\n\n");
+                // Clean up the recipient phone number 
+                String cleanToPhone = toPhone.replaceAll("[^0-9+]", "");
+                
+                // Format the message nicely with Emojis
+                StringBuilder bodyBuilder = new StringBuilder();
+                bodyBuilder.append("🟢 *MediManage Pharmacy*\n");
+                bodyBuilder.append("─────────────────────\n\n");
+                bodyBuilder.append("Hello *").append(customerName).append("*,\n\n");
+                bodyBuilder.append("Thank you for choosing us! Your invoice #*").append(billId).append("* for *₹")
+                    .append(String.format("%.2f", totalAmount)).append("* is attached below as a PDF document.\n\n");
 
                 if (careProtocol != null && !careProtocol.isBlank()) {
-                    body.append("💊 *Patient Care Protocol*\n");
-                    // Optionally trim very long protocols or leave as is. Twilio limits are quite large (1600 chars).
-                    body.append(careProtocol).append("\n\n");
+                    bodyBuilder.append("💡 *Note:* A personalized Patient Care Protocol for your medicines has been included at the end of the attached PDF. Please review it for dosage guidelines, interactions, and dietary advice.\n\n");
                 }
+                bodyBuilder.append("Stay healthy & take care! 🙏");
 
-                body.append("Take care and stay healthy!");
+                // Resolve absolute path for PDF so Node.js (running in subfolder) can find it
+                String absolutePdfPath = (pdfPath != null && !pdfPath.isBlank()) 
+                    ? java.nio.file.Paths.get(pdfPath).toAbsolutePath().toString() 
+                    : "";
 
-                Message message = Message.creator(
-                        new PhoneNumber(formattedTo),
-                        new PhoneNumber(formattedFrom),
-                        body.toString()
-                ).create();
+                // Safely build the JSON payload using Gson
+                JsonObject json = new JsonObject();
+                json.addProperty("phone", cleanToPhone);
+                json.addProperty("message", bodyBuilder.toString());
+                json.addProperty("pdfPath", absolutePdfPath);
 
-                if (message.getErrorCode() != null) {
-                    throw new RuntimeException("Twilio Error: " + message.getErrorMessage());
+                String jsonPayload = new Gson().toJson(json);
+
+                HttpClient client = HttpClient.newHttpClient();
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:3000/send"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                        .build();
+
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() != 200) {
+                    throw new RuntimeException("Local WhatsApp Bridge Error: " + response.body());
                 }
 
                 return true;
             } catch (Exception e) {
                 e.printStackTrace();
                 throw new RuntimeException("WhatsApp sending failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    /**
+     * Sends a simple text WhatsApp message (no PDF) for generic notifications.
+     */
+    public static CompletableFuture<Boolean> sendNotificationWhatsApp(String toPhone, String message) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String cleanToPhone = toPhone.replaceAll("[^0-9+]", "");
+                
+                JsonObject json = new JsonObject();
+                json.addProperty("phone", cleanToPhone);
+                json.addProperty("message", message);
+
+                String jsonPayload = new Gson().toJson(json);
+
+                HttpClient client = HttpClient.newHttpClient();
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:3000/send"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                        .build();
+
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() != 200) {
+                    throw new RuntimeException("Local WhatsApp Bridge Error: " + response.body());
+                }
+
+                return true;
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw new RuntimeException("WhatsApp Text sending failed: " + e.getMessage(), e);
             }
         });
     }

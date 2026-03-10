@@ -562,7 +562,84 @@ public class DashboardController {
             }
         });
 
-        javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10, btnDownloadReceipt, btnDownload);
+        Button btnWhatsApp = new Button("WhatsApp Invoice");
+        btnWhatsApp.getStyleClass().add("button-primary");
+        btnWhatsApp.setOnAction(e -> {
+            TextInputDialog phoneDialog = new TextInputDialog(bill.phoneProperty().get());
+            phoneDialog.setTitle("Send via WhatsApp");
+            phoneDialog.setHeaderText("Enter mobile number to send WhatsApp Invoice:");
+            phoneDialog.setContentText("Phone:");
+            phoneDialog.showAndWait().ifPresent(phone -> {
+                if (!phone.trim().isEmpty()) {
+                    try {
+                        File tempFile = File.createTempFile("Invoice_" + bill.getBillId(), ".pdf");
+                        String storedProtocol = billDAO.getAICareProtocol(bill.getBillId());
+                        if (storedProtocol == null) storedProtocol = "";
+                        else {
+                            storedProtocol = storedProtocol
+                                .replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>")
+                                .replaceAll("(?m)^#+\\s+", "<b>")
+                                .replaceAll("(?m)^#+\\s+.*$", "$0</b>")
+                                .replaceAll("`", "")
+                                .trim();
+                        }
+                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol);
+                        
+                        org.example.MediManage.service.WhatsAppService.sendInvoiceWhatsApp(
+                                phone.trim(), bill.customerNameProperty().get(), bill.totalProperty().get(),
+                                storedProtocol, bill.getBillId(), tempFile.getAbsolutePath()
+                        ).thenAccept(res -> Platform.runLater(() -> showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice sent via WhatsApp!")))
+                         .exceptionally(ex -> {
+                             Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Error", "Failed to send WhatsApp: " + ex.getMessage()));
+                             return null;
+                         });
+                    } catch (Exception ex) {
+                        showAlert(Alert.AlertType.ERROR, "Error", "Failed to generate PDF: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+
+        Button btnEmail = new Button("Email Invoice");
+        btnEmail.getStyleClass().add("button-secondary");
+        btnEmail.setOnAction(e -> {
+            String defaultEmail = billDAO.getCustomerEmailByBillId(bill.getBillId());
+            TextInputDialog emailDialog = new TextInputDialog(defaultEmail);
+            emailDialog.setTitle("Send via Email");
+            emailDialog.setHeaderText("Enter email address to send Invoice:");
+            emailDialog.setContentText("Email:");
+            emailDialog.showAndWait().ifPresent(email -> {
+                 if (!email.trim().isEmpty()) {
+                    try {
+                        File tempFile = File.createTempFile("Invoice_" + bill.getBillId(), ".pdf");
+                        String storedProtocol = billDAO.getAICareProtocol(bill.getBillId());
+                        if (storedProtocol == null) storedProtocol = "";
+                        else {
+                            storedProtocol = storedProtocol
+                                .replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>")
+                                .replaceAll("(?m)^#+\\s+", "<b>")
+                                .replaceAll("(?m)^#+\\s+.*$", "$0</b>")
+                                .replaceAll("`", "")
+                                .trim();
+                        }
+                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol);
+                        
+                        org.example.MediManage.service.EmailService.sendInvoiceEmail(
+                                email.trim(), bill.customerNameProperty().get(), storedProtocol,
+                                tempFile.getAbsolutePath(), bill.getBillId(), bill.totalProperty().get()
+                        ).thenAccept(res -> Platform.runLater(() -> showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice sent via Email!")))
+                         .exceptionally(ex -> {
+                             Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Error", "Failed to send Email: " + ex.getMessage()));
+                             return null;
+                         });
+                    } catch (Exception ex) {
+                        showAlert(Alert.AlertType.ERROR, "Error", "Failed to generate PDF: " + ex.getMessage());
+                    }
+                 }
+            });
+        });
+
+        javafx.scene.layout.HBox buttonBox = new javafx.scene.layout.HBox(10, btnEmail, btnWhatsApp, btnDownloadReceipt, btnDownload);
         buttonBox.setAlignment(Pos.CENTER_RIGHT);
         buttonBox.setPadding(new javafx.geometry.Insets(10, 0, 0, 0));
 

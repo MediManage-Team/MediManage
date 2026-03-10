@@ -92,9 +92,10 @@ public class SettingsController {
     @FXML private TextField smtpPortField;
     @FXML private TextField smtpUserField;
     @FXML private PasswordField smtpPassField;
-    @FXML private TextField twilioSidField;
-    @FXML private PasswordField twilioTokenField;
-    @FXML private TextField twilioSenderField;
+    
+    // --- Local WhatsApp Bridge ---
+    @FXML private javafx.scene.control.Label lblWhatsAppStatus;
+    @FXML private javafx.scene.image.ImageView imgQRCode;
 
     private final org.example.MediManage.service.ai.PythonEnvironmentManager envManager = AIServiceProvider
             .get().getEnvManager();
@@ -159,9 +160,8 @@ public class SettingsController {
         smtpUserField.setText(prefs.get("smtp_user", ""));
         smtpPassField.setText(org.example.MediManage.security.SecureSecretStore.get("smtp_pass"));
 
-        twilioSidField.setText(prefs.get("twilio_sid", ""));
-        twilioTokenField.setText(org.example.MediManage.security.SecureSecretStore.get("twilio_token"));
-        twilioSenderField.setText(prefs.get("twilio_sender", ""));
+        // Initial load of WhatsApp Status
+        javafx.application.Platform.runLater(this::handleRefreshWhatsApp);
     }
 
     private void setupLocalModelsCombo() {
@@ -743,13 +743,93 @@ public class SettingsController {
         prefs.put("smtp_user", smtpUserField.getText().trim());
         org.example.MediManage.security.SecureSecretStore.put("smtp_pass", smtpPassField.getText());
 
-        prefs.put("twilio_sid", twilioSidField.getText().trim());
-        org.example.MediManage.security.SecureSecretStore.put("twilio_token", twilioTokenField.getText());
-        prefs.put("twilio_sender", twilioSenderField.getText().trim());
+
 
         try { prefs.flush(); } catch (Exception ignored) {}
 
         org.example.MediManage.util.ToastNotification.success("Communication Settings Saved");
+    }
+
+    @FXML
+    private void handleRefreshWhatsApp() {
+        lblWhatsAppStatus.setText("Checking...");
+        imgQRCode.setImage(null);
+        
+        AppExecutors.runBackground(() -> {
+            try {
+                // Check Status 
+                HttpRequest statusRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:3000/status"))
+                    .GET()
+                    .build();
+                HttpResponse<String> statusResp = httpClient.send(statusRequest, HttpResponse.BodyHandlers.ofString());
+                
+                JSONObject statusJson = new JSONObject(statusResp.body());
+                String statusMsg = statusJson.optString("status", "UNKNOWN");
+                
+                javafx.application.Platform.runLater(() -> {
+                    lblWhatsAppStatus.setText(statusMsg);
+                    if ("CONNECTED".equals(statusMsg)) {
+                        lblWhatsAppStatus.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
+                        try {
+                            javafx.scene.image.Image connectedImg = new javafx.scene.image.Image("https://img.icons8.com/color/512/whatsapp--v1.png", true);
+                            imgQRCode.setImage(connectedImg);
+                        } catch (Exception ignored) {}
+                    } else if ("QR_REQUIRED".equals(statusMsg)) {
+                        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+                        fetchAndDisplayQR();
+                    } else {
+                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                    }
+                });
+                
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> {
+                    lblWhatsAppStatus.setText("NOT RUNNING. Start Node Bridge.");
+                    lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                });
+            }
+        });
+    }
+
+    private void fetchAndDisplayQR() {
+        AppExecutors.runBackground(() -> {
+            try {
+                HttpRequest qrRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:3000/qr"))
+                    .GET()
+                    .build();
+                HttpResponse<String> qrResp = httpClient.send(qrRequest, HttpResponse.BodyHandlers.ofString());
+                JSONObject json = new JSONObject(qrResp.body());
+                if (json.has("qr") && !json.isNull("qr")) {
+                    String qrData = json.getString("qr");
+                    
+                    // Generate a real image from the QR string text using ZXing
+                    try {
+                        com.google.zxing.qrcode.QRCodeWriter qrCodeWriter = new com.google.zxing.qrcode.QRCodeWriter();
+                        com.google.zxing.common.BitMatrix bitMatrix = qrCodeWriter.encode(qrData, com.google.zxing.BarcodeFormat.QR_CODE, 200, 200);
+                        
+                        javafx.scene.image.WritableImage image = new javafx.scene.image.WritableImage(200, 200);
+                        javafx.scene.image.PixelWriter pixelWriter = image.getPixelWriter();
+                        
+                        for (int x = 0; x < 200; x++) {
+                            for (int y = 0; y < 200; y++) {
+                                pixelWriter.setColor(x, y, bitMatrix.get(x, y) ? javafx.scene.paint.Color.BLACK : javafx.scene.paint.Color.WHITE);
+                            }
+                        }
+                        
+                        javafx.application.Platform.runLater(() -> {
+                            imgQRCode.setImage(image);
+                            org.example.MediManage.util.ToastNotification.info("Scan the QR Code to Link WhatsApp Bridge!");
+                        });
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private boolean enforcePermission(Permission permission) {

@@ -2,8 +2,8 @@ import threading
 import hmac
 import logging
 import os
-from flask import request, jsonify
-from app.core.logger import get_correlation_id, set_correlation_id, clear_correlation_id
+from flask import request, jsonify  # type: ignore
+from app.core.logger import get_correlation_id, set_correlation_id, clear_correlation_id  # type: ignore
 
 logger = logging.getLogger(__name__)
 

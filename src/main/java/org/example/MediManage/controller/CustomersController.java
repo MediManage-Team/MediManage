@@ -121,6 +121,13 @@ public class CustomersController {
             filteredList.setPredicate(customer -> customerService.matchesSearch(customer, newVal));
         });
 
+        // Formatter for Phone Number field (digits and + only, max 15 chars)
+        txtPhone.setTextFormatter(new TextFormatter<>(change -> {
+            if (change.getControlNewText().length() > 15) return null;
+            if (change.getText().matches("[^0-9+]")) return null;
+            return change;
+        }));
+
         // Table selection listener → populate form
         customerTable.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {

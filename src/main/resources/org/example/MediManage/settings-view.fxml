@@ -2,6 +2,7 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/17"
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
@@ -146,26 +147,23 @@
                         </GridPane>
                     </VBox>
 
-                    <!-- WhatsApp Settings -->
-                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;">
-                        <Label text="WhatsApp Settings (Twilio)" style="-fx-font-weight: bold;"/>
-                        <Label text="Used for sending Invoice Summary." styleClass="text-muted" wrapText="true"/>
+                    <!-- WhatsApp Bridge Settings -->
+                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;" alignment="TOP_CENTER">
+                        <Label text="Local WhatsApp Bridge" style="-fx-font-weight: bold;"/>
+                        <Label text="Uses whatsapp-web.js to send free invoices." styleClass="text-muted" wrapText="true"/>
                         
-                        <GridPane hgap="10" vgap="8">
-                            <Label text="Account SID:" GridPane.rowIndex="0" GridPane.columnIndex="0" styleClass="text-muted"/>
-                            <TextField fx:id="twilioSidField" promptText="AC..." GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
-                            <Label text="Auth Token:" GridPane.rowIndex="1" GridPane.columnIndex="0" styleClass="text-muted"/>
-                            <PasswordField fx:id="twilioTokenField" promptText="Your Secret Token" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
-                            <Label text="Sender No:" GridPane.rowIndex="2" GridPane.columnIndex="0" styleClass="text-muted"/>
-                            <TextField fx:id="twilioSenderField" promptText="whatsapp:+14155238886" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
-                            <columnConstraints>
-                                <ColumnConstraints minWidth="80" prefWidth="85"/>
-                                <ColumnConstraints hgrow="ALWAYS"/>
-                            </columnConstraints>
-                        </GridPane>
+                        <HBox alignment="CENTER" spacing="10" style="-fx-padding: 10 0 10 0;">
+                            <Label text="Status:" style="-fx-font-weight: bold;"/>
+                            <Label fx:id="lblWhatsAppStatus" text="Checking..." style="-fx-text-fill: #e8c66a; -fx-font-weight: bold;"/>
+                        </HBox>
+
+                        <StackPane style="-fx-background-color: white; -fx-padding: 5; -fx-border-color: #ccc; -fx-border-radius: 5;" maxWidth="-Infinity">
+                            <ImageView fx:id="imgQRCode" fitWidth="180" fitHeight="180" preserveRatio="true"/>
+                        </StackPane>
+                        
+                        <Label text="If disconnected, scan the QR code using WhatsApp -> Linked Devices." styleClass="text-muted" wrapText="true" textAlignment="CENTER"/>
+                        
+                        <Button fx:id="btnRefreshWhatsApp" text="Refresh Status" onAction="#handleRefreshWhatsApp" styleClass="button-outlined" maxWidth="Infinity" style="-fx-margin-top: 10;"/>
                     </VBox>
                 </HBox>
                 <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">

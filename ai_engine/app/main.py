@@ -1,9 +1,9 @@
 import logging
 import os
-from flask import Flask
-from app.core.logger import configure_structured_logging
-from app.api.routes import api_bp, MODELS_DIR
-from app.api.middleware import setup_middleware, ADMIN_TOKEN
+from flask import Flask  # type: ignore
+from app.core.logger import configure_structured_logging  # type: ignore
+from app.api.routes import api_bp, MODELS_DIR  # type: ignore
+from app.api.middleware import setup_middleware, ADMIN_TOKEN  # type: ignore
 
 def create_app():
     configure_structured_logging(force=True)
