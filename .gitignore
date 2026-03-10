@@ -77,10 +77,15 @@ Output/
 *.deb
 *.rpm
 
-# ── Logs ──────────────────────────────────────────────────
+# ── Logs & Build Output ──────────────────────────
 *.log
+*_output.txt
+*_out.txt
 
-# ── Generated Invoices ───────────────────────────────────
+# ── Misc Config ──────────────────────────────────
+.pyre_configuration
+
+# ── Generated Invoices ───────────────────────────
 Invoice_*.pdf
 
 # ── Maven Wrapper (keep jar) ─────────────────────────────
