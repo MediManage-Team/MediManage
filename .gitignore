@@ -86,3 +86,5 @@ Invoice_*.pdf
 # ── Maven Wrapper (keep jar) ─────────────────────────────
 !.mvn/wrapper/maven-wrapper.jar
 whatsapp-server/.wwebjs_auth/
+whatsapp-server/node_modules/
+whatsapp-server/.env
