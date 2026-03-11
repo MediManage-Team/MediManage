@@ -32,6 +32,9 @@ public class DatabaseUtil {
             // Initialize Schema if tables don't exist
             runSchema(conn);
 
+            // Seed default message templates
+            seedMessageTemplatesIfNeeded(conn);
+
             // Auto-seed sample data if DB is fresh (idempotent)
             runSeedDataIfNeeded(conn);
         }
@@ -87,6 +90,29 @@ public class DatabaseUtil {
         }
 
         System.out.println("✅ Schema initialized successfully.");
+    }
+
+    private static void seedMessageTemplatesIfNeeded(Connection conn) {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM message_templates")) {
+            if (rs.next() && rs.getInt(1) > 0) {
+                return; // Templates already seeded
+            }
+        } catch (SQLException e) {
+            System.err.println("Could not check message_templates: " + e.getMessage());
+            return;
+        }
+
+        System.out.println("🌱 Seeding default message templates...");
+        org.example.MediManage.dao.MessageTemplateDAO dao = new org.example.MediManage.dao.MessageTemplateDAO();
+        try {
+            dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE, null, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE)));
+            dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT), dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT)));
+            dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY, null, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY)));
+            System.out.println("✅ Default templates seeded.");
+        } catch (Exception e) {
+            System.err.println("Failed to seed templates: " + e.getMessage());
+        }
     }
 
     /**

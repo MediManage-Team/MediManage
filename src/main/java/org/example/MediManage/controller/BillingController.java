@@ -309,7 +309,7 @@ public class BillingController {
         TextField phoneField = phoneDialog.getEditor();
         phoneField.setTextFormatter(new TextFormatter<>(change -> {
             if (change.getControlNewText().length() > 15) return null;
-            if (change.getText().matches("[^0-9+]")) return null;
+            if (!change.getControlNewText().matches("[0-9+]*")) return null;
             return change;
         }));
         

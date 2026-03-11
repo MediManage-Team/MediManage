@@ -10,9 +10,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.prefs.Preferences;
 import java.io.File;
 
+import org.example.MediManage.dao.MessageTemplateDAO;
+import org.example.MediManage.dao.ReceiptSettingsDAO;
+import org.example.MediManage.model.MessageTemplate;
+import org.example.MediManage.model.ReceiptSettings;
+
 public class EmailService {
 
     private static final Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+    private static final MessageTemplateDAO templateDAO = new MessageTemplateDAO();
+    private static final ReceiptSettingsDAO receiptDAO = new ReceiptSettingsDAO();
 
     /**
      * Sends an email with the invoice attached and care protocol in the body.
@@ -45,23 +52,36 @@ public class EmailService {
                 Message message = new MimeMessage(session);
                 message.setFrom(new InternetAddress(username, "MediManage Pharmacy"));
                 message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toAddress));
-                message.setSubject("Your Invoice #" + billId + " & Care Protocol - MediManage");
+                // Fetch templates
+                String pharmacyName = "MediManage Pharmacy";
+                try {
+                    ReceiptSettings rs = receiptDAO.getSettings();
+                    if (rs.getPharmacyName() != null && !rs.getPharmacyName().isBlank()) {
+                        pharmacyName = rs.getPharmacyName();
+                    }
+                } catch (Exception ignored) {}
+
+                String careNote = "";
+                if (careProtocol != null && !careProtocol.isBlank()) {
+                    careNote = "\uD83D\uDCA1 *Note:* A personalized Patient Care Protocol for your medicines has been included at the end of the attached PDF. Please review it for dosage guidelines, interactions, and dietary advice.";
+                }
+
+                MessageTemplate subjectTpl = templateDAO.getByKey(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT);
+                String subjectStr = subjectTpl != null ? subjectTpl.getBodyTemplate() : templateDAO.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT);
+                String finalSubject = MessageTemplate.render(subjectStr, customerName, billId, totalAmount, pharmacyName, careNote);
+
+                MessageTemplate bodyTpl = templateDAO.getByKey(MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY);
+                String bodyStr = bodyTpl != null ? bodyTpl.getBodyTemplate() : templateDAO.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY);
+                String finalBody = MessageTemplate.render(bodyStr, customerName, billId, totalAmount, pharmacyName, careNote);
+
+                message.setSubject(finalSubject);
 
                 // Create a multipart message
                 Multipart multipart = new MimeMultipart();
 
                 // Body text part
                 MimeBodyPart textPart = new MimeBodyPart();
-                StringBuilder sb = new StringBuilder();
-                sb.append("Hello ").append(customerName).append(",\n\n");
-                sb.append("Thank you for choosing MediManage Pharmacy! Your invoice for ₹").append(String.format("%.2f", totalAmount)).append(" is attached below as a PDF document.\n\n");
-                
-                if (careProtocol != null && !careProtocol.isBlank()) {
-                    sb.append("💡 Note: A personalized Patient Care Protocol for your medicines has been included at the end of the attached PDF. Please review it for dosage guidelines, interactions, and dietary advice.\n\n");
-                }
-                
-                sb.append("Stay healthy,\nMediManage Team");
-                textPart.setText(sb.toString(), "UTF-8");
+                textPart.setText(finalBody, "UTF-8");
                 multipart.addBodyPart(textPart);
 
                 // Attachment part

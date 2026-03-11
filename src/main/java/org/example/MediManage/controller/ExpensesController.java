@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import javafx.application.Platform;
+import org.example.MediManage.util.AppExecutors;
 
 public class ExpensesController {
 
@@ -59,15 +61,18 @@ public class ExpensesController {
 
     @FXML
     private void loadExpenses() {
-        try {
-            List<Expense> allExpenses = expenseDAO.getAllExpenses();
-            expensesList.setAll(allExpenses);
-            
-            calculateMonthlyTotal(allExpenses);
-        } catch (SQLException e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load expenses.");
-        }
+        AppExecutors.runBackground(() -> {
+            try {
+                List<Expense> allExpenses = expenseDAO.getAllExpenses();
+                Platform.runLater(() -> {
+                    expensesList.setAll(allExpenses);
+                    calculateMonthlyTotal(allExpenses);
+                });
+            } catch (SQLException e) {
+                e.printStackTrace();
+                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Error", "Failed to load expenses."));
+            }
+        });
     }
 
     private void calculateMonthlyTotal(List<Expense> allExpenses) {

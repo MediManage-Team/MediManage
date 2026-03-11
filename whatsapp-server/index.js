@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 const MAX_AUTH_RETRIES = parseInt(process.env.MAX_AUTH_RETRIES, 10) || 3;
 const MAX_DISCONNECT_RETRIES = parseInt(process.env.MAX_DISCONNECT_RETRIES, 10) || 5;
 const SEND_RATE_LIMIT = parseInt(process.env.SEND_RATE_LIMIT, 10) || 10; // per minute
-const ALLOWED_PDF_DIR = path.resolve(process.env.ALLOWED_PDF_DIR || path.join(__dirname, '..'));
+const ALLOWED_PDF_DIR = path.resolve(process.env.ALLOWED_PDF_DIR || require('os').homedir());
 
 // --- Structured Logger ---
 function log(level, msg, meta = {}) {
@@ -22,215 +22,250 @@ function log(level, msg, meta = {}) {
         message: msg,
         ...meta
     };
-    if (level === 'ERROR') {
-        console.error(JSON.stringify(entry));
-    } else {
-        console.log(JSON.stringify(entry));
-    }
+    console.log(JSON.stringify(entry));
 }
 
+// --- Express Server Setup ---
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Rate Limiting ---
+// Basic Rate Limiting for sending messages
 const sendLimiter = rateLimit({
-    windowMs: 60 * 1000,
+    windowMs: 60 * 1000, // 1 minute
     max: SEND_RATE_LIMIT,
-    message: { success: false, error: 'Too many requests. Please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
+    message: { success: false, error: 'Too many messages sent from this IP, please try again after a minute' }
 });
 
-// --- WhatsApp Client State ---
+// --- State Variables ---
+let clientStatus = 'INITIALIZING'; // INITIALIZING, QR_REQUIRED, AUTHENTICATING, CONNECTED, FAILED, DISCONNECTED
 let qrCodeData = null;
-let clientStatus = 'DISCONNECTED'; // DISCONNECTED, QR_REQUIRED, CONNECTED, AUTHENTICATING, FAILED
 let authRetries = 0;
 let disconnectRetries = 0;
 
+const PUPPETEER_ARGS = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu'
+];
+
+function createClient() {
+    return new Client({
+        authStrategy: new LocalAuth(),
+        puppeteer: {
+            headless: true,
+            args: PUPPETEER_ARGS
+        }
+    });
+}
+
+let client = createClient();
+
+function attachClientEvents(c) {
+    c.on('qr', (qr) => {
+        log('INFO', 'New QR code generated. Scan via WhatsApp to link MediManage.');
+        qrcode.generate(qr, { small: true });
+        qrCodeData = qr;
+        clientStatus = 'QR_REQUIRED';
+    });
+
+    c.on('authenticated', () => {
+        log('INFO', 'WhatsApp authenticated successfully.');
+        clientStatus = 'AUTHENTICATING';
+        qrCodeData = null;
+        authRetries = 0;
+    });
+
+    c.on('auth_failure', (msg) => {
+        authRetries++;
+        log('ERROR', 'WhatsApp authentication failure.', { attempt: authRetries, max: MAX_AUTH_RETRIES, detail: msg });
+
+        if (authRetries >= MAX_AUTH_RETRIES) {
+            log('ERROR', `Max auth retries (${MAX_AUTH_RETRIES}) reached. Manual intervention required.`);
+            clientStatus = 'FAILED';
+            return;
+        }
+
+        clientStatus = 'DISCONNECTED';
+        try { fs.rmSync('./.wwebjs_auth', { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        c.initialize();
+    });
+
+    c.on('ready', () => {
+        log('INFO', 'WhatsApp ready and connected. Monitoring for requests...');
+        clientStatus = 'CONNECTED';
+        disconnectRetries = 0;
+    });
+
+    c.on('disconnected', (reason) => {
+        disconnectRetries++;
+        log('WARN', 'WhatsApp disconnected.', { reason, attempt: disconnectRetries, max: MAX_DISCONNECT_RETRIES });
+
+        if (disconnectRetries >= MAX_DISCONNECT_RETRIES) {
+            log('ERROR', `Max disconnect retries (${MAX_DISCONNECT_RETRIES}) reached. Manual intervention required.`);
+            clientStatus = 'FAILED';
+            return;
+        }
+
+        clientStatus = 'DISCONNECTED';
+        c.initialize();
+    });
+}
+
 log('INFO', 'Initializing WhatsApp Client...');
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu'
-        ]
-    },
-    webVersionCache: {
-        type: 'remote',
-        remotePath: process.env.WA_WEB_VERSION_URL || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-    }
-});
-
-// --- Client Events ---
-client.on('qr', (qr) => {
-    log('INFO', 'New QR code generated. Scan via WhatsApp to link MediManage.');
-    qrcode.generate(qr, { small: true });
-    qrCodeData = qr;
-    clientStatus = 'QR_REQUIRED';
-});
-
-client.on('authenticated', () => {
-    log('INFO', 'WhatsApp authenticated successfully.');
-    clientStatus = 'AUTHENTICATING';
-    qrCodeData = null;
-    authRetries = 0; // reset on successful auth
-});
-
-client.on('auth_failure', (msg) => {
-    authRetries++;
-    log('ERROR', 'WhatsApp authentication failure.', { attempt: authRetries, max: MAX_AUTH_RETRIES, detail: msg });
-
-    if (authRetries >= MAX_AUTH_RETRIES) {
-        log('ERROR', `Max auth retries (${MAX_AUTH_RETRIES}) reached. Manual intervention required.`);
-        clientStatus = 'FAILED';
-        return;
-    }
-
-    clientStatus = 'DISCONNECTED';
-    try { fs.rmSync('./.wwebjs_auth', { recursive: true, force: true }); } catch (e) { /* ignore */ }
-    client.initialize();
-});
-
-client.on('ready', () => {
-    log('INFO', 'WhatsApp ready and connected. Monitoring for requests...');
-    clientStatus = 'CONNECTED';
-    disconnectRetries = 0; // reset on successful connection
-});
-
-client.on('disconnected', (reason) => {
-    disconnectRetries++;
-    log('WARN', 'WhatsApp disconnected.', { reason, attempt: disconnectRetries, max: MAX_DISCONNECT_RETRIES });
-
-    if (disconnectRetries >= MAX_DISCONNECT_RETRIES) {
-        log('ERROR', `Max disconnect retries (${MAX_DISCONNECT_RETRIES}) reached. Manual intervention required.`);
-        clientStatus = 'FAILED';
-        return;
-    }
-
-    clientStatus = 'DISCONNECTED';
-    client.initialize();
-});
+attachClientEvents(client);
 
 // Prevent fatal Node.js crashes from Puppeteer dropping connections
 process.on('unhandledRejection', (reason, promise) => {
-    log('ERROR', 'Unhandled Rejection', { reason: String(reason) });
+    log('WARN', 'Unhandled Promise Rejection in Node process', { reason: reason.toString() });
 });
 
-// Initialize the Client
-client.initialize();
+// --- API Endpoints ---
 
-
-// --- EXPRESS API ENDPOINTS ---
-
-// Health check
-app.get('/health', (req, res) => {
+// Get Status
+app.get('/status', (req, res) => {
     res.json({
-        uptime: process.uptime(),
         status: clientStatus,
-        timestamp: Date.now()
+        authRetries,
+        disconnectRetries
     });
 });
 
-// WhatsApp connection status
-app.get('/status', (req, res) => {
-    res.json({ status: clientStatus, ready: clientStatus === 'CONNECTED' });
-});
-
-// QR code retrieval
+// Get QR Code
 app.get('/qr', (req, res) => {
     if (clientStatus === 'QR_REQUIRED' && qrCodeData) {
-        res.json({ status: 'QR_REQUIRED', qr: qrCodeData });
+        res.json({ success: true, qr: qrCodeData });
     } else {
-        res.json({ status: clientStatus, qr: null });
+        res.status(400).json({ success: false, error: 'QR code not currently required or not generated yet.', currentStatus: clientStatus });
     }
 });
 
-// Send message (rate-limited)
+// Send Message (Text or PDF Invoice)
 app.post('/send', sendLimiter, async (req, res) => {
-    if (clientStatus !== 'CONNECTED') {
-        return res.status(503).json({ success: false, error: 'WhatsApp is not connected. Check /status.' });
-    }
-
     const { phone, message, pdfPath } = req.body;
 
     if (!phone || !message) {
-        return res.status(400).json({ success: false, error: 'Phone and message are required fields.' });
+        return res.status(400).json({ success: false, error: 'Phone number and message are required.' });
+    }
+
+    if (clientStatus !== 'CONNECTED') {
+        return res.status(503).json({ success: false, error: 'WhatsApp client is not currently connected.', currentStatus: clientStatus });
     }
 
     // Format phone number to international WhatsApp ID format
-    // e.g., '+917396096334' -> '917396096334@c.us'
     let formattedPhone = phone.replace(/[^0-9]/g, '');
     if (!formattedPhone.endsWith('@c.us')) {
         formattedPhone = formattedPhone + '@c.us';
     }
 
     try {
-        log('INFO', `Resolving WhatsApp ID...`, { phone: formattedPhone });
-
+        log('INFO', 'Resolving WhatsApp ID...', { phone: formattedPhone });
         const numberId = await client.getNumberId(formattedPhone);
+
         if (!numberId) {
-            return res.status(400).json({ success: false, error: 'This phone number is not registered on WhatsApp.' });
+            log('WARN', 'Phone number not registered on WhatsApp.', { phone: formattedPhone });
+            return res.status(404).json({ success: false, error: 'Phone number is not registered on WhatsApp.' });
         }
 
-        const secureResolvedId = numberId._serialized;
-        log('INFO', `Resolved to internal ID. Sending message...`, { resolvedId: secureResolvedId });
+        const resolvedId = numberId._serialized;
+        log('INFO', 'Resolved to internal ID. Sending message...', { resolvedId });
 
+        // Send Text Message
         let sentMessage;
 
-        // If there is a PDF path, validate it before attaching
+        // Send PDF attachment if provided
         if (pdfPath) {
-            const resolvedPdfPath = path.resolve(pdfPath);
+            log('INFO', 'Processing PDF attachment...', { pdfPath });
+            const absolutePath = path.resolve(pdfPath); // Normalize path
 
-            // Security: Prevent path traversal — only allow files under the allowed directory
-            if (!resolvedPdfPath.startsWith(ALLOWED_PDF_DIR)) {
-                log('WARN', 'Rejected PDF path outside allowed directory.', { pdfPath, allowed: ALLOWED_PDF_DIR });
-                return res.status(400).json({ success: false, error: 'Invalid PDF path. File is outside the allowed directory.' });
+            if (!absolutePath.startsWith(ALLOWED_PDF_DIR)) {
+                log('WARN', 'Rejected PDF path outside allowed directory.', { pdfPath: absolutePath, allowed: ALLOWED_PDF_DIR });
+                return res.json({ success: false, partialSuccess: true, error: 'Invalid PDF path. File is outside the allowed directory.' });
             }
 
-            if (!fs.existsSync(resolvedPdfPath)) {
-                return res.status(400).json({ success: false, error: 'PDF file not found at the specified path.' });
+            if (!fs.existsSync(absolutePath)) {
+                 log('WARN', 'PDF file not found on disk.', { pdfPath: absolutePath });
+                 return res.json({ success: false, partialSuccess: true, error: 'PDF file not found on server disk.' });
             }
 
-            log('INFO', `Attaching PDF.`, { path: resolvedPdfPath });
-            const media = MessageMedia.fromFilePath(resolvedPdfPath);
-            sentMessage = await client.sendMessage(secureResolvedId, media, { caption: message });
+            try {
+                const media = MessageMedia.fromFilePath(absolutePath);
+                sentMessage = await client.sendMessage(resolvedId, media, { caption: message });
+                log('INFO', 'PDF sent successfully.');
+            } catch (mediaError) {
+                log('ERROR', 'Failed to read or send PDF media.', { error: mediaError.toString() });
+                return res.json({ success: false, partialSuccess: true, error: 'Failed to process PDF attachment: ' + mediaError.toString() });
+            }
         } else {
-            sentMessage = await client.sendMessage(secureResolvedId, message);
+            sentMessage = await client.sendMessage(resolvedId, message);
         }
 
-        log('INFO', `Message sent successfully.`, { phone });
         res.json({ success: true, messageId: sentMessage.id._serialized });
+
     } catch (error) {
-        log('ERROR', 'Error sending message.', { error: error.toString(), phone });
+        log('ERROR', 'Failed to send message.', { error: error.toString() });
         res.status(500).json({ success: false, error: error.toString() });
     }
 });
 
+// Logout / Disconnect WhatsApp (clears session, requires re-scan)
+app.post('/logout', async (req, res) => {
+    try {
+        log('INFO', 'Logout requested. Disconnecting WhatsApp...');
+        try { await client.logout(); } catch (e) { log('WARN', 'Logout call failed, forcing destroy.', { error: e.toString() }); }
+        try { await client.destroy(); } catch (e) { log('WARN', 'Destroy call failed.', { error: e.toString() }); }
+
+        clientStatus = 'DISCONNECTED';
+        qrCodeData = null;
+        log('INFO', 'WhatsApp logged out. Creating fresh client for new QR...');
+
+        client = createClient();
+        attachClientEvents(client);
+        setTimeout(() => client.initialize(), 2000);
+
+        res.json({ success: true, message: 'WhatsApp disconnected. Scan QR to reconnect.' });
+    } catch (error) {
+        log('ERROR', 'Error during logout.', { error: error.toString() });
+        clientStatus = 'DISCONNECTED';
+        qrCodeData = null;
+        res.status(500).json({ success: false, error: error.toString() });
+    }
+});
+
+// Stop the bridge server entirely
+app.post('/shutdown', async (req, res) => {
+    res.json({ success: true, message: 'Bridge shutting down.' });
+    await shutdown('HTTP /shutdown');
+});
 
 // --- Graceful Shutdown ---
 async function shutdown(signal) {
     log('INFO', `Received ${signal}. Shutting down gracefully...`);
     try {
-        await client.destroy();
-        log('INFO', 'WhatsApp client destroyed.');
+        if (client) {
+            log('INFO', 'Destroying WhatsApp client...');
+            await client.destroy();
+        }
     } catch (e) {
-        log('ERROR', 'Error destroying WhatsApp client.', { error: e.toString() });
+        log('ERROR', 'Error destroying client during shutdown', { error: e.toString() });
     }
+    log('INFO', 'Server exiting.');
     process.exit(0);
 }
+
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-
-// --- Start Server ---
+// Start Server
 app.listen(PORT, () => {
-    log('INFO', `MediManage WhatsApp Bridge Server running on http://localhost:${PORT}`);
+    log('INFO', `WhatsApp Bridge Server running on port ${PORT}`);
+    log('INFO', 'Bridging requests to whatsapp-web.js...');
+    // Start Puppeteer client after a short delay
+    setTimeout(() => {
+        client.initialize();
+    }, 1000);
 });

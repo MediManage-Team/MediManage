@@ -13,6 +13,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.service.ai.AIAssistantService;
+import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.util.AsyncUiFeedback;
 import org.example.MediManage.util.ReportingWindowUtils;
 
@@ -107,27 +108,29 @@ public class ReportsController {
         LocalDate end = dateEnd.getValue();
         if (start == null || end == null || start.isAfter(end)) return;
 
-        // 1. Fetch raw datasets
-        Map<String, Double> salesByDay = billDAO.getSalesBetweenDates(start, end);
-        Map<String, Double> profitByDay = billDAO.getProfitBetweenDates(start, end);
-        Map<String, Integer> paymentModes = billDAO.getPaymentMethodDistribution(start, end);
-        Map<String, Integer> itemVolume = billDAO.getItemizedSales(start, end);
-        Map<String, Double> itemRevenue = billDAO.getItemizedRevenue(start, end);
+        AppExecutors.runBackground(() -> {
+            // 1. Fetch raw datasets
+            Map<String, Double> salesByDay = billDAO.getSalesBetweenDates(start, end);
+            Map<String, Double> profitByDay = billDAO.getProfitBetweenDates(start, end);
+            Map<String, Integer> paymentModes = billDAO.getPaymentMethodDistribution(start, end);
+            Map<String, Integer> itemVolume = billDAO.getItemizedSales(start, end);
+            Map<String, Double> itemRevenue = billDAO.getItemizedRevenue(start, end);
 
-        // 2. Aggregate KPI Totals
-        double totalRev = 0;
-        for (Double val : salesByDay.values()) totalRev += val;
-        
-        double totalProf = 0;
-        for (Double val : profitByDay.values()) totalProf += val;
+            Platform.runLater(() -> {
+                // 2. Aggregate KPI Totals
+                double totalRev = 0;
+                for (Double val : salesByDay.values()) totalRev += val;
+                
+                double totalProf = 0;
+                for (Double val : profitByDay.values()) totalProf += val;
 
-        int totalTxns = 0;
-        for (Integer count : paymentModes.values()) totalTxns += count;
+                int totalTxns = 0;
+                for (Integer count : paymentModes.values()) totalTxns += count;
 
-        double aov = totalTxns > 0 ? (totalRev / totalTxns) : 0.0;
-        double avgMargin = totalRev > 0 ? (totalProf / totalRev) * 100 : 0.0;
+                double aov = totalTxns > 0 ? (totalRev / totalTxns) : 0.0;
+                double avgMargin = totalRev > 0 ? (totalProf / totalRev) * 100 : 0.0;
 
-        // 3. Update KPI Labels
+                // 3. Update KPI Labels
         lblTotalRevenue.setText(String.format("₹%.2f", totalRev));
         lblNetProfit.setText(String.format("₹%.2f", totalProf));
         lblTotalBills.setText(String.valueOf(totalTxns));
@@ -188,10 +191,12 @@ public class ReportsController {
         }
         itemTable.setItems(tableRows);
 
-        // Subtly save data for AI module
-        lastSalesData = salesByDay;
-        lastItemVolume = itemVolume;
-        lastTotalRevenue = totalRev;
+                // Subtly save data for AI module
+                lastSalesData = salesByDay;
+                lastItemVolume = itemVolume;
+                lastTotalRevenue = totalRev;
+            });
+        });
     }
 
     @FXML

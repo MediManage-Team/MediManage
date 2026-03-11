@@ -10,12 +10,13 @@ import javafx.scene.input.KeyEvent;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.service.InventoryService;
 import org.example.MediManage.util.AsyncUiFeedback;
+import javafx.stage.FileChooser;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import javafx.application.Platform;
-
+import org.example.MediManage.util.AppExecutors;
 public class InventoryController {
     private static final String RESTOCK_READY_LABEL = "✨ Get AI Suggestions";
     private static final String RESTOCK_BUSY_LABEL = "⏳ Running...";
@@ -120,26 +121,30 @@ public class InventoryController {
         String query = searchField.getText() == null ? "" : searchField.getText().trim();
         int safePage = Math.max(0, page);
 
-        totalItems = inventoryService.countInventory(query);
+        AppExecutors.runBackground(() -> {
+            int total = inventoryService.countInventory(query);
+            int totalPagesCalc = Math.max(1, (int) Math.ceil(total / (double) pageSize));
+            int boundedPage = (safePage >= totalPagesCalc) ? totalPagesCalc - 1 : safePage;
 
-        int totalPages = Math.max(1, (int) Math.ceil(totalItems / (double) pageSize));
-        if (safePage >= totalPages) {
-            safePage = totalPages - 1;
-        }
-        currentPage = safePage;
+            List<Medicine> pageData = inventoryService.loadInventoryPage(query, boundedPage, pageSize);
 
-        masterData.setAll(inventoryService.loadInventoryPage(query, currentPage, pageSize));
-        inventoryTable.setItems(masterData);
-        inventoryTable.refresh();
+            Platform.runLater(() -> {
+                totalItems = total;
+                currentPage = boundedPage;
+                masterData.setAll(pageData);
+                inventoryTable.setItems(masterData);
+                inventoryTable.refresh();
 
-        if (selectedMedicine != null) {
-            boolean selectedStillVisible = masterData.stream().anyMatch(m -> m.getId() == selectedMedicine.getId());
-            if (!selectedStillVisible) {
-                handleClear();
-            }
-        }
+                if (selectedMedicine != null) {
+                    boolean selectedStillVisible = masterData.stream().anyMatch(m -> m.getId() == selectedMedicine.getId());
+                    if (!selectedStillVisible) {
+                        handleClear();
+                    }
+                }
 
-        updatePaginationControls();
+                updatePaginationControls();
+            });
+        });
     }
 
     private void setupSearch() {
@@ -288,8 +293,31 @@ public class InventoryController {
 
     @FXML
     private void handleExportExcel() {
-        // Placeholder for future implementation
-        showAlert(Alert.AlertType.INFORMATION, "Export", "Export to Excel not implemented yet.");
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Inventory as CSV");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        fileChooser.setInitialFileName("inventory_export_" + java.time.LocalDate.now() + ".csv");
+        java.io.File file = fileChooser.showSaveDialog(inventoryTable.getScene().getWindow());
+
+        if (file != null) {
+            AppExecutors.runBackground(() -> {
+                try (java.io.PrintWriter writer = new java.io.PrintWriter(file)) {
+                    writer.println("ID,Name,Company,Expiry Date,Stock,Price");
+                    for (Medicine m : masterData) {
+                        writer.printf("%d,\"%s\",\"%s\",%s,%d,%.2f%n",
+                                m.getId(),
+                                m.getName().replace("\"", "\"\""),
+                                m.getCompany().replace("\"", "\"\""),
+                                m.getExpiry() != null ? m.getExpiry() : "",
+                                m.getStock(),
+                                m.getPrice());
+                    }
+                    Platform.runLater(() -> showAlert(Alert.AlertType.INFORMATION, "Export Successful", "Inventory exported to " + file.getName()));
+                } catch (Exception e) {
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Export Failed", "Error exporting to CSV: " + e.getMessage()));
+                }
+            });
+        }
     }
 
     @FXML

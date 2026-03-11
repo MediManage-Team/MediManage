@@ -11,6 +11,8 @@ import org.example.MediManage.model.Supplier;
 
 import java.sql.SQLException;
 import java.util.Optional;
+import javafx.application.Platform;
+import org.example.MediManage.util.AppExecutors;
 
 /**
  * Controller for the Supplier Management view.
@@ -57,11 +59,14 @@ public class SupplierController {
     }
 
     private void loadSuppliers() {
-        try {
-            suppliers.setAll(supplierDAO.getAllSuppliers());
-        } catch (SQLException e) {
-            showAlert(Alert.AlertType.ERROR, "Load Error", e.getMessage());
-        }
+        AppExecutors.runBackground(() -> {
+            try {
+                var list = supplierDAO.getAllSuppliers();
+                Platform.runLater(() -> suppliers.setAll(list));
+            } catch (SQLException e) {
+                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Load Error", e.getMessage()));
+            }
+        });
     }
 
     @FXML

@@ -97,6 +97,12 @@ public class SettingsController {
     @FXML private javafx.scene.control.Label lblWhatsAppStatus;
     @FXML private javafx.scene.image.ImageView imgQRCode;
 
+    // --- Customer Communication Templates ---
+    @FXML private javafx.scene.control.TextArea txtWhatsAppTemplate;
+    @FXML private TextField txtEmailSubjectTemplate;
+    @FXML private javafx.scene.control.TextArea txtEmailBodyTemplate;
+    private final org.example.MediManage.dao.MessageTemplateDAO messageTemplateDAO = new org.example.MediManage.dao.MessageTemplateDAO();
+
     private final org.example.MediManage.service.ai.PythonEnvironmentManager envManager = AIServiceProvider
             .get().getEnvManager();
 
@@ -162,6 +168,56 @@ public class SettingsController {
 
         // Initial load of WhatsApp Status
         javafx.application.Platform.runLater(this::handleRefreshWhatsApp);
+
+        // --- Message Templates ---
+        loadMessageTemplates();
+    }
+
+    private void loadMessageTemplates() {
+        try {
+            var wa = messageTemplateDAO.getByKey(org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE);
+            if (wa != null && txtWhatsAppTemplate != null) txtWhatsAppTemplate.setText(wa.getBodyTemplate());
+
+            var emailSubject = messageTemplateDAO.getByKey(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT);
+            if (emailSubject != null && txtEmailSubjectTemplate != null) txtEmailSubjectTemplate.setText(emailSubject.getBodyTemplate());
+
+            var emailBody = messageTemplateDAO.getByKey(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY);
+            if (emailBody != null && txtEmailBodyTemplate != null) txtEmailBodyTemplate.setText(emailBody.getBodyTemplate());
+        } catch (Exception e) {
+            System.err.println("Failed to load message templates: " + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleSaveTemplates() {
+        try {
+            if (txtWhatsAppTemplate != null) {
+                var t = new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE, null, txtWhatsAppTemplate.getText());
+                messageTemplateDAO.save(t);
+            }
+            if (txtEmailSubjectTemplate != null) {
+                var t = new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT, txtEmailSubjectTemplate.getText(), txtEmailSubjectTemplate.getText());
+                messageTemplateDAO.save(t);
+            }
+            if (txtEmailBodyTemplate != null) {
+                var t = new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY, null, txtEmailBodyTemplate.getText());
+                messageTemplateDAO.save(t);
+            }
+            showAlert(Alert.AlertType.INFORMATION, "Templates Saved", "Message templates updated successfully.");
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to save templates: " + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleResetTemplates() {
+        try {
+            messageTemplateDAO.resetAllToDefaults();
+            loadMessageTemplates();
+            showAlert(Alert.AlertType.INFORMATION, "Templates Reset", "All templates restored to defaults.");
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to reset templates: " + e.getMessage());
+        }
     }
 
     private void setupLocalModelsCombo() {
@@ -759,7 +815,7 @@ public class SettingsController {
             try {
                 // Check Status 
                 HttpRequest statusRequest = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:3000/status"))
+                    .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.statusUrl()))
                     .GET()
                     .build();
                 HttpResponse<String> statusResp = httpClient.send(statusRequest, HttpResponse.BodyHandlers.ofString());
@@ -796,7 +852,7 @@ public class SettingsController {
         AppExecutors.runBackground(() -> {
             try {
                 HttpRequest qrRequest = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:3000/qr"))
+                    .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.qrUrl()))
                     .GET()
                     .build();
                 HttpResponse<String> qrResp = httpClient.send(qrRequest, HttpResponse.BodyHandlers.ofString());
@@ -829,6 +885,121 @@ public class SettingsController {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        });
+    }
+
+    @FXML
+    private javafx.scene.control.Button btnStartBridge;
+    private Process whatsappBridgeProcess;
+
+    @FXML
+    private void handleStartWhatsAppBridge() {
+        // Check if already running
+        if (whatsappBridgeProcess != null && whatsappBridgeProcess.isAlive()) {
+            showAlert(Alert.AlertType.INFORMATION, "WhatsApp Bridge", "Bridge is already running.");
+            handleRefreshWhatsApp();
+            return;
+        }
+
+        btnStartBridge.setDisable(true);
+        btnStartBridge.setText("⏳ Starting...");
+        lblWhatsAppStatus.setText("Starting Node Bridge...");
+        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+
+        AppExecutors.runBackground(() -> {
+            try {
+                java.io.File serverDir = org.example.MediManage.config.WhatsAppBridgeConfig.resolveServerDir();
+                if (serverDir == null || !serverDir.isDirectory()) {
+                    javafx.application.Platform.runLater(() -> {
+                        lblWhatsAppStatus.setText("ERROR: whatsapp-server/ directory not found.");
+                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                        btnStartBridge.setDisable(false);
+                        btnStartBridge.setText("▶ Start Node Bridge");
+                    });
+                    return;
+                }
+
+                // Start the server (node_modules check is handled in MediManageApplication)
+                ProcessBuilder pb = new ProcessBuilder("node", "index.js");
+                pb.directory(serverDir);
+                pb.redirectErrorStream(true);
+                whatsappBridgeProcess = pb.start();
+
+                // Wait a few seconds for the server to start, then refresh status
+                Thread.sleep(3000);
+
+                javafx.application.Platform.runLater(() -> {
+                    btnStartBridge.setDisable(false);
+                    btnStartBridge.setText("▶ Start Node Bridge");
+                    handleRefreshWhatsApp();
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                javafx.application.Platform.runLater(() -> {
+                    lblWhatsAppStatus.setText("FAILED TO START: " + e.getMessage());
+                    lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                    btnStartBridge.setDisable(false);
+                    btnStartBridge.setText("▶ Start Node Bridge");
+                });
+            }
+        });
+    }
+
+    @FXML
+    private void handleDisconnectWhatsApp() {
+        lblWhatsAppStatus.setText("Disconnecting...");
+        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+
+        AppExecutors.runBackground(() -> {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.logoutUrl()))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+                HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                javafx.application.Platform.runLater(() -> {
+                    if (resp.statusCode() == 200) {
+                        lblWhatsAppStatus.setText("DISCONNECTED. Scan QR to reconnect.");
+                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                        imgQRCode.setImage(null);
+                        showAlert(Alert.AlertType.INFORMATION, "WhatsApp", "WhatsApp disconnected successfully. Scan QR to reconnect.");
+                        // Auto-refresh to show new QR after a delay
+                        AppExecutors.schedule(() -> javafx.application.Platform.runLater(this::handleRefreshWhatsApp), 4, java.util.concurrent.TimeUnit.SECONDS);
+                    } else {
+                        lblWhatsAppStatus.setText("Disconnect failed. Try again.");
+                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                    }
+                });
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> {
+                    lblWhatsAppStatus.setText("Bridge not running.");
+                    lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                });
+            }
+        });
+    }
+
+    @FXML
+    private void handleStopWhatsAppBridge() {
+        lblWhatsAppStatus.setText("Stopping bridge...");
+        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+
+        AppExecutors.runBackground(() -> {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.shutdownUrl()))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+                httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (Exception ignored) {}
+
+            javafx.application.Platform.runLater(() -> {
+                lblWhatsAppStatus.setText("STOPPED. Use Start Bridge to restart.");
+                lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                imgQRCode.setImage(null);
+            });
         });
     }
 

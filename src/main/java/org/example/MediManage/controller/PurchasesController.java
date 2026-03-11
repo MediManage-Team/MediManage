@@ -2,6 +2,8 @@ package org.example.MediManage.controller;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.application.Platform;
+import org.example.MediManage.util.AppExecutors;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import org.example.MediManage.dao.MedicineDAO;
@@ -117,29 +119,33 @@ public class PurchasesController {
                 listMedicineSuggestions.setVisible(false);
                 return;
             }
-            try {
-                List<Medicine> results = medicineDAO.searchMedicines(newValue, 0, 15);
-                listMedicineSuggestions.setItems(FXCollections.observableArrayList(results));
-                
-                listMedicineSuggestions.setCellFactory(lv -> new ListCell<Medicine>() {
-                    @Override
-                    protected void updateItem(Medicine item, boolean empty) {
-                        super.updateItem(item, empty);
-                        if (empty || item == null) {
-                            setText(null);
-                        } else {
-                            setText(item.getName() + " (" + item.getCompany() + ")");
+            AppExecutors.runBackground(() -> {
+                try {
+                    List<Medicine> results = medicineDAO.searchMedicines(newValue, 0, 15);
+                    Platform.runLater(() -> {
+                        listMedicineSuggestions.setItems(FXCollections.observableArrayList(results));
+                        
+                        listMedicineSuggestions.setCellFactory(lv -> new ListCell<Medicine>() {
+                            @Override
+                            protected void updateItem(Medicine item, boolean empty) {
+                                super.updateItem(item, empty);
+                                if (empty || item == null) {
+                                    setText(null);
+                                } else {
+                                    setText(item.getName() + " (" + item.getCompany() + ")");
+                                }
+                            }
+                        });
+                        
+                        listMedicineSuggestions.setVisible(!results.isEmpty());
+                        if (!results.isEmpty()) {
+                            listMedicineSuggestions.setPrefHeight(Math.min(150, results.size() * 25));
                         }
-                    }
-                });
-                
-                listMedicineSuggestions.setVisible(!results.isEmpty());
-                if (!results.isEmpty()) {
-                    listMedicineSuggestions.setPrefHeight(Math.min(150, results.size() * 25));
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            });
         });
 
         listMedicineSuggestions.setOnMouseClicked(event -> {

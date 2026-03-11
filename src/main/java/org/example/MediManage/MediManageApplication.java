@@ -23,6 +23,7 @@ public class MediManageApplication extends Application {
         private static MediManageApplication instance;
         private volatile Process pythonProcess;
         private volatile Process mcpProcess;
+        private volatile Process whatsappBridgeProcess;
         private org.example.MediManage.service.ai.PythonEnvironmentManager envManager;
         private volatile StartupProgressController startupPopup;
 
@@ -46,6 +47,9 @@ public class MediManageApplication extends Application {
 
                 // Start Python Server in background (non-blocking)
                 startPythonServer();
+
+                // Start WhatsApp Bridge in background (non-blocking, like Python server)
+                startWhatsAppBridge();
 
                 // Async Database Init
                 org.example.MediManage.service.DatabaseService.initializeAsync(() -> {
@@ -239,6 +243,98 @@ public class MediManageApplication extends Application {
         }
 
         /**
+         * Start WhatsApp Bridge (Node.js server) on port 3000.
+         * Mirrors the Python server lifecycle: auto-start, log forwarding.
+         */
+        private void startWhatsAppBridge() {
+                AppExecutors.runBackground(() -> {
+                        try {
+                                // Check if port is already in use — kill stale bridge to reload latest code
+                                if (org.example.MediManage.config.WhatsAppBridgeConfig.isRunning()) {
+                                        int port = org.example.MediManage.config.WhatsAppBridgeConfig.getPort();
+                                        System.out.println("🔄 WhatsApp Bridge already on port " + port +
+                                                ". Killing to load latest code...");
+
+                                        // Try HTTP shutdown first (graceful)
+                                        try {
+                                                java.net.http.HttpClient hc = java.net.http.HttpClient.newHttpClient();
+                                                java.net.http.HttpRequest shutReq = java.net.http.HttpRequest.newBuilder()
+                                                        .uri(java.net.URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.shutdownUrl()))
+                                                        .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build();
+                                                hc.send(shutReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                                                Thread.sleep(2000);
+                                        } catch (Exception ignored) {}
+
+                                        // If still running, force-kill via OS command (Windows: netstat + taskkill)
+                                        if (org.example.MediManage.config.WhatsAppBridgeConfig.isRunning()) {
+                                                System.out.println("⚡ HTTP shutdown failed. Force-killing process on port " + port + "...");
+                                                try {
+                                                        // Find PID using port, then kill it
+                                                        ProcessBuilder findPb = new ProcessBuilder("cmd", "/c",
+                                                                "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :" + port + " ^| findstr LISTENING') do taskkill /PID %a /F");
+                                                        findPb.redirectErrorStream(true);
+                                                        Process killProc = findPb.start();
+                                                        new String(killProc.getInputStream().readAllBytes()); // consume output
+                                                        killProc.waitFor();
+                                                        Thread.sleep(2000);
+                                                } catch (Exception e) {
+                                                        System.err.println("⚠️ Could not kill process on port " + port + ": " + e.getMessage());
+                                                }
+                                        }
+                                }
+
+                                // Check if Node.js is available on this system
+                                if (!org.example.MediManage.config.WhatsAppBridgeConfig.isNodeAvailable()) {
+                                        System.out.println("⚠️ Node.js is not installed. WhatsApp Bridge requires Node.js. Skipping.");
+                                        return;
+                                }
+
+                                java.io.File serverDir = org.example.MediManage.config.WhatsAppBridgeConfig.resolveServerDir();
+                                if (serverDir == null) {
+                                        System.out.println("⚠️ whatsapp-server/ directory not found. WhatsApp Bridge not started.");
+                                        return;
+                                }
+
+                                // Check if node_modules exists, run npm install if missing
+                                java.io.File nodeModules = new java.io.File(serverDir, "node_modules");
+                                if (!nodeModules.isDirectory()) {
+                                        System.out.println("📦 Installing WhatsApp Bridge dependencies (npm install)...");
+                                        ProcessBuilder installPb = new ProcessBuilder("npm", "install");
+                                        installPb.directory(serverDir);
+                                        installPb.redirectErrorStream(true);
+                                        Process installProc = installPb.start();
+                                        // Consume install output
+                                        try (java.io.BufferedReader r = new java.io.BufferedReader(
+                                                        new java.io.InputStreamReader(installProc.getInputStream()))) {
+                                                String l;
+                                                while ((l = r.readLine()) != null) {
+                                                        System.out.println("[npm install]: " + l);
+                                                }
+                                        }
+                                        installProc.waitFor();
+                                }
+
+                                System.out.println("🟢 Starting WhatsApp Bridge (Node.js, port 3000)...");
+                                ProcessBuilder pb = new ProcessBuilder("node", "index.js");
+                                pb.directory(serverDir);
+                                pb.redirectErrorStream(true);
+                                instance.whatsappBridgeProcess = pb.start();
+
+                                // Consume output in background thread
+                                java.io.BufferedReader reader = new java.io.BufferedReader(
+                                                new java.io.InputStreamReader(instance.whatsappBridgeProcess.getInputStream()));
+                                String line;
+                                while ((line = reader.readLine()) != null) {
+                                        System.out.println("[WhatsApp Bridge]: " + line);
+                                }
+                        } catch (Exception e) {
+                                System.err.println("⚠️ WhatsApp Bridge failed to start: " + e.getMessage());
+                        }
+                });
+        }
+
+
+        /**
          * Restart the AI Engine with the currently active environment.
          * Called from SettingsController when user switches environment.
          */
@@ -370,6 +466,8 @@ public class MediManageApplication extends Application {
                                 // Ignore, server probably not running
                         }
                 }
+                // NOTE: WhatsApp Bridge is intentionally left running
+                // so the session stays authenticated between app restarts.
                 org.example.MediManage.service.DatabaseService.shutdown();
                 AppExecutors.shutdown();
                 Platform.exit();

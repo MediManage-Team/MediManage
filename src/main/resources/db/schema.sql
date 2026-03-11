@@ -162,6 +162,14 @@ ADD COLUMN generic_name TEXT;
 ALTER TABLE customers
 ADD COLUMN current_balance REAL DEFAULT 0.0;
 -- Phase 1 Optimization: new columns
+CREATE TABLE IF NOT EXISTS message_templates (
+    template_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_key TEXT UNIQUE NOT NULL,
+    subject TEXT,
+    body_template TEXT NOT NULL,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_message_templates_key ON message_templates(template_key);
 ALTER TABLE bills
 ADD COLUMN payment_mode TEXT DEFAULT 'CASH';
 ALTER TABLE bills
@@ -420,3 +428,17 @@ ADD COLUMN loyalty_points INTEGER DEFAULT 0;
 -- 35. REORDER THRESHOLD ON MEDICINES (low stock reorder workflow)
 ALTER TABLE medicines
 ADD COLUMN reorder_threshold INTEGER DEFAULT 10;
+-- 36. ADD CHECK CONSTRAINT TO STOCK
+CREATE TABLE IF NOT EXISTS stock_new (
+    stock_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    medicine_id INTEGER UNIQUE,
+    quantity INTEGER NOT NULL CHECK (quantity >= 0),
+    FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
+);
+INSERT OR IGNORE INTO stock_new (stock_id, medicine_id, quantity)
+SELECT stock_id, medicine_id, quantity FROM stock;
+PRAGMA foreign_keys=off;
+DROP TABLE IF EXISTS stock;
+ALTER TABLE stock_new RENAME TO stock;
+PRAGMA foreign_keys=on;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_medicine ON stock(medicine_id);
