@@ -84,6 +84,12 @@ public class ReportService {
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
             String careProtocol)
             throws JRException {
+        try {
+            ensureParentDirectory(filePath);
+        } catch (IOException e) {
+            throw new JRException("Failed to prepare output path: " + filePath, e);
+        }
+
         // Load Template
         InputStream reportStream = getClass().getResourceAsStream("/reports/invoice.jrxml");
         if (reportStream == null) {
@@ -116,6 +122,12 @@ public class ReportService {
 
     public void generateReceiptPDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
             throws JRException {
+        try {
+            ensureParentDirectory(filePath);
+        } catch (IOException e) {
+            throw new JRException("Failed to prepare output path: " + filePath, e);
+        }
+
         // Load Template
         InputStream reportStream = getClass().getResourceAsStream("/reports/receipt.jrxml");
         if (reportStream == null) {
@@ -141,6 +153,7 @@ public class ReportService {
     }
 
     public void exportInventoryToExcel(List<Medicine> medicines, String filePath) throws IOException {
+        ensureParentDirectory(filePath);
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Inventory");
 
@@ -242,6 +255,14 @@ public class ReportService {
         }
 
         return new AnalyticsExportPayload(title, generatedAt, filterScope, summaryLines, sections);
+    }
+
+    private void ensureParentDirectory(String filePath) throws IOException {
+        Path outputPath = Path.of(filePath).toAbsolutePath();
+        Path parent = outputPath.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
     }
 
     private void exportAnalyticsToCsv(AnalyticsExportPayload payload, Path filePath) throws IOException {

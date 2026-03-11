@@ -1,12 +1,12 @@
 package org.example.MediManage.service;
 
-import net.sf.jasperreports.engine.JRException;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.CustomerDAO;
 import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
+import org.example.MediManage.model.PaymentSplit;
 import org.example.MediManage.service.ai.AIOrchestrator;
 import org.example.MediManage.service.ai.AIServiceProvider;
 
@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.nio.file.Path;
 
 public class BillingService {
     public enum AddItemStatus {
@@ -30,7 +31,9 @@ public class BillingService {
             int billId,
             String pdfPath,
             double total,
-            String customerName) {
+            String customerName,
+            boolean pdfAvailable,
+            String pdfErrorMessage) {
     }
 
     private final MedicineDAO medicineDAO;
@@ -39,6 +42,7 @@ public class BillingService {
     private final ReportService reportService;
     private final AIOrchestrator aiOrchestrator;
     private final BillingCareProtocolFallbackRulesEngine careProtocolFallbackRulesEngine;
+    private final LoyaltyService loyaltyService;
 
     public BillingService() {
         this(
@@ -61,6 +65,7 @@ public class BillingService {
         this.reportService = reportService;
         this.aiOrchestrator = aiOrchestrator;
         this.careProtocolFallbackRulesEngine = new BillingCareProtocolFallbackRulesEngine();
+        this.loyaltyService = new LoyaltyService();
     }
 
     // ═══════════════════════════════════════════════
@@ -102,8 +107,14 @@ public class BillingService {
 
         if (existing.isPresent()) {
             BillItem item = existing.get();
+            int remainingStock = Math.max(0, medicine.getStock() - item.getQty());
+            if (qty > remainingStock) {
+                return new AddItemResult(AddItemStatus.OUT_OF_STOCK, false, remainingStock);
+            }
+            double gstIncrement = (medicine.getPrice() * qty) * 0.18;
             item.setQty(item.getQty() + qty);
-            item.setTotal(item.getTotal() + (medicine.getPrice() * qty));
+            item.setGst(item.getGst() + gstIncrement);
+            item.setTotal(item.getTotal() + (medicine.getPrice() * qty) + gstIncrement);
             return new AddItemResult(AddItemStatus.ADDED, true, medicine.getStock());
         }
 
@@ -122,6 +133,14 @@ public class BillingService {
         return billItems == null ? 0.0 : billItems.stream().mapToDouble(BillItem::getTotal).sum();
     }
 
+    public double calculateTotal(List<BillItem> billItems, double discountPercent) {
+        double total = calculateTotal(billItems);
+        if (discountPercent <= 0) {
+            return total;
+        }
+        return roundCurrency(total * (1.0 - discountPercent / 100.0));
+    }
+
     // ═══════════════════════════════════════════════
     // CHECKOUT
     // ═══════════════════════════════════════════════
@@ -130,13 +149,15 @@ public class BillingService {
             List<BillItem> billItems,
             Customer selectedCustomer,
             int userId,
+            List<PaymentSplit> paymentSplits,
             String paymentMode,
-            String careProtocol) throws SQLException, JRException {
+            String careProtocol,
+            boolean redeemLoyalty) throws SQLException {
         if (billItems == null || billItems.isEmpty()) {
             throw new IllegalArgumentException("No bill items found for checkout.");
         }
 
-        if ("Credit".equalsIgnoreCase(paymentMode) && selectedCustomer == null) {
+        if (containsCreditPayment(paymentMode, paymentSplits) && selectedCustomer == null) {
             throw new IllegalArgumentException("Credit requires a selected customer.");
         }
 
@@ -146,8 +167,18 @@ public class BillingService {
         double total = calculateTotal(billItems);
         Integer customerId = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
         String customerName = selectedCustomer != null ? selectedCustomer.getName() : "Walk-in";
+        int pointsToAward = customerId != null ? loyaltyService.calculateAwardPoints(total) : 0;
+        int pointsToRedeem = redeemLoyalty && customerId != null ? loyaltyService.getRedemptionThreshold() : 0;
 
-        int billId = billDAO.generateInvoice(total, billItems, customerId, userId, paymentMode);
+        int billId = billDAO.generateInvoice(
+                total,
+                billItems,
+                customerId,
+                userId,
+                paymentSplits,
+                paymentMode,
+                pointsToRedeem,
+                pointsToAward);
         DashboardKpiService.invalidateSalesMetrics();
 
         // Save AI protocol to the database so the Dashboard History can rebuild the invoice PDFs later
@@ -155,7 +186,7 @@ public class BillingService {
             billDAO.saveAICareProtocol(billId, careProtocol);
         }
 
-        String pdfPath = "Invoice_" + billId + ".pdf";
+        String pdfPath = resolveInvoicePath(billId);
 
         // JasperReports text fields are simplest and most reliable with plain text,
         // but since we updated JRXML to markup="html", we can convert markdown bold (**text**) to HTML (<b>text</b>)
@@ -172,9 +203,18 @@ public class BillingService {
         System.out.println("PLAIN CARE PROTOCOL SIZE: " + plainCareProtocol.length());
         System.out.println("PLAIN CARE PROTOCOL START: [" + (plainCareProtocol.length() > 50 ? plainCareProtocol.substring(0, 50) : plainCareProtocol) + "]");
 
-        reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, plainCareProtocol);
-
-        return new CheckoutResult(billId, pdfPath, total, customerName);
+        try {
+            reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, plainCareProtocol);
+            return new CheckoutResult(billId, pdfPath, total, customerName, true, "");
+        } catch (Exception pdfError) {
+            return new CheckoutResult(
+                    billId,
+                    pdfPath,
+                    total,
+                    customerName,
+                    false,
+                    pdfError.getMessage() == null ? "Unknown PDF generation error" : pdfError.getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════
@@ -240,9 +280,56 @@ public class BillingService {
     }
 
     public List<BillItem> snapshotItems(List<BillItem> billItems) {
+        if (billItems == null) {
+            return List.of();
+        }
         return billItems.stream()
                 .map(i -> new BillItem(i.getMedicineId(), i.getName(), i.getExpiry(), i.getQty(), i.getPrice(),
                         i.getGst()))
                 .toList();
+    }
+
+    public List<BillItem> snapshotItems(List<BillItem> billItems, double discountPercent) {
+        List<BillItem> snapshot = snapshotItems(billItems);
+        if (snapshot.isEmpty() || discountPercent <= 0) {
+            return snapshot;
+        }
+
+        double originalTotal = calculateTotal(snapshot);
+        double discountedTotal = calculateTotal(snapshot, discountPercent);
+        double totalDiscount = roundCurrency(originalTotal - discountedTotal);
+        double allocatedDiscount = 0.0;
+
+        for (int i = 0; i < snapshot.size(); i++) {
+            BillItem item = snapshot.get(i);
+            double itemDiscount;
+            if (i == snapshot.size() - 1) {
+                itemDiscount = roundCurrency(totalDiscount - allocatedDiscount);
+            } else {
+                double ratio = originalTotal == 0.0 ? 0.0 : item.getTotal() / originalTotal;
+                itemDiscount = roundCurrency(totalDiscount * ratio);
+                allocatedDiscount = roundCurrency(allocatedDiscount + itemDiscount);
+            }
+            item.setTotal(roundCurrency(Math.max(0.0, item.getTotal() - itemDiscount)));
+        }
+
+        return snapshot;
+    }
+
+    private String resolveInvoicePath(int billId) {
+        return Path.of(System.getProperty("user.home"), "MediManage", "invoices", "Invoice_" + billId + ".pdf")
+                .toString();
+    }
+
+    private boolean containsCreditPayment(String paymentMode, List<PaymentSplit> paymentSplits) {
+        if (paymentSplits != null && paymentSplits.stream()
+                .anyMatch(split -> split != null && "Credit".equalsIgnoreCase(split.getPaymentMethod()))) {
+            return true;
+        }
+        return "Credit".equalsIgnoreCase(paymentMode);
+    }
+
+    private double roundCurrency(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 }

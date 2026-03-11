@@ -12,6 +12,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.concurrent.CompletableFuture;
 
 public class WhatsAppService {
@@ -53,7 +56,7 @@ public class WhatsAppService {
 
                 // Resolve absolute path for PDF
                 String absolutePdfPath = (pdfPath != null && !pdfPath.isBlank())
-                    ? java.nio.file.Paths.get(pdfPath).toAbsolutePath().toString()
+                    ? prepareBridgePdfPath(pdfPath)
                     : "";
 
                 JsonObject json = new JsonObject();
@@ -70,10 +73,7 @@ public class WhatsAppService {
                         .build();
 
                 HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Local WhatsApp Bridge Error: " + response.body());
-                }
+                ensureBridgeSuccess(response);
 
                 return true;
             } catch (Exception e) {
@@ -104,10 +104,7 @@ public class WhatsAppService {
                         .build();
 
                 HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Local WhatsApp Bridge Error: " + response.body());
-                }
+                ensureBridgeSuccess(response);
 
                 return true;
             } catch (Exception e) {
@@ -115,5 +112,35 @@ public class WhatsAppService {
                 throw new RuntimeException("WhatsApp Text sending failed: " + e.getMessage(), e);
             }
         });
+    }
+
+    private static String prepareBridgePdfPath(String pdfPath) throws java.io.IOException {
+        Path source = Path.of(pdfPath).toAbsolutePath();
+        Path userHome = Path.of(System.getProperty("user.home")).toAbsolutePath();
+        if (source.startsWith(userHome)) {
+            return source.toString();
+        }
+
+        Path bridgeDir = userHome.resolve("MediManage").resolve("bridge-pdfs");
+        Files.createDirectories(bridgeDir);
+        Path target = bridgeDir.resolve(source.getFileName() == null ? "invoice.pdf" : source.getFileName().toString());
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+        return target.toString();
+    }
+
+    private static void ensureBridgeSuccess(HttpResponse<String> response) {
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("Local WhatsApp Bridge Error: " + response.body());
+        }
+
+        try {
+            JsonObject body = new Gson().fromJson(response.body(), JsonObject.class);
+            if (body != null && body.has("success") && !body.get("success").getAsBoolean()) {
+                String error = body.has("error") ? body.get("error").getAsString() : "Unknown WhatsApp Bridge error";
+                throw new RuntimeException(error);
+            }
+        } catch (com.google.gson.JsonSyntaxException ignored) {
+            // Non-JSON payloads are treated as successful only when HTTP status is 200.
+        }
     }
 }

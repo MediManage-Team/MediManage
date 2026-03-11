@@ -1,0 +1,71 @@
+@startuml
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam ArrowColor #5B6B7A
+skinparam ParticipantPadding 18
+skinparam BoxPadding 10
+skinparam SequenceGroupBorderColor #9AA5B1
+skinparam SequenceGroupBackgroundColor #FFFFFF
+skinparam ParticipantBackgroundColor #FFFFFF
+skinparam ParticipantBorderColor #8C98A4
+skinparam LifeLineBorderColor #B8C1CC
+skinparam LifeLineBackgroundColor #FAFBFC
+skinparam ActorBorderColor #8C98A4
+skinparam ActorBackgroundColor #FFFFFF
+
+actor Cashier
+actor Customer
+
+box "Desktop App" #EAF4FF
+participant "Billing\nController" as BC
+participant "Billing\nService" as BS
+participant "Report\nService" as RS
+end box
+
+box "AI Layer" #EEF7EA
+participant "AI\nOrchestrator" as AI
+participant "Local AI\nService" as LAS
+participant "Local AI\nEngine" as PY
+end box
+
+box "Persistence" #FFF4E5
+participant "BillDAO" as DAO
+database SQLite as DB
+end box
+
+group Prepare checkout
+  Cashier -> BC : checkout()
+  BC -> BS : snapshotItems()
+end
+
+group Generate care protocol
+  BC -> BS : generateCareProtocol()
+  BS -> AI : orchestrate()
+  AI -> LAS : delegate()
+  LAS -> PY : POST /orchestrate
+  PY --> LAS : careProtocol
+  LAS --> AI : careProtocol
+  AI --> BS : careProtocol
+end
+
+group Commit sale
+  BC -> BS : completeCheckout()
+  BS -> DAO : generateInvoice()
+  activate DAO
+  DAO -> DB : persistSale()
+  DB --> DAO : billId
+  BS -> DAO : saveCareProtocol()
+  DAO -> DB : updateProtocol()
+  deactivate DAO
+end
+
+group Generate invoice
+  BS -> RS : generateInvoicePdf()
+  RS --> BS : pdfPath
+  BS --> BC : CheckoutResult
+end
+
+BC --> Cashier : showSuccess()
+Cashier --> Customer : deliverInvoice()
+@enduml

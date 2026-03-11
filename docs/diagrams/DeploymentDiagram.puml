@@ -1,0 +1,64 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam node {
+  BorderColor #AEB8C2
+  FontColor #1F2937
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #8C98A4
+}
+skinparam database {
+  BackgroundColor #FFFBEA
+  BorderColor #B89B3C
+}
+skinparam folder {
+  BackgroundColor #FFFFFF
+  BorderColor #8C98A4
+}
+
+node "Windows Workstation" as WS #EAF4FF {
+  node "Java Desktop App" as Desktop #EAF4FF {
+    artifact "MediManageApplication" as APP
+    artifact "FXML Views + Controllers" as UI
+  }
+
+  database "SQLite\nmedimanage.db" as DB
+
+  node "Python Sidecar" as PythonSidecar #EEF7EA {
+    artifact "Local AI Engine\nHTTP localhost:5000" as AI
+    artifact "MCP Server\nSSE / stdio localhost:5001" as MCP
+    folder "Local Model Store" as MODELS
+  }
+
+  node "Node.js Sidecar" as NodeSidecar #F3E8FF {
+    artifact "WhatsApp Bridge\nHTTP localhost:3000" as WA
+  }
+}
+
+cloud "External Services" #FFF4E5 {
+  artifact "External AI Hosts" as HOSTS
+  artifact "Cloud AI APIs" as CloudAI
+  artifact "Hugging Face" as HF
+  artifact "SMTP Server" as SMTP
+  artifact "WhatsApp Network" as WAN
+}
+
+APP --> UI
+APP --> DB : SQLite / JDBC
+APP --> AI : HTTP
+APP --> WA : HTTP
+APP --> SMTP : SMTP
+APP ..> MCP : starts and monitors
+
+AI --> DB : SQLite access
+AI --> MODELS
+AI --> CloudAI
+AI --> HF
+
+HOSTS --> MCP : MCP
+MCP --> DB : SQLite access
+WA --> WAN
+@enduml

@@ -42,6 +42,10 @@ public class MediManageApplication extends Application {
                 // Apply AtlantaFX Theme immediately
                 Application.setUserAgentStylesheet(new atlantafx.base.theme.PrimerDark().getUserAgentStylesheet());
 
+                if (!initializeDatabase()) {
+                        return;
+                }
+
                 // Show Login immediately — server starts in background
                 showLoginScreen(stage);
 
@@ -50,19 +54,21 @@ public class MediManageApplication extends Application {
 
                 // Start WhatsApp Bridge in background (non-blocking, like Python server)
                 startWhatsAppBridge();
+        }
 
-                // Async Database Init
-                org.example.MediManage.service.DatabaseService.initializeAsync(() -> {
-                        System.out.println("✅ Background DB Init Complete");
-                }, () -> {
-                        Platform.runLater(() -> {
-                                Alert alert = new Alert(Alert.AlertType.ERROR);
-                                alert.setTitle("Database Error");
-                                alert.setHeaderText("Connection Failed");
-                                alert.setContentText("Could not connect to the database. Please check logs.");
-                                alert.showAndWait();
-                        });
-                });
+        private boolean initializeDatabase() {
+                try {
+                        org.example.MediManage.util.DatabaseUtil.initDB();
+                        return true;
+                } catch (Exception e) {
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setTitle("Database Error");
+                        alert.setHeaderText("Connection Failed");
+                        alert.setContentText("Could not initialize the database. " + e.getMessage());
+                        alert.showAndWait();
+                        Platform.exit();
+                        return false;
+                }
         }
 
         private void startPythonServer() {

@@ -212,6 +212,27 @@ CREATE TABLE IF NOT EXISTS ai_prompt_registry (
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_registry_active ON ai_prompt_registry(prompt_key, is_active, version_number DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_registry_history ON ai_prompt_registry(prompt_key, version_number DESC);
 
+-- 8B. SUBSCRIPTION PLANS (roadmap table kept available for seed/migration compatibility)
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_code TEXT NOT NULL UNIQUE,
+    plan_name TEXT NOT NULL,
+    description TEXT,
+    price REAL NOT NULL DEFAULT 0.0,
+    duration_days INTEGER NOT NULL DEFAULT 30,
+    grace_days INTEGER NOT NULL DEFAULT 0,
+    default_discount_percent REAL NOT NULL DEFAULT 0.0,
+    max_discount_percent REAL NOT NULL DEFAULT 0.0,
+    minimum_margin_percent REAL NOT NULL DEFAULT 0.0,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    auto_renew INTEGER NOT NULL DEFAULT 0,
+    requires_approval INTEGER NOT NULL DEFAULT 0,
+    created_by_user_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_plans_status ON subscription_plans(status);
+
 -- Phase 1 Subscription Discount Columns
 ALTER TABLE bills
 ADD COLUMN subscription_enrollment_id INTEGER;

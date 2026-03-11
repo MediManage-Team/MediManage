@@ -56,7 +56,7 @@ class MedicineDAOInsightsIntegrationTest {
         MedicineDAO dao = new MedicineDAO();
         int userId = insertUser("med_analytics_" + System.nanoTime(), "ADMIN");
         int medicineA = insertMedicine("OutA-" + System.nanoTime(), "CoA", "2027-12-31", 50.0, 0);
-        int medicineB = insertMedicine("OutB-" + System.nanoTime(), "CoB", "2027-12-31", 40.0, -2);
+        int medicineB = insertMedicine("OutB-" + System.nanoTime(), "CoB", "2027-12-31", 40.0, 0);
         insertMedicine("InStock-" + System.nanoTime(), "CoC", "2027-12-31", 30.0, 5);
 
         LocalDate today = LocalDate.now();

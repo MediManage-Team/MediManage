@@ -1,0 +1,76 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam actorStyle awesome
+skinparam ArrowColor #5B6B7A
+skinparam ArrowThickness 1
+skinparam rectangle {
+  BorderColor #AEB8C2
+  BackgroundColor #F8FAFC
+}
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #7C8A97
+  FontColor #1F2937
+}
+skinparam actor {
+  FontColor #1F2937
+}
+
+actor Cashier
+actor Pharmacist
+actor Manager
+actor Administrator
+actor Customer
+
+rectangle "MediManage" #F8FAFC {
+  rectangle "Access" #F3E8FF {
+    usecase "Authenticate User" as UC1
+  }
+
+  rectangle "Sales" #EAF4FF {
+    usecase "Manage Customers" as UC2
+    usecase "Process Sale" as UC3
+    usecase "Deliver Invoice" as UC4
+  }
+
+  rectangle "Clinical" #EEF7EA {
+    usecase "Manage Prescriptions" as UC5
+    usecase "Generate Care Protocol" as UC6
+  }
+
+  rectangle "Administration" #FFF4E5 {
+    usecase "Manage Inventory" as UC7
+    usecase "Review Reports" as UC8
+    usecase "Configure System" as UC9
+  }
+}
+
+Cashier --> UC1
+Pharmacist --> UC1
+Manager --> UC1
+Administrator --> UC1
+
+Cashier --> UC2
+Cashier --> UC3
+Cashier --> UC4
+
+Pharmacist --> UC3
+Pharmacist --> UC5
+Pharmacist --> UC6
+
+Manager --> UC2
+Manager --> UC7
+Manager --> UC8
+
+Administrator --> UC7
+Administrator --> UC8
+Administrator --> UC9
+
+Customer --> UC4
+
+UC3 ..> UC4 : <<include>>
+UC3 ..> UC6 : <<include>>
+@enduml

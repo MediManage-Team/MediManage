@@ -1,0 +1,67 @@
+@startuml
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 80
+skinparam ArrowColor #5B6B7A
+
+skinparam object {
+  BackgroundColor #FFFFFF
+  BorderColor #8C98A4
+  FontColor #1F2937
+}
+
+skinparam package {
+  BorderColor #AEB8C2
+  FontColor #1F2937
+}
+
+package "Actors" #FFF8E8 {
+  object "Cashier" as Cashier
+}
+
+package "Desktop App" #EAF4FF {
+  object "BillingController" as BC
+  object "BillingService" as BS
+  object "ReportService" as RS
+}
+
+package "AI Layer" #EEF7EA {
+  object "AIOrchestrator" as AI
+  object "LocalAIService" as LAS
+}
+
+package "Persistence" #FFF4E5 {
+  object "BillDAO" as DAO
+  object "SQLite" as DB
+}
+
+package "Outcome" #F3E8FF {
+  object "Customer" as Customer
+}
+
+' --- Sibling Order Enforcement ---
+' This hidden rule forces AI to the left, ReportService in the center, and Persistence to the right
+AI -[hidden]right-> RS
+RS -[hidden]right-> DAO
+
+' --- Main Vertical Spine ---
+Cashier --> BC : checkout request
+BC --> BS : complete checkout
+
+' Return arrow formatted as a dotted line pointing back up
+BS ..> BC : return result
+
+BS --> RS : render PDF
+RS --> Customer : deliver invoice
+
+' --- Diagonal Branches ---
+' By simply pointing down, the engine naturally swings them left and right 
+BS --> AI : orchestrate AI
+AI --> LAS : delegate
+
+BS --> DAO : save invoice
+DAO --> DB : persist sale
+
+@enduml

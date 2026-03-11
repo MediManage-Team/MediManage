@@ -1,0 +1,153 @@
+@startuml
+top to bottom direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam ArrowColor #5B6B7A
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #8C98A4
+  FontColor #1F2937
+}
+skinparam package {
+  BorderColor #AEB8C2
+  FontColor #1F2937
+}
+
+package "Bootstrap" #F3F4F6 {
+  class MediManageApplication {
+    +start(stage)
+    -initializeDatabase()
+    -startPythonServer()
+    -startMcpServer(pythonExe)
+    -startWhatsAppBridge()
+  }
+}
+
+package "Controller" #EAF4FF {
+  class BillingController {
+    -billList : ObservableList
+    -selectedCustomer : Customer
+    -selectedMedicine : Medicine
+    +initialize()
+    -handleAdd()
+    -handleCheckout()
+  }
+
+  class BillingCheckoutSupport {
+    ~showSplitDialog()
+    ~showPostCheckoutDialog()
+    ~buildPaymentMode()
+    ~validateSplitTotal()
+  }
+}
+
+package "Service" #EEF7EA {
+  class BillingService {
+    +addMedicine()
+    +calculateTotal()
+    +generateCareProtocol()
+    +completeCheckout()
+    +snapshotItems()
+  }
+
+  class ReportService {
+    +generateInvoicePdf()
+  }
+
+  class LoyaltyService {
+    +calculateAwardPoints()
+    +getRedemptionThreshold()
+  }
+
+  class AIOrchestrator {
+    +processOrchestration()
+    +isLocalAvailable()
+  }
+}
+
+package "Persistence" #FFF4E5 {
+  class BillDAO {
+    +generateInvoice()
+    +saveCareProtocol()
+  }
+
+  class CustomerDAO {
+    +searchCustomer()
+    +addCustomer()
+  }
+
+  class MedicineDAO {
+    +getAllMedicines()
+    +findByBarcode()
+  }
+}
+
+package "Integration" #F3E8FF {
+  interface AIService {
+    +chat()
+    +isAvailable()
+    +getProviderName()
+  }
+
+  class LocalAIService {
+    +orchestrate()
+    +loadModel()
+    +getHealth()
+  }
+
+  class WhatsAppService {
+    +sendInvoiceWhatsApp()
+  }
+}
+
+package "Model" #FFF1F2 {
+  class BillItem {
+    -medicineId : int
+    -name : String
+    -qty : int
+    -total : double
+  }
+
+  class Customer {
+    -customerId : int
+    -name : String
+    -phoneNumber : String
+    -currentBalance : double
+  }
+
+  class Medicine {
+    -id : int
+    -name : String
+    -stock : int
+    -price : double
+  }
+
+  class PaymentSplit {
+    -paymentMethod : String
+    -amount : double
+    -referenceNumber : String
+  }
+}
+
+MediManageApplication --> BillingController
+BillingController *-- BillingCheckoutSupport
+BillingController --> BillingService
+BillingController --> Customer
+BillingController --> Medicine
+BillingController --> BillItem
+BillingController --> PaymentSplit
+
+BillingService --> BillDAO
+BillingService --> CustomerDAO
+BillingService --> MedicineDAO
+BillingService --> ReportService
+BillingService --> LoyaltyService
+BillingService --> AIOrchestrator
+
+AIOrchestrator --> AIService
+AIService <|.. LocalAIService
+BillingCheckoutSupport ..> WhatsAppService
+BillDAO --> BillItem
+@enduml

@@ -1,0 +1,65 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam package {
+  BorderColor #AEB8C2
+  FontColor #1F2937
+}
+skinparam rectangle {
+  BorderColor #8C98A4
+}
+
+package "View" #EAF4FF {
+  [login-view.fxml] as LoginView
+  [billing-view.fxml] as BillingView
+  [dashboard-view.fxml] as DashboardView
+  [settings-view.fxml] as SettingsView
+}
+
+package "Controller" #EEF7EA {
+  [LoginController] as LoginController
+  [BillingController] as BillingController
+  [DashboardController] as DashboardController
+  [SettingsController] as SettingsController
+}
+
+package "Model" #FFF4E5 {
+  [Application Services] as Services
+  [Domain Models] as Domain
+  [DAO Layer] as DAOs
+  database "SQLite Database" as SQLite
+}
+
+package "Integrations" #F3E8FF {
+  [Local AI Engine] as LocalAI
+  [WhatsApp Bridge] as WhatsApp
+  [SMTP Service] as Mail
+  [Cloud AI APIs] as CloudAI
+  [MCP Server] as MCP
+  [External AI Hosts] as AIHosts
+}
+
+LoginView --> LoginController : events
+BillingView --> BillingController : events
+DashboardView --> DashboardController : events
+SettingsView --> SettingsController : events
+
+LoginController --> Services : commands
+BillingController --> Services : commands
+DashboardController --> Services : queries
+SettingsController --> Services : commands
+
+Services --> Domain : business rules
+Services --> DAOs : persistence access
+DAOs --> SQLite : CRUD
+
+Services --> LocalAI : HTTP
+LocalAI --> CloudAI : routed calls
+Services --> WhatsApp : HTTP
+Services --> Mail : SMTP
+
+AIHosts --> MCP : MCP
+MCP --> SQLite : tool access
+@enduml

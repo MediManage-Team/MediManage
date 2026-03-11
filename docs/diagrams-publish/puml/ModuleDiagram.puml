@@ -1,0 +1,71 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+skinparam package {
+  BorderColor #AEB8C2
+  FontColor #1F2937
+}
+skinparam componentStyle rectangle
+
+package "Desktop Runtime" #EAF4FF {
+  [JavaFX Shell] as Shell
+  [Feature Controllers] as Controllers
+  [Shared Services] as Services
+  database "SQLite Database" as DB
+
+  package "Functional Modules" {
+    [Billing] as Billing
+    [Inventory] as Inventory
+    [Customers] as Customers
+    [Prescriptions] as Prescriptions
+    [Reports] as Reports
+    [Settings] as Settings
+    [AI Assistant] as AIAssistant
+  }
+}
+
+package "Local Sidecars" #EEF7EA {
+  [Local AI Engine\nHTTP :5000] as LocalAI
+  [MCP Server\nSSE / stdio :5001] as MCP
+  [WhatsApp Bridge\nHTTP :3000] as WA
+}
+
+cloud "External Services" #FFF4E5 {
+  [Cloud AI APIs] as CloudAI
+  [Hugging Face] as HF
+  [SMTP Server] as SMTP
+  [WhatsApp Network] as WAN
+  [External AI Hosts] as AIHosts
+}
+
+Shell --> Controllers
+Controllers --> Billing
+Controllers --> Inventory
+Controllers --> Customers
+Controllers --> Prescriptions
+Controllers --> Reports
+Controllers --> Settings
+Controllers --> AIAssistant
+
+Billing --> Services
+Inventory --> Services
+Customers --> Services
+Prescriptions --> Services
+Reports --> Services
+Settings --> Services
+AIAssistant --> Services
+
+Services --> DB
+AIAssistant --> LocalAI
+LocalAI --> DB
+LocalAI --> CloudAI
+LocalAI --> HF
+Billing --> WA
+Billing --> SMTP
+WA --> WAN
+AIHosts --> MCP
+MCP --> DB
+@enduml

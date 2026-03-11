@@ -3,6 +3,7 @@ package org.example.MediManage.dao;
 import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.BillHistoryRecord;
+import org.example.MediManage.model.PaymentSplit;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -16,7 +17,7 @@ public class BillDAO {
     private static final int MAX_HISTORY_LIMIT = 500;
 
     public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
-            String paymentMode)
+            List<PaymentSplit> paymentSplits, String paymentMode, int loyaltyPointsToRedeem, int loyaltyPointsToAward)
             throws SQLException {
         Connection conn = null;
         int billId = -1;
@@ -56,33 +57,66 @@ public class BillDAO {
             String itemSql = "INSERT INTO bill_items (" +
                     "bill_id, medicine_id, quantity, price, total" +
                     ") VALUES (?, ?, ?, ?, ?)";
-            String stockSql = "UPDATE stock SET quantity = quantity - ? WHERE medicine_id = ?";
+            String stockSql = "UPDATE stock SET quantity = quantity - ? " +
+                    "WHERE medicine_id = ? AND quantity >= ?";
 
             try (PreparedStatement psItem = conn.prepareStatement(itemSql);
                     PreparedStatement psStock = conn.prepareStatement(stockSql)) {
 
                 for (BillItem item : items) {
+                    psStock.setInt(1, item.getQty());
+                    psStock.setInt(2, item.getMedicineId());
+                    psStock.setInt(3, item.getQty());
+                    int updatedRows = psStock.executeUpdate();
+                    if (updatedRows != 1) {
+                        throw new SQLException("Insufficient stock for medicine_id=" + item.getMedicineId());
+                    }
+
                     psItem.setInt(1, billId);
                     psItem.setInt(2, item.getMedicineId());
                     psItem.setInt(3, item.getQty());
                     psItem.setDouble(4, item.getPrice());
                     psItem.setDouble(5, item.getTotal());
-                    psItem.addBatch();
-
-                    psStock.setInt(1, item.getQty());
-                    psStock.setInt(2, item.getMedicineId());
-                    psStock.addBatch();
+                    psItem.executeUpdate();
                 }
-                psItem.executeBatch();
-                psStock.executeBatch();
             }
 
-            if ("Credit".equalsIgnoreCase(paymentMode) && customerId != null) {
-                String updateBalanceSql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
-                try (PreparedStatement psUpdate = conn.prepareStatement(updateBalanceSql)) {
-                    psUpdate.setDouble(1, totalAmount);
-                    psUpdate.setInt(2, customerId);
-                    psUpdate.executeUpdate();
+            savePaymentSplits(conn, billId, paymentSplits);
+
+            if (customerId != null) {
+                double creditAmount = resolveCreditAmount(totalAmount, paymentMode, paymentSplits);
+                if (creditAmount > 0.0) {
+                    String updateBalanceSql = "UPDATE customers SET current_balance = current_balance + ? WHERE customer_id = ?";
+                    try (PreparedStatement psUpdate = conn.prepareStatement(updateBalanceSql)) {
+                        psUpdate.setDouble(1, creditAmount);
+                        psUpdate.setInt(2, customerId);
+                        psUpdate.executeUpdate();
+                    }
+                }
+
+                if (loyaltyPointsToRedeem > 0) {
+                    String redeemSql = "UPDATE customers " +
+                            "SET loyalty_points = COALESCE(loyalty_points, 0) - ? " +
+                            "WHERE customer_id = ? AND COALESCE(loyalty_points, 0) >= ?";
+                    try (PreparedStatement psRedeem = conn.prepareStatement(redeemSql)) {
+                        psRedeem.setInt(1, loyaltyPointsToRedeem);
+                        psRedeem.setInt(2, customerId);
+                        psRedeem.setInt(3, loyaltyPointsToRedeem);
+                        if (psRedeem.executeUpdate() != 1) {
+                            throw new SQLException("Failed to redeem loyalty points for customer_id=" + customerId);
+                        }
+                    }
+                }
+
+                if (loyaltyPointsToAward > 0) {
+                    String awardSql = "UPDATE customers SET loyalty_points = COALESCE(loyalty_points, 0) + ? WHERE customer_id = ?";
+                    try (PreparedStatement psAward = conn.prepareStatement(awardSql)) {
+                        psAward.setInt(1, loyaltyPointsToAward);
+                        psAward.setInt(2, customerId);
+                        if (psAward.executeUpdate() != 1) {
+                            throw new SQLException("Failed to award loyalty points for customer_id=" + customerId);
+                        }
+                    }
                 }
             }
 
@@ -105,6 +139,42 @@ public class BillDAO {
             }
         }
         return billId;
+    }
+
+    private void savePaymentSplits(Connection conn, int billId, List<PaymentSplit> paymentSplits) throws SQLException {
+        if (paymentSplits == null || paymentSplits.isEmpty()) {
+            return;
+        }
+
+        String sql = "INSERT INTO payment_splits (bill_id, payment_method, amount, reference_number) VALUES (?, ?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (PaymentSplit split : paymentSplits) {
+                if (split == null) {
+                    continue;
+                }
+                ps.setInt(1, billId);
+                ps.setString(2, normalizePaymentMethod(split.getPaymentMethod()));
+                ps.setDouble(3, split.getAmount());
+                ps.setString(4, split.getReferenceNumber());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+    }
+
+    private double resolveCreditAmount(double totalAmount, String paymentMode, List<PaymentSplit> paymentSplits) {
+        if (paymentSplits != null && !paymentSplits.isEmpty()) {
+            return paymentSplits.stream()
+                    .filter(split -> split != null && "Credit".equalsIgnoreCase(split.getPaymentMethod()))
+                    .mapToDouble(PaymentSplit::getAmount)
+                    .sum();
+        }
+
+        return "Credit".equalsIgnoreCase(paymentMode) ? totalAmount : 0.0;
+    }
+
+    private String normalizePaymentMethod(String paymentMethod) {
+        return paymentMethod == null ? "OTHER" : paymentMethod.trim().toUpperCase();
     }
 
     public double getDailySales() {

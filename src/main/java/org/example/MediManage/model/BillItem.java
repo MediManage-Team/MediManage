@@ -77,6 +77,10 @@ public class BillItem {
         this.qty.set(q);
     }
 
+    public void setGst(double gst) {
+        this.gst.set(gst);
+    }
+
     public void setTotal(double t) {
         this.total.set(t);
     }

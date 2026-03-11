@@ -9,8 +9,6 @@ import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.VBox;
-import javafx.scene.layout.HBox;
-import javafx.geometry.Insets;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
@@ -21,9 +19,6 @@ import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.service.BillingService;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
-import org.example.MediManage.service.EmailService;
-import org.example.MediManage.service.WhatsAppService;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -88,6 +83,7 @@ public class BillingController {
     private final HeldOrderDAO heldOrderDAO = new HeldOrderDAO();
     private final MedicineDAO medicineDAO = new MedicineDAO();
     private final org.example.MediManage.service.LoyaltyService loyaltyService = new org.example.MediManage.service.LoyaltyService();
+    private final BillingCheckoutSupport checkoutSupport = new BillingCheckoutSupport(this::showAlert);
     private final Gson gson = new Gson();
 
     private ObservableList<BillItem> billList = FXCollections.observableArrayList();
@@ -95,6 +91,7 @@ public class BillingController {
     private Customer selectedCustomer = null;
     private Medicine selectedMedicine = null;
     private boolean keyboardShortcutsRegistered = false;
+    private double pendingLoyaltyDiscountPercent = 0.0;
 
     @FXML
     public void initialize() {
@@ -236,7 +233,7 @@ public class BillingController {
         if (selectedCustomer != null) {
             int points = loyaltyService.getPoints(selectedCustomer.getCustomerId());
             lblLoyaltyPoints.setText(String.valueOf(points));
-            boolean canRedeem = points >= loyaltyService.getRedemptionThreshold();
+            boolean canRedeem = points >= loyaltyService.getRedemptionThreshold() && pendingLoyaltyDiscountPercent <= 0.0;
             if (btnRedeemPoints != null) {
                 btnRedeemPoints.setVisible(canRedeem);
                 btnRedeemPoints.setManaged(canRedeem);
@@ -254,18 +251,18 @@ public class BillingController {
     private void handleRedeemPoints() {
         if (selectedCustomer == null)
             return;
-        double discountPercent = loyaltyService.redeemPoints(selectedCustomer.getCustomerId());
-        if (discountPercent > 0) {
-            // Apply discount to all items in the bill
-            for (BillItem item : billList) {
-                double discounted = item.getTotal() * (1.0 - discountPercent / 100.0);
-                item.setTotal(Math.round(discounted * 100.0) / 100.0);
-            }
-            updateTotal();
-            updateLoyaltyDisplay();
-            showAlert(Alert.AlertType.INFORMATION, "Loyalty Redeemed",
-                    String.format("%.0f%% discount applied! 100 points redeemed.", discountPercent));
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add items before applying loyalty redemption.");
+            return;
         }
+        if (!loyaltyService.canRedeem(selectedCustomer.getCustomerId()))
+            return;
+
+        pendingLoyaltyDiscountPercent = loyaltyService.getRedemptionDiscountPercent();
+        updateTotal();
+        updateLoyaltyDisplay();
+        showAlert(Alert.AlertType.INFORMATION, "Loyalty Discount Ready",
+                String.format("%.0f%% discount will be applied when checkout completes.", pendingLoyaltyDiscountPercent));
     }
 
     // ═══════════════════════════════════════════════
@@ -279,7 +276,11 @@ public class BillingController {
             return;
         List<Customer> res = billingService.searchCustomers(q);
         if (!res.isEmpty()) {
-            selectedCustomer = res.get(0);
+            Customer newCustomer = res.get(0);
+            if (!isSameCustomer(selectedCustomer, newCustomer)) {
+                clearPendingLoyaltyDiscount();
+            }
+            selectedCustomer = newCustomer;
             String labelText = selectedCustomer.getName();
             if (selectedCustomer.getCurrentBalance() > 0) {
                 labelText += String.format(" (Bal: \u20b9%.2f)", selectedCustomer.getCurrentBalance());
@@ -290,6 +291,7 @@ public class BillingController {
             applyCustomerNameStyle(true);
             updateLoyaltyDisplay();
         } else {
+            clearPendingLoyaltyDiscount();
             lblCustomerName.setText("Not Found (Walk-in)");
             if (lblCustomerPhone != null)
                 lblCustomerPhone.setText("-");
@@ -323,8 +325,12 @@ public class BillingController {
             if (nameResult.isPresent() && !nameResult.get().trim().isEmpty()) {
                 String name = nameResult.get().trim();
                 try {
+                    Customer previousCustomer = selectedCustomer;
                     selectedCustomer = billingService.addCustomerAndFind(name, phone);
                     if (selectedCustomer != null) {
+                        if (!isSameCustomer(previousCustomer, selectedCustomer)) {
+                            clearPendingLoyaltyDiscount();
+                        }
                         lblCustomerName.setText(selectedCustomer.getName());
                         if (lblCustomerPhone != null)
                             lblCustomerPhone.setText(selectedCustomer.getPhone());
@@ -374,7 +380,7 @@ public class BillingController {
     }
 
     private void updateTotal() {
-        double sum = billingService.calculateTotal(billList);
+        double sum = billingService.calculateTotal(billList, pendingLoyaltyDiscountPercent);
         lblTotal.setText(String.format("\u20b9 %.2f", sum));
     }
 
@@ -390,12 +396,12 @@ public class BillingController {
         Customer checkoutCustomer = selectedCustomer;
         Integer cid = checkoutCustomer != null ? checkoutCustomer.getCustomerId() : null;
 
-        double totalAmount = billingService.calculateTotal(billList);
-        List<PaymentSplit> splits = showSplitPaymentDialog(totalAmount);
+        double totalAmount = billingService.calculateTotal(billList, pendingLoyaltyDiscountPercent);
+        List<PaymentSplit> splits = checkoutSupport.showSplitPaymentDialog(totalAmount);
         if (splits == null || splits.isEmpty())
             return;
 
-        String paymentMode = compositePaymentMode(splits);
+        String paymentMode = BillingCheckoutSupport.compositePaymentMode(splits);
         boolean hasCredit = splits.stream().anyMatch(s -> "Credit".equalsIgnoreCase(s.getPaymentMethod()));
         if (hasCredit && cid == null) {
             showAlert(Alert.AlertType.WARNING, "Credit Error", "Credit payment requires a selected customer!");
@@ -405,7 +411,8 @@ public class BillingController {
         btnCheckout.setDisable(true);
         btnCheckout.setText(CHECKOUT_BUSY_LABEL);
 
-        List<BillItem> checkoutItems = billingService.snapshotItems(billList);
+        List<BillItem> checkoutItems = billingService.snapshotItems(billList, pendingLoyaltyDiscountPercent);
+        boolean redeemLoyalty = pendingLoyaltyDiscountPercent > 0.0;
         CompletableFuture<String> careProtocolFuture = billingService.generateCheckoutCareProtocol(checkoutItems);
 
         careProtocolFuture.thenAccept(careProtocol -> {
@@ -413,11 +420,13 @@ public class BillingController {
                 try {
                     int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
                     BillingService.CheckoutResult checkoutResult = billingService.completeCheckout(
-                            checkoutItems, checkoutCustomer, userId, paymentMode, careProtocol);
+                            checkoutItems, checkoutCustomer, userId, splits, paymentMode, careProtocol,
+                            redeemLoyalty);
 
-                    showPostCheckoutDialog(checkoutResult, checkoutCustomer, totalAmount, careProtocol);
+                    checkoutSupport.showPostCheckoutDialog(checkoutResult, checkoutCustomer, totalAmount, careProtocol);
 
                     billList.clear();
+                    clearPendingLoyaltyDiscount();
                     updateTotal();
                     selectedCustomer = null;
                     lblCustomerName.setText(WALK_IN_CUSTOMER_LABEL);
@@ -425,14 +434,6 @@ public class BillingController {
                     if (lblCustomerPhone != null)
                         lblCustomerPhone.setText("-");
                     updateLoyaltyDisplay();
-
-                    // Award loyalty points
-                    if (cid != null) {
-                        int awarded = loyaltyService.awardPoints(cid, totalAmount);
-                        if (awarded > 0) {
-                            System.out.println("🎁 Awarded " + awarded + " loyalty points to customer #" + cid);
-                        }
-                    }
                     txtSearchCustomer.clear();
                     allMedicines.clear();
                     allMedicines.addAll(billingService.loadActiveMedicines());
@@ -453,85 +454,6 @@ public class BillingController {
             });
             return null;
         });
-    }
-
-    private void showPostCheckoutDialog(BillingService.CheckoutResult result, Customer customer, double totalAmount, String careProtocol) {
-        Alert dialog = new Alert(Alert.AlertType.INFORMATION);
-        dialog.setTitle("Checkout Successful");
-        dialog.setHeaderText("Bill #" + result.billId() + " Generated successfully!\nSaved to: " + result.pdfPath());
-        
-        ButtonType btnBoth = new ButtonType("📨 Send Both");
-        ButtonType btnEmail = new ButtonType("📧 Email Invoice");
-        ButtonType btnWhatsApp = new ButtonType("💬 WhatsApp Invoice");
-        ButtonType btnClose = new ButtonType("Close", ButtonBar.ButtonData.CANCEL_CLOSE);
-
-        dialog.getButtonTypes().setAll(btnBoth, btnEmail, btnWhatsApp, btnClose);
-
-        java.util.Optional<ButtonType> choice = dialog.showAndWait();
-        if (choice.isPresent()) {
-            if (choice.get() == btnBoth) {
-                // To keep it simple, we just ask for email then ask for phone.
-                handleSendEmail(result, customer, totalAmount, careProtocol);
-                handleSendWhatsApp(result, customer, totalAmount, careProtocol);
-            } else if (choice.get() == btnEmail) {
-                handleSendEmail(result, customer, totalAmount, careProtocol);
-            } else if (choice.get() == btnWhatsApp) {
-                handleSendWhatsApp(result, customer, totalAmount, careProtocol);
-            }
-        }
-    }
-
-    private void handleSendEmail(BillingService.CheckoutResult result, Customer customer, double totalAmount, String careProtocol) {
-        TextInputDialog emailDialog = new TextInputDialog(customer != null ? customer.getEmail() : "");
-        emailDialog.setTitle("Send Email");
-        emailDialog.setHeaderText("Enter Customer Email Address");
-        java.util.Optional<String> emailResult = emailDialog.showAndWait();
-
-        if (emailResult.isPresent() && !emailResult.get().trim().isEmpty()) {
-            String toEmail = emailResult.get().trim();
-            String name = customer != null ? customer.getName() : "Customer";
-            
-            org.example.MediManage.util.ToastNotification.info("Sending Email to " + toEmail + "...");
-            
-            EmailService.sendInvoiceEmail(toEmail, name, careProtocol, result.pdfPath(), result.billId(), totalAmount)
-                .thenAccept(success -> Platform.runLater(() -> 
-                    org.example.MediManage.util.ToastNotification.success("Email sent successfully!")))
-                .exceptionally(ex -> {
-                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Email Failed", ex.getMessage()));
-                    return null;
-                });
-        }
-    }
-
-    private void handleSendWhatsApp(BillingService.CheckoutResult result, Customer customer, double totalAmount, String careProtocol) {
-        TextInputDialog phoneDialog = new TextInputDialog(customer != null ? customer.getPhone() : "");
-        phoneDialog.setTitle("Send WhatsApp");
-        phoneDialog.setHeaderText("Enter Customer WhatsApp Number (+CCxxxxxxxxxx)");
-        
-        // Add text formatter to restrict to digits and '+', max 15 chars
-        TextField phoneField = phoneDialog.getEditor();
-        phoneField.setTextFormatter(new TextFormatter<>(change -> {
-            if (change.getControlNewText().length() > 15) return null;
-            if (change.getText().matches("[^0-9+]")) return null;
-            return change;
-        }));
-        
-        java.util.Optional<String> phoneResult = phoneDialog.showAndWait();
-
-        if (phoneResult.isPresent() && !phoneResult.get().trim().isEmpty()) {
-            String toPhone = phoneResult.get().trim();
-            String name = customer != null ? customer.getName() : "Customer";
-            
-            org.example.MediManage.util.ToastNotification.info("Sending WhatsApp to " + toPhone + "...");
-            
-            WhatsAppService.sendInvoiceWhatsApp(toPhone, name, totalAmount, careProtocol, result.billId(), result.pdfPath())
-                .thenAccept(success -> Platform.runLater(() -> 
-                    org.example.MediManage.util.ToastNotification.success("WhatsApp message sent successfully!")))
-                .exceptionally(ex -> {
-                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "WhatsApp Failed", ex.getMessage()));
-                    return null;
-                });
-        }
     }
 
     // ═══════════════════════════════════════════════
@@ -742,6 +664,7 @@ public class BillingController {
                     "Order #" + holdId + " held successfully (" + billList.size() + " items, \u20b9"
                             + String.format("%.2f", total) + ").");
             billList.clear();
+            clearPendingLoyaltyDiscount();
             updateTotal();
             refreshHeldCount();
         } catch (SQLException e) {
@@ -780,6 +703,7 @@ public class BillingController {
                     new TypeToken<List<Map<String, Object>>>() {
                     }.getType());
             billList.clear();
+            clearPendingLoyaltyDiscount();
             for (Map<String, Object> m : itemMaps) {
                 int medId = ((Number) m.get("medicineId")).intValue();
                 String name = (String) m.get("name");
@@ -808,104 +732,18 @@ public class BillingController {
         }
     }
 
-    // ═══════════════════════════════════════════════
-    // SPLIT PAYMENT DIALOG
-    // ═══════════════════════════════════════════════
-
-    List<PaymentSplit> showSplitPaymentDialog(double totalAmount) {
-        Dialog<List<PaymentSplit>> dialog = new Dialog<>();
-        dialog.setTitle("Split Payment");
-        dialog.setHeaderText(String.format("Total: \u20b9%.2f \u2014 Split across payment methods", totalAmount));
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-        dialog.getDialogPane().setPrefWidth(500);
-
-        VBox container = new VBox(10);
-        container.setPadding(new Insets(10));
-
-        ObservableList<PaymentSplit> splits = FXCollections.observableArrayList();
-        splits.add(new PaymentSplit("Cash", totalAmount));
-
-        ListView<PaymentSplit> listView = new ListView<>(splits);
-        listView.setPrefHeight(150);
-        listView.setCellFactory(lv -> new ListCell<>() {
-            @Override
-            protected void updateItem(PaymentSplit item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.toString());
-            }
-        });
-
-        ComboBox<String> methodBox = new ComboBox<>(FXCollections.observableArrayList(
-                "Cash", "UPI", "Card", "Credit", "Cheque", "Other"));
-        methodBox.setValue("Cash");
-        TextField amountField = new TextField();
-        amountField.setPromptText("Amount");
-        TextField refField = new TextField();
-        refField.setPromptText("Ref# (optional)");
-
-        Button addBtn = new Button("Add Split");
-        addBtn.setOnAction(e -> {
-            try {
-                double amt = Double.parseDouble(amountField.getText());
-                if (amt <= 0)
-                    return;
-                splits.add(new PaymentSplit(methodBox.getValue(), amt, refField.getText()));
-                amountField.clear();
-                refField.clear();
-            } catch (NumberFormatException ignored) {
-            }
-        });
-
-        Button removeBtn = new Button("Remove Selected");
-        removeBtn.setOnAction(e -> {
-            PaymentSplit sel = listView.getSelectionModel().getSelectedItem();
-            if (sel != null)
-                splits.remove(sel);
-        });
-
-        Label remainingLabel = new Label();
-        Runnable updateRemaining = () -> {
-            double paid = splits.stream().mapToDouble(PaymentSplit::getAmount).sum();
-            double remaining = totalAmount - paid;
-            remainingLabel.setText(String.format("Remaining: \u20b9%.2f", remaining));
-            remainingLabel.setStyle(remaining > 0.01 ? "-fx-text-fill: #ff6b6b;" : "-fx-text-fill: #5fe6b3;");
-        };
-        splits.addListener((javafx.collections.ListChangeListener<PaymentSplit>) c -> updateRemaining.run());
-        updateRemaining.run();
-
-        HBox addRow = new HBox(8, methodBox, amountField, refField, addBtn, removeBtn);
-        addRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        container.getChildren().addAll(listView, addRow, remainingLabel);
-        dialog.getDialogPane().setContent(container);
-
-        dialog.setResultConverter(btn -> {
-            if (btn == ButtonType.OK) {
-                double paid = splits.stream().mapToDouble(PaymentSplit::getAmount).sum();
-                if (Math.abs(paid - totalAmount) > 0.01) {
-                    showAlert(Alert.AlertType.WARNING, "Amount Mismatch",
-                            String.format("Total splits (\u20b9%.2f) must equal bill total (\u20b9%.2f)", paid,
-                                    totalAmount));
-                    return null;
-                }
-                return new ArrayList<>(splits);
-            }
-            return null;
-        });
-
-        java.util.Optional<List<PaymentSplit>> result = dialog.showAndWait();
-        return result.orElse(null);
+    private void clearPendingLoyaltyDiscount() {
+        if (pendingLoyaltyDiscountPercent > 0.0) {
+            pendingLoyaltyDiscountPercent = 0.0;
+            updateTotal();
+        }
     }
 
-    static String compositePaymentMode(List<PaymentSplit> splits) {
-        if (splits == null || splits.isEmpty())
-            return "Cash";
-        if (splits.size() == 1)
-            return splits.get(0).getPaymentMethod().toUpperCase();
-        return splits.stream()
-                .map(PaymentSplit::getPaymentMethod)
-                .distinct()
-                .reduce((a, b) -> a + "+" + b)
-                .orElse("Cash");
+    private boolean isSameCustomer(Customer left, Customer right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.getCustomerId() == right.getCustomerId();
     }
 
     // ═══════════════════════════════════════════════

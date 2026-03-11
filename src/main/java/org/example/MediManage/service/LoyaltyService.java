@@ -27,10 +27,8 @@ public class LoyaltyService {
      * @return points awarded
      */
     public int awardPoints(int customerId, double billTotal) {
-        if (customerId <= 0 || billTotal <= 0)
-            return 0;
-        int points = (int) (billTotal / 100.0) * POINTS_PER_100_RUPEES;
-        if (points <= 0)
+        int points = calculateAwardPoints(billTotal);
+        if (customerId <= 0 || points <= 0)
             return 0;
 
         String sql = "UPDATE customers SET loyalty_points = COALESCE(loyalty_points, 0) + ? WHERE customer_id = ?";
@@ -43,6 +41,16 @@ public class LoyaltyService {
             e.printStackTrace();
         }
         return points;
+    }
+
+    /**
+     * Calculates how many points a bill total would award without mutating the
+     * database.
+     */
+    public int calculateAwardPoints(double billTotal) {
+        if (billTotal <= 0)
+            return 0;
+        return (int) (billTotal / 100.0) * POINTS_PER_100_RUPEES;
     }
 
     /**
