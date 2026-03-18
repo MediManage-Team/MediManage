@@ -785,11 +785,10 @@ public class DashboardController {
                 ctx -> {
                     String query = ctx.getQuery();
                     if (query.isEmpty()) return;
-                    ctx.setResult("Searching for \"" + query + "\"...");
                     inventoryAIService.findSubstitutes(query)
-                            .thenAccept(result -> ctx.setResult(result))
+                            .thenAccept(ctx::finish)
                             .exceptionally(ex -> {
-                                ctx.setResult("Error: " + ex.getMessage());
+                                ctx.finish("Error: " + ex.getMessage());
                                 return null;
                             });
                 });

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.CompletionException;
 import java.util.prefs.Preferences;
 
 /**
@@ -22,6 +23,7 @@ import java.util.prefs.Preferences;
  */
 public class AIOrchestrator {
     private final LocalAIService pythonService;
+    private final CloudAIService cloudService;
     private boolean forceCloud = false;
 
     private static final Map<CloudApiKeyStore.Provider, List<String>> CLOUD_MODELS = Map.of(
@@ -56,11 +58,16 @@ public class AIOrchestrator {
     // ======================== CONSTRUCTORS ========================
 
     public AIOrchestrator() {
-        this.pythonService = new LocalAIService();
+        this(new LocalAIService(), new CloudAIService());
     }
 
     public AIOrchestrator(LocalAIService pythonService) {
+        this(pythonService, new CloudAIService());
+    }
+
+    AIOrchestrator(LocalAIService pythonService, CloudAIService cloudService) {
         this.pythonService = pythonService;
+        this.cloudService = cloudService;
     }
 
     // ======================== CONFIGURATION ========================
@@ -103,7 +110,7 @@ public class AIOrchestrator {
         return trimmedModel;
     }
 
-    private JSONObject buildCloudConfig() {
+    JSONObject buildCloudConfig() {
         Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
         CloudApiKeyStore.Provider provider = resolveCloudProvider(prefs.get("cloud_provider", "GEMINI"));
         String model = resolveConfiguredCloudModel(provider, prefs.get("cloud_model", ""));
@@ -133,9 +140,24 @@ public class AIOrchestrator {
         if (cached != null) return CompletableFuture.completedFuture(cached);
 
         String activeRouting = forceCloud ? "cloud_only" : (routingOverride != null ? routingOverride : "auto");
+        JSONObject cloudConfig = buildCloudConfig();
 
-        return withRateLimit(() -> pythonService.orchestrate(action, data, buildCloudConfig(), activeRouting, useSearch)
-                .thenApply(r -> cacheAndReturn(cacheKey, r)));
+        return withRateLimit(() -> pythonService.orchestrate(action, data, cloudConfig, activeRouting, useSearch)
+                .handle((response, ex) -> {
+                    if (ex == null) {
+                        return CompletableFuture.completedFuture(cacheAndReturn(cacheKey, response));
+                    }
+
+                    Throwable rootCause = unwrap(ex);
+                    if (shouldUseDirectCloudFallback(action, activeRouting, cloudConfig, rootCause)) {
+                        String fallbackPrompt = AIActionPromptBuilder.buildDirectCloudFallbackPrompt(action, data);
+                        return cloudService.chat(cloudConfig, fallbackPrompt)
+                                .thenApply(result -> cacheAndReturn(cacheKey, result));
+                    }
+
+                    return CompletableFuture.<String>failedFuture(rootCause);
+                })
+                .thenCompose(result -> result));
     }
 
     public CompletableFuture<String> processQuery(String query, boolean requiresPrecision, boolean useSearch) {
@@ -259,5 +281,53 @@ public class AIOrchestrator {
 
     public void cancelLocalGeneration() {
         pythonService.cancelGeneration();
+    }
+
+    private boolean shouldUseDirectCloudFallback(String action, String routing, JSONObject cloudConfig, Throwable failure) {
+        if (!"cloud_only".equals(routing) && !"auto".equals(routing)) {
+            return false;
+        }
+        if (cloudConfig == null || cloudConfig.optString("api_key", "").isBlank()) {
+            return false;
+        }
+        if (!AIActionPromptBuilder.supportsDirectCloudFallback(action)) {
+            return false;
+        }
+        return isPythonSidecarUnavailable(failure);
+    }
+
+    private boolean isPythonSidecarUnavailable(Throwable failure) {
+        if (failure == null) {
+            return false;
+        }
+        if (failure instanceof java.net.ConnectException
+                || failure instanceof java.net.http.HttpConnectTimeoutException
+                || failure instanceof java.nio.channels.UnresolvedAddressException) {
+            return true;
+        }
+
+        String message = failure.getMessage();
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("connectexception")
+                || normalized.contains("connection refused")
+                || normalized.contains("connection reset")
+                || normalized.contains("httpconnecttimeoutexception")
+                || normalized.contains("ai orchestration error: 503")
+                || normalized.contains("ai orchestration error: 502")
+                || normalized.contains("ai orchestration error: 504")
+                || normalized.contains("admin token not configured")
+                || normalized.contains("no such host is known");
+    }
+
+    private Throwable unwrap(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current == null ? throwable : current;
     }
 }

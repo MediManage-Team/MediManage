@@ -5,6 +5,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
 
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -56,19 +57,28 @@ public class AIResultDialog {
                 "-fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 20; " +
                 "-fx-cursor: hand; -fx-font-size: 13px;");
 
-        HBox searchBox = new HBox(10, searchField, searchBtn);
+        ProgressIndicator loadingIndicator = new ProgressIndicator();
+        loadingIndicator.setPrefSize(20, 20);
+        loadingIndicator.setVisible(false);
+        loadingIndicator.setManaged(false);
+
+        HBox searchBox = new HBox(10, searchField, searchBtn, loadingIndicator);
         searchBox.setAlignment(Pos.CENTER_LEFT);
 
         TextArea resultArea = createResultArea();
         resultArea.setText("Enter a search term and click Search.");
 
-        SearchContext ctx = new SearchContext(resultArea, searchField);
+        SearchContext ctx = new SearchContext(resultArea, searchField, searchBtn, loadingIndicator);
 
         searchBtn.setOnAction(e -> {
             String query = searchField.getText().trim();
             if (!query.isEmpty()) {
-                resultArea.setText("Searching for \"" + query + "\"...");
-                onSearch.accept(ctx);
+                ctx.setLoading(true, "Searching for \"" + query + "\"...");
+                try {
+                    onSearch.accept(ctx);
+                } catch (RuntimeException ex) {
+                    ctx.finish("Error: " + ex.getMessage());
+                }
             }
         });
         searchField.setOnAction(e -> searchBtn.fire());
@@ -199,14 +209,38 @@ public class AIResultDialog {
     public static class SearchContext {
         private final TextArea resultArea;
         private final TextField searchField;
+        private final Button searchButton;
+        private final ProgressIndicator loadingIndicator;
 
-        SearchContext(TextArea resultArea, TextField searchField) {
+        SearchContext(TextArea resultArea, TextField searchField, Button searchButton, ProgressIndicator loadingIndicator) {
             this.resultArea = resultArea;
             this.searchField = searchField;
+            this.searchButton = searchButton;
+            this.loadingIndicator = loadingIndicator;
         }
 
         public void setResult(String text) {
             javafx.application.Platform.runLater(() -> resultArea.setText(text));
+        }
+
+        public void setLoading(boolean loading, String message) {
+            javafx.application.Platform.runLater(() -> {
+                resultArea.setText(message);
+                searchButton.setDisable(loading);
+                searchButton.setText(loading ? "Searching..." : "Search");
+                loadingIndicator.setVisible(loading);
+                loadingIndicator.setManaged(loading);
+            });
+        }
+
+        public void finish(String text) {
+            javafx.application.Platform.runLater(() -> {
+                resultArea.setText(text);
+                searchButton.setDisable(false);
+                searchButton.setText("Search");
+                loadingIndicator.setVisible(false);
+                loadingIndicator.setManaged(false);
+            });
         }
 
         public String getQuery() {

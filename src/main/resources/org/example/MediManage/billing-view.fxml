@@ -78,6 +78,7 @@
                     <Label text="Search Medicine"/>
                     <StackPane alignment="TOP_LEFT">
                         <TextField fx:id="txtSearchMedicine" promptText="Type medicine name..."/>
+                        <ProgressIndicator fx:id="medicineSearchSpinner" visible="false" managed="false" maxWidth="18" maxHeight="18" StackPane.alignment="CENTER_RIGHT"/>
                         <!-- Autocomplete List Overlay -->
                         <ListView fx:id="listMedicineSuggestions" visible="false" maxHeight="150"/>
                     </StackPane>

@@ -2,7 +2,6 @@ package org.example.MediManage.controller;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.application.Platform;
 import javafx.scene.control.*;
@@ -26,6 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class BillingController {
     private static final String CUSTOMER_NAME_SELECTED_CLASS = "customer-name-selected";
@@ -59,6 +60,8 @@ public class BillingController {
     @FXML
     private ListView<Medicine> listMedicineSuggestions;
     @FXML
+    private ProgressIndicator medicineSearchSpinner;
+    @FXML
     private TextField txtQty;
     @FXML
     private TextField txtBarcode;
@@ -85,16 +88,19 @@ public class BillingController {
     private final Gson gson = new Gson();
 
     private ObservableList<BillItem> billList = FXCollections.observableArrayList();
-    private ObservableList<Medicine> allMedicines = FXCollections.observableArrayList();
+    private final ObservableList<Medicine> medicineSuggestions = FXCollections.observableArrayList();
     private Customer selectedCustomer = null;
     private Medicine selectedMedicine = null;
     private boolean keyboardShortcutsRegistered = false;
     private double pendingLoyaltyDiscountPercent = 0.0;
+    private ScheduledFuture<?> pendingMedicineSearch;
+    private int medicineSearchGeneration = 0;
+
+    private static final int MIN_MEDICINE_SEARCH_CHARS = 2;
+    private static final long MEDICINE_SEARCH_DEBOUNCE_MS = 180L;
 
     @FXML
     public void initialize() {
-        allMedicines.addAll(billingService.loadActiveMedicines());
-
         colName.setCellValueFactory(data -> data.getValue().nameProperty());
         colQty.setCellValueFactory(data -> data.getValue().qtyProperty().asObject());
         colPrice.setCellValueFactory(data -> data.getValue().priceProperty().asObject());
@@ -114,23 +120,30 @@ public class BillingController {
     // ═══════════════════════════════════════════════
 
     private void setupMedicineSearch() {
-        FilteredList<Medicine> filteredDocs = new FilteredList<>(allMedicines, p -> true);
-        txtSearchMedicine.textProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal == null || newVal.isEmpty()) {
-                listMedicineSuggestions.setVisible(false);
-                return;
-            }
-            String lower = newVal.toLowerCase();
-            filteredDocs.setPredicate(m -> m.getName().toLowerCase().contains(lower) ||
-                    m.getCompany().toLowerCase().contains(lower) ||
-                    m.getGenericName().toLowerCase().contains(lower));
-            if (filteredDocs.isEmpty()) {
-                listMedicineSuggestions.setVisible(false);
-            } else {
-                listMedicineSuggestions.setVisible(true);
-                listMedicineSuggestions.setItems(filteredDocs);
+        listMedicineSuggestions.setItems(medicineSuggestions);
+        listMedicineSuggestions.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(Medicine item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item.getName() + " (" + item.getCompany() + ")");
+                }
             }
         });
+
+        txtSearchMedicine.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (selectedMedicine != null && selectedMedicine.getName().equals(newVal)) {
+                setMedicineSearchLoading(false);
+                return;
+            }
+            if (selectedMedicine != null && !selectedMedicine.getName().equals(newVal)) {
+                selectedMedicine = null;
+            }
+            scheduleMedicineSearch(newVal);
+        });
+
         listMedicineSuggestions.setOnMouseClicked(e -> {
             Medicine sel = listMedicineSuggestions.getSelectionModel().getSelectedItem();
             if (sel != null)
@@ -141,8 +154,8 @@ public class BillingController {
                 listMedicineSuggestions.requestFocus();
                 listMedicineSuggestions.getSelectionModel().selectFirst();
             } else if (e.getCode() == KeyCode.ENTER) {
-                if (!listMedicineSuggestions.getItems().isEmpty()) {
-                    selectMedicine(listMedicineSuggestions.getItems().get(0));
+                if (!medicineSuggestions.isEmpty()) {
+                    selectMedicine(medicineSuggestions.get(0));
                 }
             }
         });
@@ -153,12 +166,60 @@ public class BillingController {
                     selectMedicine(sel);
             }
         });
+
+        setMedicineSearchLoading(false);
+    }
+
+    private void scheduleMedicineSearch(String query) {
+        if (pendingMedicineSearch != null) {
+            pendingMedicineSearch.cancel(false);
+        }
+
+        medicineSearchGeneration++;
+        String trimmedQuery = query == null ? "" : query.trim();
+        if (trimmedQuery.length() < MIN_MEDICINE_SEARCH_CHARS) {
+            medicineSuggestions.clear();
+            listMedicineSuggestions.setVisible(false);
+            setMedicineSearchLoading(false);
+            return;
+        }
+
+        setMedicineSearchLoading(true);
+        final int generation = medicineSearchGeneration;
+        pendingMedicineSearch = org.example.MediManage.util.AppExecutors.schedule(() -> {
+            List<Medicine> results = medicineDAO.searchMedicines(trimmedQuery, 0, 15);
+            Platform.runLater(() -> {
+                if (generation != medicineSearchGeneration) {
+                    return;
+                }
+                medicineSuggestions.setAll(results);
+                listMedicineSuggestions.setVisible(!results.isEmpty());
+                if (!results.isEmpty()) {
+                    listMedicineSuggestions.setPrefHeight(Math.min(180, results.size() * 28));
+                }
+                setMedicineSearchLoading(false);
+            });
+        }, MEDICINE_SEARCH_DEBOUNCE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private void setMedicineSearchLoading(boolean loading) {
+        if (medicineSearchSpinner == null) {
+            return;
+        }
+        medicineSearchSpinner.setVisible(loading);
+        medicineSearchSpinner.setManaged(loading);
     }
 
     private void selectMedicine(Medicine m) {
+        if (pendingMedicineSearch != null) {
+            pendingMedicineSearch.cancel(false);
+        }
+        medicineSearchGeneration++;
         selectedMedicine = m;
         txtSearchMedicine.setText(m.getName());
+        medicineSuggestions.clear();
         listMedicineSuggestions.setVisible(false);
+        setMedicineSearchLoading(false);
         txtQty.requestFocus();
     }
 
@@ -215,7 +276,9 @@ public class BillingController {
         selectedMedicine = null;
         txtSearchMedicine.clear();
         txtQty.clear();
+        medicineSuggestions.clear();
         listMedicineSuggestions.setVisible(false);
+        setMedicineSearchLoading(false);
     }
 
     private void applyCustomerNameStyle(boolean selected) {
@@ -432,8 +495,6 @@ public class BillingController {
                         lblCustomerPhone.setText("-");
                     updateLoyaltyDisplay();
                     txtSearchCustomer.clear();
-                    allMedicines.clear();
-                    allMedicines.addAll(billingService.loadActiveMedicines());
                 } catch (Exception e) {
                     e.printStackTrace();
                     showAlert(Alert.AlertType.ERROR, "Error", "Checkout/Printing Failed: " + e.getMessage());
