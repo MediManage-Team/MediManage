@@ -409,6 +409,15 @@ public class MediManageApplication extends Application {
                                 }
                                 ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, mcpScript);
                                 mcpPb.redirectErrorStream(true);
+                                java.util.prefs.Preferences prefs = java.util.prefs.Preferences
+                                                .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+                                mcpPb.environment().put(LocalAdminTokenManager.ENV_NAME,
+                                                LocalAdminTokenManager.getOrCreateToken());
+                                mcpPb.environment().put("MEDIMANAGE_DB_BACKEND", "sqlite");
+                                mcpPb.environment().put("MEDIMANAGE_DB_PATH",
+                                                prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_DB_PATH,
+                                                                System.getProperty("user.dir")
+                                                                                + "/medimanage.db"));
                                 mcpProcess = mcpPb.start();
 
                                 // Consume MCP output in background

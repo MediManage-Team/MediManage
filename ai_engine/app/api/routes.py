@@ -146,8 +146,9 @@ def load_model():
 
 @api_bp.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     prompt = data.get("prompt")
+    context = data.get("context") or data.get("business_context", "")
     use_search = data.get("use_search", False)
 
     if not prompt:
@@ -159,10 +160,36 @@ def chat():
         _auto_load_model()
 
     try:
-        response_text = engine.generate(prompt, use_search=use_search)
+        response_text = engine.generate(_build_contextual_prompt(prompt, context), use_search=use_search)
         return jsonify({"response": response_text})
     except Exception as e:
         logger.error(f"Inference error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/chat/rag', methods=['POST'])
+def chat_rag():
+    data = request.get_json(silent=True) or {}
+    prompt = data.get("prompt")
+    context = data.get("context") or data.get("business_context", "")
+    use_search = data.get("use_search", False)
+
+    if not prompt:
+        return jsonify({"error": "No prompt provided"}), 400
+
+    if engine.provider is None:
+        logger.info("No model loaded - auto-loading first available model for RAG chat...")
+        _auto_load_model()
+
+    try:
+        response_text = engine.generate(_build_contextual_prompt(prompt, context), use_search=use_search)
+        return jsonify({
+            "response": response_text,
+            "source": "local_rag",
+            "provider": engine.provider,
+        })
+    except Exception as e:
+        logger.error(f"RAG inference error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -188,10 +215,20 @@ def _auto_load_model():
         logger.error("Auto-load failed: %s", e)
 
 
+def _build_contextual_prompt(prompt: str, context: str) -> str:
+    prompt = (prompt or "").strip()
+    context = (context or "").strip()
+    if context and prompt:
+        return f"### Business Data\n{context}\n\n### Query\n{prompt}"
+    if context:
+        return context
+    return prompt
+
+
 @api_bp.route('/orchestrate', methods=['POST'])
 def orchestrate():
     """Unified Orchestration Endpoint. Replaces Java's AIOrchestrator branching logic."""
-    payload = request.json
+    payload = request.get_json(silent=True) or {}
     action = payload.get("action", "")
     data = payload.get("data", {})
     cloud_config = payload.get("cloud_config", {})
@@ -200,11 +237,6 @@ def orchestrate():
 
     if not action:
         return jsonify({"error": "No action provided"}), 400
-
-    # 1. Build the prompt dynamically based on Java's action ID
-    prompt = _build_prompt_from_action(action, data)
-    if not prompt:
-        return jsonify({"error": f"Unknown action: {action}"}), 400
 
     # 2. Extract Cloud Configurations
     provider = cloud_config.get("provider", "GEMINI")
@@ -216,23 +248,43 @@ def orchestrate():
 
     # 3. Routing Logic (Mimicking Java AIOrchestrator)
     try:
+        # Combined AI Flow (Analyze locally with business data, refine with cloud)
+        if action == "combined_analysis":
+            ctx = data.get("business_context", "")
+            base_prompt = data.get("prompt", "")
+
+            if cloud_available:
+                if engine.provider is not None:
+                    local_insight = engine.generate(
+                        prompts.combined_business_summary_prompt(base_prompt) + f"\nContext: {ctx}"
+                    )
+                else:
+                    local_insight = prompts.combined_business_fallback_prompt(ctx)
+
+                cloud_prompt = prompts.combined_medical_precision_prompt(local_insight, base_prompt)
+                result = cloud_api_client.chat(provider, model, api_key, cloud_prompt)
+                return jsonify({"response": result, "source": "cloud_combined", "provider": provider})
+
+            if engine.provider is None:
+                _auto_load_model()
+
+            if engine.provider is not None:
+                result = engine.generate(_build_contextual_prompt(base_prompt, ctx), use_search=use_search)
+                return jsonify({"response": result, "source": "local_combined", "provider": engine.provider})
+
+            raise ValueError("Combined analysis requested but neither cloud nor local AI is available.")
+
+        # 1. Build the prompt dynamically based on Java's action ID
+        prompt = _build_prompt_from_action(action, data)
+        if not prompt:
+            return jsonify({"error": f"Unknown action: {action}"}), 400
+
         # Explicit Local DB Query Routing (Doesn't use LLM)
-        if routing == "local_only" or action.endswith("_db_query") or action.startswith("Show "):
+        if action.endswith("_db_query") or action.startswith("Show "):
             result = engine.search_pharmacy_db(prompt)
             if result:
                  return jsonify({"response": result, "source": "database", "provider": "Local DB"})
             return jsonify({"response": "No matching data found.", "source": "database", "provider": "Local DB"})
-
-        # Combined AI Flow (Analyze locally with business data, refine with cloud)
-        if action == "combined_analysis" and cloud_available and engine.provider is not None:
-            # First, Local AI does basic summary
-            ctx = data.get("business_context", "")
-            base_prompt = data.get("prompt", "")
-            local_insight = engine.generate(prompts.combined_business_summary_prompt(base_prompt) + f"\nContext: {ctx}")
-            # Then, Cloud AI gives precision based on local analysis
-            cloud_prompt = prompts.combined_medical_precision_prompt(local_insight, base_prompt)
-            result = cloud_api_client.chat(provider, model, api_key, cloud_prompt)
-            return jsonify({"response": result, "source": "cloud_combined", "provider": provider})
 
         # Try Cloud First (if required or auto)
         if routing in ["cloud_only", "auto"]:
@@ -286,12 +338,11 @@ def _build_prompt_from_action(action: str, data: dict) -> str:
         return prompts.db_report_analysis_prompt(data.get("report_type", ""))
     
     # Simple passing prompts
+    if action == "combined_analysis":
+        return _build_contextual_prompt(data.get("prompt", ""), data.get("business_context", ""))
+
     if action == "raw_chat":
-        prompt = data.get("prompt", "")
-        ctx = data.get("business_context", "")
-        if ctx:
-            return f"### Business Data\n{ctx}\n\n### Query\n{prompt}"
-        return prompt
+        return _build_contextual_prompt(data.get("prompt", ""), data.get("business_context", ""))
     
     # DB Queries
     db_mapping = {

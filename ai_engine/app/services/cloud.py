@@ -14,14 +14,23 @@ class CloudAPIClient:
 
     def __init__(self):
         self.timeout = 90  # seconds
+        self.default_models = {
+            "GEMINI": "gemini-2.5-flash",
+            "GROQ": "llama-3.3-70b-versatile",
+            "OPENROUTER": "anthropic/claude-3.5-sonnet",
+            "OPENAI": "gpt-4o",
+            "CLAUDE": "claude-3-5-sonnet-20241022",
+        }
 
     def chat(self, provider: str, model: str, api_key: str, prompt: str, requires_json: bool = False, retries: int = 2) -> str:
         """Execute a prompt with a configured Cloud LLM, handling rate limits automatically."""
+        provider = (provider or "").strip().upper()
+        model = self._resolve_model(provider, model)
+        api_key = (api_key or "").strip()
+
         if not api_key or api_key == "YOUR_API_KEY":
             raise ValueError(f"{provider} API key not configured. Set it in UI Settings.")
-        
-        provider = provider.upper()
-        
+
         # Modify prompt if JSON is required
         if requires_json:
             prompt += "\n\nRespond with ONLY valid JSON. Do NOT include markdown fences or explanation — raw JSON only."
@@ -48,6 +57,12 @@ class CloudAPIClient:
                     time.sleep(15)
                 else:
                     raise
+
+    def _resolve_model(self, provider: str, model: str) -> str:
+        configured_model = (model or "").strip()
+        if configured_model:
+            return configured_model
+        return self.default_models.get(provider, "")
 
     def _send_gemini(self, model: str, api_key: str, prompt: str) -> str:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"

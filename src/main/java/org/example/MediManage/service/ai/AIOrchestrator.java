@@ -2,9 +2,12 @@ package org.example.MediManage.service.ai;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.example.MediManage.security.CloudApiKeyStore;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.prefs.Preferences;
@@ -20,6 +23,14 @@ import java.util.prefs.Preferences;
 public class AIOrchestrator {
     private final LocalAIService pythonService;
     private boolean forceCloud = false;
+
+    private static final Map<CloudApiKeyStore.Provider, List<String>> CLOUD_MODELS = Map.of(
+            CloudApiKeyStore.Provider.GEMINI, List.of("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"),
+            CloudApiKeyStore.Provider.GROQ, List.of("llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"),
+            CloudApiKeyStore.Provider.OPENROUTER, List.of("anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"),
+            CloudApiKeyStore.Provider.OPENAI, List.of("gpt-4o", "gpt-4o-mini", "o1-mini"),
+            CloudApiKeyStore.Provider.CLAUDE, List.of("claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229")
+    );
 
     // ======================== CACHE ========================
     private static final int MAX_CACHE_SIZE = 100;
@@ -62,21 +73,50 @@ public class AIOrchestrator {
         return forceCloud;
     }
 
+    static CloudApiKeyStore.Provider resolveCloudProvider(String configuredProvider) {
+        String normalized = configuredProvider == null
+                ? ""
+                : configuredProvider.trim().toUpperCase(Locale.ROOT);
+        try {
+            return CloudApiKeyStore.Provider.valueOf(normalized);
+        } catch (IllegalArgumentException ex) {
+            return CloudApiKeyStore.Provider.GEMINI;
+        }
+    }
+
+    static String resolveConfiguredCloudModel(CloudApiKeyStore.Provider provider, String configuredModel) {
+        List<String> providerModels = CLOUD_MODELS.getOrDefault(provider, List.of());
+        String trimmedModel = configuredModel == null ? "" : configuredModel.trim();
+        if (trimmedModel.isBlank()) {
+            return providerModels.isEmpty() ? "" : providerModels.get(0);
+        }
+
+        if (providerModels.contains(trimmedModel)) {
+            return trimmedModel;
+        }
+
+        boolean knownForeignModel = CLOUD_MODELS.values().stream().anyMatch(models -> models.contains(trimmedModel));
+        if (knownForeignModel && !providerModels.isEmpty()) {
+            return providerModels.get(0);
+        }
+
+        return trimmedModel;
+    }
+
     private JSONObject buildCloudConfig() {
         Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
-        String provider = prefs.get("cloud_provider", "GEMINI");
-        String model = prefs.get("cloud_model", "");
+        CloudApiKeyStore.Provider provider = resolveCloudProvider(prefs.get("cloud_provider", "GEMINI"));
+        String model = resolveConfiguredCloudModel(provider, prefs.get("cloud_model", ""));
         String apiKey = "";
-        
+
         try {
-            // Re-fetch using the enum name pattern for backwards compatibility with the keystore
-            apiKey = org.example.MediManage.security.CloudApiKeyStore.get(org.example.MediManage.security.CloudApiKeyStore.Provider.valueOf(provider));
+            apiKey = CloudApiKeyStore.get(provider).trim();
         } catch (Exception e) {
             // Fallback for custom logic if needed
         }
 
         JSONObject config = new JSONObject();
-        config.put("provider", provider);
+        config.put("provider", provider.name());
         config.put("model", model);
         config.put("api_key", apiKey);
         return config;
