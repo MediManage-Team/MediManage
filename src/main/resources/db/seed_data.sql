@@ -1,6 +1,11 @@
 -- ======================================================================
 -- MediManage — Seed Data for uniCenta POS Features (Phases 1-3)
 -- ======================================================================
+
+-- ── PHASE 1: INITIAL ADMIN USER ──
+INSERT OR IGNORE INTO users (user_id, username, password, role)
+VALUES (1, '1', '1', 'ADMIN');
+
 -- ── PHASE 1: RECEIPT SETTINGS ──
 INSERT
     OR IGNORE INTO receipt_settings (setting_key, setting_value)

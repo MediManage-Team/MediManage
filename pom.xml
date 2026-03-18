@@ -7,7 +7,7 @@
 
     <groupId>org.example</groupId>
     <artifactId>Project_File</artifactId>
-    <version>0.1.5</version>
+    <version>6.1.0</version>
     <name>Project_File</name>
 
     <properties>
@@ -273,6 +273,8 @@
                     </mainClass>
                     <options>
                         <option>--enable-native-access=javafx.graphics,ALL-UNNAMED</option>
+                        <option>--add-modules</option>
+                        <option>jdk.crypto.ec,java.naming</option>
                     </options>
                 </configuration>
             </plugin>

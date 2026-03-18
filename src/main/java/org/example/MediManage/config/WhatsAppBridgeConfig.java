@@ -64,11 +64,38 @@ public class WhatsAppBridgeConfig {
     }
 
     /**
-     * Check if Node.js is available on this system.
+     * Resolves the Node.js executable, preferring the bundled runtime/node/node.exe.
+     */
+    public static String resolveNodeExe() {
+        // Check bundled node.exe inside the whatsapp-server directory first
+        java.io.File serverDir = resolveServerDir();
+        if (serverDir != null) {
+            java.io.File bundledNode = new java.io.File(serverDir, "node.exe");
+            if (bundledNode.exists()) {
+                return bundledNode.getAbsolutePath();
+            }
+        }
+        return "node";
+    }
+
+    /**
+     * Resolves the entry script: protected start_protected.js or raw index.js.
+     */
+    public static String resolveEntryScript(java.io.File serverDir) {
+        java.io.File protectedEntry = new java.io.File(serverDir, "start_protected.js");
+        if (protectedEntry.exists()) {
+            return "start_protected.js";
+        }
+        return "index.js";
+    }
+
+    /**
+     * Check if Node.js is available on this system (bundled or system-installed).
      */
     public static boolean isNodeAvailable() {
         try {
-            Process p = new ProcessBuilder("node", "--version")
+            String nodeExe = resolveNodeExe();
+            Process p = new ProcessBuilder(nodeExe, "--version")
                     .redirectErrorStream(true).start();
             String output = new String(p.getInputStream().readAllBytes()).trim();
             int exitCode = p.waitFor();

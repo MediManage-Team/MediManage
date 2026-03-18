@@ -68,4 +68,48 @@ public class ExpenseDAO {
             pstmt.executeUpdate();
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // BUSINESS INTELLIGENCE QUERIES
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Returns total expenses grouped by category.
+     */
+    public java.util.Map<String, Double> getExpensesByCategory() {
+        java.util.Map<String, Double> result = new java.util.LinkedHashMap<>();
+        String sql = "SELECT category, SUM(amount) as total FROM expenses GROUP BY category ORDER BY total DESC";
+        try (Connection conn = DatabaseUtil.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                result.put(rs.getString("category"), rs.getDouble("total"));
+            }
+        } catch (SQLException e) {
+            System.err.println("getExpensesByCategory error: " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Returns monthly expense totals for the last N months.
+     */
+    public List<java.util.AbstractMap.SimpleEntry<String, Double>> getMonthlyExpenseTrend(int months) {
+        List<java.util.AbstractMap.SimpleEntry<String, Double>> trend = new ArrayList<>();
+        String sql = "SELECT strftime('%Y-%m', date) as month, SUM(amount) as total " +
+                "FROM expenses WHERE date >= date('now', '-' || ? || ' months') " +
+                "GROUP BY month ORDER BY month ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, months);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    trend.add(new java.util.AbstractMap.SimpleEntry<>(rs.getString("month"), rs.getDouble("total")));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("getMonthlyExpenseTrend error: " + e.getMessage());
+        }
+        return trend;
+    }
 }

@@ -31,5 +31,5 @@ if errorlevel 1 (
 :: Start server
 echo [3/3] Starting AI Engine Server...
 echo.
-"%VENV_DIR%\Scripts\python.exe" ai_engine\server.py
+"%VENV_DIR%\Scripts\python.exe" ai_engine\server\server.py
 pause

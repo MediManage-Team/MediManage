@@ -247,11 +247,27 @@ public class BillingService {
     }
 
     public CompletableFuture<String> generateDetailedCareProtocol(List<BillItem> billItems) {
-        org.json.JSONObject data = new org.json.JSONObject();
-        org.json.JSONArray meds = new org.json.JSONArray();
-        for (BillItem item : billItems) meds.put(item.getName());
-        data.put("medicines", meds);
-        return aiOrchestrator.processOrchestration("detailed_protocol", data, "cloud_only", false);
+        if (aiOrchestrator == null) {
+            return CompletableFuture.completedFuture(
+                    fallbackCheckoutCareProtocol(billItems, "AI orchestrator unavailable"));
+        }
+        try {
+            org.json.JSONObject data = new org.json.JSONObject();
+            org.json.JSONArray meds = new org.json.JSONArray();
+            for (BillItem item : billItems) meds.put(item.getName());
+            data.put("medicines", meds);
+            return aiOrchestrator.processOrchestration("detailed_protocol", data, "cloud_only", false)
+                    .handle((response, ex) -> {
+                        if (ex != null || !isUsableCareProtocol(response)) {
+                            String reason = ex == null ? "AI response unusable" : ex.getMessage();
+                            return fallbackCheckoutCareProtocol(billItems, reason);
+                        }
+                        return response.trim();
+                    });
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture(
+                    fallbackCheckoutCareProtocol(billItems, e.getMessage()));
+        }
     }
 
     public String getCloudProviderInfo() {
@@ -278,6 +294,7 @@ public class BillingService {
             return false;
         return true;
     }
+
 
     public List<BillItem> snapshotItems(List<BillItem> billItems) {
         if (billItems == null) {

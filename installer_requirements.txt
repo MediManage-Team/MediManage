@@ -1,0 +1,33 @@
+MediManage - Important Installation Requirements
+
+Before proceeding with the installation, please read the following requirements carefully:
+
+-------------------------------------------------------------------------------
+1. INTERNET CONNECTION REQUIRED
+-------------------------------------------------------------------------------
+This installation requires an active internet connection on first launch.
+
+While the core MediManage application and its database are installed offline, 
+the advanced AI Engine and WhatsApp Bridge features require downloading 
+additional dependencies from the internet the very first time you use them.
+
+-------------------------------------------------------------------------------
+2. DATA USAGE (APPROXIMATELY 400 MB)
+-------------------------------------------------------------------------------
+Please ensure you have sufficient data allowance on your connection.
+
+- Python AI Engine Dependencies (PyTorch, Transformers, etc.): ~350 MB
+- Node.js WhatsApp Bridge Dependencies: ~50 MB
+
+These downloads will happen automatically in the background the first time 
+you click "MediManage AI Engine" or "MediManage WhatsApp Bridge" in your 
+Start Menu.
+
+-------------------------------------------------------------------------------
+3. LOCAL PREREQUISITES
+-------------------------------------------------------------------------------
+This installer will automatically install Python 3.11 and Node.js v20 on 
+your PC if they are not already installed. This will happen silently 
+during the final stage of this setup wizard.
+
+Click "Next" to accept these requirements and continue the installation.

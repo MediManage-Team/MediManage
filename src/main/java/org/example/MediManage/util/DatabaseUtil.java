@@ -52,6 +52,12 @@ public class DatabaseUtil {
     }
 
     private static void runSchema(Connection conn) throws SQLException {
+        // Fast-path: if core tables already exist, skip the full schema run
+        if (schemaAlreadyInitialized(conn)) {
+            System.out.println("✅ Database schema already initialized — skipping.");
+            return;
+        }
+
         System.out.println("⚙️ Initializing Database Schema...");
         String schemaResource = resolveSchemaResource(conn);
 
@@ -90,6 +96,27 @@ public class DatabaseUtil {
         }
 
         System.out.println("✅ Schema initialized successfully.");
+    }
+
+    /**
+     * Quick check: if the core tables (medicines, bills, stock, users) all exist,
+     * the schema has already been initialized and we can skip the full run.
+     */
+    private static boolean schemaAlreadyInitialized(Connection conn) {
+        String[] coreTables = {"users", "medicines", "stock", "bills", "bill_items", "customers", "expenses"};
+        try (Statement stmt = conn.createStatement()) {
+            for (String table : coreTables) {
+                try (ResultSet rs = stmt.executeQuery(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='" + table + "'")) {
+                    if (!rs.next()) {
+                        return false; // At least one core table is missing
+                    }
+                }
+            }
+            return true; // All core tables exist
+        } catch (SQLException e) {
+            return false; // Can't check — run full schema
+        }
     }
 
     private static void seedMessageTemplatesIfNeeded(Connection conn) {
@@ -245,5 +272,49 @@ public class DatabaseUtil {
             }
         }
         return value;
+    }
+
+    /**
+     * Wipes all operational database tables, retaining only the Users and Message Templates.
+     * This is intended for customers to clear out the demo database before starting real operations.
+     */
+    public static void clearDemoData() throws SQLException {
+        String[] tablesToClear = {
+            "inventory_adjustments",
+            "expenses",
+            "held_order_items",
+            "held_orders",
+            "order_items",
+            "orders",
+            "bill_items",
+            "bills",
+            "suppliers",
+            "stock",
+            "medicines",
+            "customers"
+        };
+        
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false);
+            try (Statement stmt = conn.createStatement()) {
+                // Temporarily disable FK checks to allow bulk deletion in any order
+                stmt.execute("PRAGMA foreign_keys = OFF;");
+                
+                for (String table : tablesToClear) {
+                    stmt.execute("DELETE FROM " + table + ";");
+                    // Reset sqlite_sequence for this table if it exists
+                    stmt.execute("DELETE FROM sqlite_sequence WHERE name='" + table + "';");
+                }
+                
+                stmt.execute("PRAGMA foreign_keys = ON;");
+                conn.commit();
+                System.out.println("✅ Successfully cleared all demo data.");
+            } catch (SQLException e) {
+                conn.rollback();
+                throw new SQLException("Failed to clear demo data. Transaction rolled back.", e);
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        }
     }
 }

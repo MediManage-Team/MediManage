@@ -22,6 +22,7 @@
 
                 <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
                     <Button text="Test Database Connection" onAction="#handleTestDatabaseConnection" styleClass="button-outlined"/>
+                    <Button text="🗑️ Clear Demo Data" onAction="#handleClearDemoData" styleClass="button-danger"/>
                     <Button text="Save Database Settings" onAction="#handleSaveDatabase" styleClass="button-success"/>
                 </HBox>
             </VBox>

@@ -6,9 +6,11 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.fxml.FXML;
+import javafx.scene.chart.*;
 import javafx.scene.control.*;
 import javafx.stage.FileChooser;
 import org.example.MediManage.dao.BillDAO;
+import org.example.MediManage.dao.ExpenseDAO;
 import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.BillHistoryRecord;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.example.MediManage.service.ReportService;
 import org.example.MediManage.service.DashboardKpiService;
@@ -140,15 +143,17 @@ public class DashboardController {
     @FXML
     private Button btnHistoryNext;
 
-    // ── BI ──
+    // ── BI TEXT TOOLS (now using popup dialogs via AIResultDialog) ──
+
+    // ── BI CHARTS ──
     @FXML
-    private TextField substituteInput;
+    private LineChart<String, Number> salesTrendChart;
     @FXML
-    private TextArea substituteResult;
+    private PieChart paymentModeChart;
     @FXML
-    private TextArea forecastResult;
+    private BarChart<String, Number> topProductsChart;
     @FXML
-    private TextArea expiryResult;
+    private PieChart expenseCategoryChart;
 
     // ── TABS ──
     @FXML
@@ -166,10 +171,11 @@ public class DashboardController {
     // ── SERVICES ──
     private final MedicineDAO medicineDAO = new MedicineDAO();
     private final BillDAO billDAO = new BillDAO();
-
+    private final ExpenseDAO expenseDAO = new ExpenseDAO();
 
     private final DashboardKpiService kpiService = DashboardKpiService.getInstance();
     private final ReportService reportService = new ReportService();
+    private boolean biChartsLoaded = false;
     private org.example.MediManage.service.ai.InventoryAIService inventoryAIService;
 
     // ══════════════════════════════════════════════════════════════
@@ -188,6 +194,15 @@ public class DashboardController {
         loadDashboard();
         loadHistory();
 
+        // Lazy-load BI charts when the BI tab is selected
+        if (mainTabPane != null) {
+            mainTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+                if (newTab != null && "Business Intelligence".equals(newTab.getText()) && !biChartsLoaded) {
+                    loadBICharts();
+                    biChartsLoaded = true;
+                }
+            });
+        }
     }
 
     /**
@@ -698,43 +713,120 @@ public class DashboardController {
     }
 
     // ══════════════════════════════════════════════════════════════
+    // BUSINESS INTELLIGENCE CHARTS
+    // ══════════════════════════════════════════════════════════════
+
+    private void loadBICharts() {
+        AppExecutors.runBackground(() -> {
+            // Fetch all BI data off the FX thread
+            List<Map.Entry<String, Double>> salesTrend = billDAO.getDailySalesTrend(30);
+            Map<String, Double> paymentModes = billDAO.getSalesByPaymentMode();
+            List<Map.Entry<String, Integer>> topProducts = billDAO.getTopSellingMedicines(10);
+            Map<String, Double> expenseCategories = expenseDAO.getExpensesByCategory();
+
+            Platform.runLater(() -> {
+                // ── 1. Revenue Trend LineChart ──
+                if (salesTrendChart != null) {
+                    salesTrendChart.getData().clear();
+                    XYChart.Series<String, Number> series = new XYChart.Series<>();
+                    series.setName("Revenue");
+                    for (Map.Entry<String, Double> entry : salesTrend) {
+                        // Shorten date label to MM-DD
+                        String label = entry.getKey().length() > 5 ? entry.getKey().substring(5) : entry.getKey();
+                        series.getData().add(new XYChart.Data<>(label, entry.getValue()));
+                    }
+                    salesTrendChart.getData().add(series);
+                }
+
+                // ── 2. Payment Mode PieChart ──
+                if (paymentModeChart != null) {
+                    paymentModeChart.getData().clear();
+                    for (Map.Entry<String, Double> entry : paymentModes.entrySet()) {
+                        paymentModeChart.getData().add(
+                                new PieChart.Data(entry.getKey() + " (₹" + String.format("%.0f", entry.getValue()) + ")", entry.getValue())
+                        );
+                    }
+                }
+
+                // ── 3. Top Products BarChart ──
+                if (topProductsChart != null) {
+                    topProductsChart.getData().clear();
+                    XYChart.Series<String, Number> barSeries = new XYChart.Series<>();
+                    barSeries.setName("Units Sold");
+                    for (Map.Entry<String, Integer> entry : topProducts) {
+                        // Truncate long medicine names
+                        String name = entry.getKey().length() > 20 ? entry.getKey().substring(0, 17) + "..." : entry.getKey();
+                        barSeries.getData().add(new XYChart.Data<>(name, entry.getValue()));
+                    }
+                    topProductsChart.getData().add(barSeries);
+                }
+
+                // ── 4. Expense Category PieChart ──
+                if (expenseCategoryChart != null) {
+                    expenseCategoryChart.getData().clear();
+                    for (Map.Entry<String, Double> entry : expenseCategories.entrySet()) {
+                        expenseCategoryChart.getData().add(
+                                new PieChart.Data(entry.getKey() + " (₹" + String.format("%.0f", entry.getValue()) + ")", entry.getValue())
+                        );
+                    }
+                }
+            });
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // BUSINESS INTELLIGENCE (AI)
     // ══════════════════════════════════════════════════════════════
 
     @FXML
     private void handleFindSubstitutes() {
-        String brand = substituteInput.getText().trim();
-        if (brand.isEmpty()) {
-            substituteResult.setText("Please enter a brand name.");
-            return;
-        }
-        substituteResult.setText("Analyzing '" + brand + "' with AI and checking inventory...");
-        inventoryAIService.findSubstitutes(brand)
-                .thenAccept(result -> Platform.runLater(() -> substituteResult.setText(result)))
-                .exceptionally(ex -> {
-                    Platform.runLater(() -> substituteResult.setText("Error: " + ex.getMessage()));
-                    return null;
+        org.example.MediManage.util.AIResultDialog.showSearchPopup(
+                "Substitute Finder", "🔍", "Search medicine name or generic...",
+                ctx -> {
+                    String query = ctx.getQuery();
+                    if (query.isEmpty()) return;
+                    ctx.setResult("Searching for \"" + query + "\"...");
+                    inventoryAIService.findSubstitutes(query)
+                            .thenAccept(result -> ctx.setResult(result))
+                            .exceptionally(ex -> {
+                                ctx.setResult("Error: " + ex.getMessage());
+                                return null;
+                            });
                 });
     }
 
     @FXML
     private void handleRestockReport() {
-        forecastResult.setText("Analyzing sales history (last 30 days) for trends...");
+        var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
+                "Restock Forecasting", "📦", "Analyzing sales history (last 30 days) for trends...");
         inventoryAIService.generateRestockReport()
-                .thenAccept(result -> Platform.runLater(() -> forecastResult.setText(result)))
+                .thenAccept(result -> ctx.setResult(result))
                 .exceptionally(ex -> {
-                    Platform.runLater(() -> forecastResult.setText("Error: " + ex.getMessage()));
+                    ctx.setResult("Error: " + ex.getMessage());
                     return null;
                 });
     }
 
     @FXML
     private void handleExpiryReport() {
-        expiryResult.setText("Scanning inventory for expiring items and generating strategy...");
+        var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
+                "Expiry Strategy", "⏰", "Scanning inventory for expiring items...");
         inventoryAIService.generateExpiryReport()
-                .thenAccept(result -> Platform.runLater(() -> expiryResult.setText(result)))
+                .thenAccept(result -> ctx.setResult(result))
                 .exceptionally(ex -> {
-                    Platform.runLater(() -> expiryResult.setText("Error: " + ex.getMessage()));
+                    ctx.setResult("Error: " + ex.getMessage());
+                    return null;
+                });
+    }
+
+    @FXML
+    private void handleProfitAnalysis() {
+        var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
+                "Profit Analyzer", "💎", "Analyzing profit margins across inventory...");
+        inventoryAIService.generateProfitAnalysis()
+                .thenAccept(result -> ctx.setResult(result))
+                .exceptionally(ex -> {
+                    ctx.setResult("Error: " + ex.getMessage());
                     return null;
                 });
     }

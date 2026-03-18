@@ -146,6 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customer_id);
 CREATE INDEX IF NOT EXISTS idx_bill_items_bill ON bill_items(bill_id);
 CREATE INDEX IF NOT EXISTS idx_bill_items_medicine ON bill_items(medicine_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
 CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_medicine ON inventory_adjustments(medicine_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_type_date ON inventory_adjustments(adjustment_type, occurred_at);

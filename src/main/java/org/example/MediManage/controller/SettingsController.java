@@ -132,7 +132,17 @@ public class SettingsController {
         
         loadEnvironmentList();
 
-        hfTokenField.setText(prefs.get("hf_token", ""));
+        // Migrate legacy plaintext hf_token to encrypted SecureSecretStore
+        String hfTokenVal = org.example.MediManage.security.SecureSecretStore.get("hf_token");
+        if ((hfTokenVal == null || hfTokenVal.isBlank())) {
+            String legacyHf = prefs.get("hf_token", "");
+            if (legacyHf != null && !legacyHf.isBlank()) {
+                org.example.MediManage.security.SecureSecretStore.put("hf_token", legacyHf);
+                prefs.remove("hf_token");
+                hfTokenVal = legacyHf;
+            }
+        }
+        hfTokenField.setText(hfTokenVal != null ? hfTokenVal : "");
 
         // --- Cloud AI ---
         // Provider ComboBox
@@ -312,6 +322,44 @@ public class SettingsController {
             showAlert(Alert.AlertType.ERROR, "Database Test Failed",
                     "Could not connect with current settings:\n" + e.getMessage());
         }
+    }
+
+    @FXML
+    private void handleClearDemoData() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, 
+            "⚠️ WARNING: PERMANENT DATA DELETION ⚠️\n\n" +
+            "This action will permanently delete ALL operational data in the database, including:\n" +
+            "- Customers & Loyalty Points\n" +
+            "- Medicines & Stock Inventory\n" +
+            "- Historical Bills & Sales Data\n" +
+            "- Orders, Suppliers, and Expenses\n\n" +
+            "Only configuration (Active Users, Passwords, Message Templates) will remain.\n" +
+            "Are you absolutely sure you want to completely wipe the system?",
+            javafx.scene.control.ButtonType.YES, javafx.scene.control.ButtonType.NO);
+        confirm.setTitle("Clear All Operational Data");
+        confirm.setHeaderText("Irreversible Action");
+        
+        // Add styling for severe warning
+        javafx.scene.control.DialogPane dialogPane = confirm.getDialogPane();
+        dialogPane.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
+        dialogPane.getStyleClass().add("alert-danger");
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == javafx.scene.control.ButtonType.YES) {
+                try {
+                    DatabaseUtil.clearDemoData();
+                    showAlert(Alert.AlertType.INFORMATION, "System Reset Successful", 
+                        "All operational data has been deleted.\nThe system is now clean and ready for real usage.\n\nPlease restart the application.");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    showAlert(Alert.AlertType.ERROR, "System Reset Failed", 
+                        "Failed to wipe demo data:\n" + e.getMessage());
+                }
+            }
+        });
     }
 
     @FXML
@@ -685,7 +733,8 @@ public class SettingsController {
         prefs.put("ai_hardware", hardware);
 
         String hfToken = hfTokenField.getText().trim();
-        prefs.put("hf_token", hfToken);
+        org.example.MediManage.security.SecureSecretStore.put("hf_token", hfToken);
+        prefs.remove("hf_token"); // Clean up legacy plaintext if present
 
         try { prefs.flush(); } catch (Exception ignored) {}
 

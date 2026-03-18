@@ -9,7 +9,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.service.InventoryService;
-import org.example.MediManage.util.AsyncUiFeedback;
+
 import javafx.stage.FileChooser;
 
 import java.time.LocalDate;
@@ -18,8 +18,7 @@ import java.util.Optional;
 import javafx.application.Platform;
 import org.example.MediManage.util.AppExecutors;
 public class InventoryController {
-    private static final String RESTOCK_READY_LABEL = "✨ Get AI Suggestions";
-    private static final String RESTOCK_BUSY_LABEL = "⏳ Running...";
+
 
     @FXML
     private TextField searchField;
@@ -323,26 +322,26 @@ public class InventoryController {
     @FXML
     private void handleAIRestock() {
         List<Medicine> snapshot = inventoryService.loadRestockAnalysisSnapshot();
-        InventoryService.RestockPreparation restock = inventoryService.prepareRestock(snapshot);
-        if (!restock.requiresAi()) {
-            AsyncUiFeedback.showSuccess(btnAIRestock, spinnerRestock, txtAIRestock,
-                    RESTOCK_READY_LABEL, restock.message());
+        InventoryService.RestockPreparation prep = inventoryService.prepareRestock(snapshot);
+
+        var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
+                "Restock Analysis", "📦", "Analyzing stock levels and sales trends...");
+
+        if (!prep.requiresAi()) {
+            ctx.setResult(prep.message());
             return;
         }
 
-        AsyncUiFeedback.showLoading(btnAIRestock, spinnerRestock, txtAIRestock,
-                RESTOCK_BUSY_LABEL, "⏳ Running AI restock analysis...");
-
-        inventoryService.suggestRestock(restock.snapshot())
-                .thenAccept(result -> Platform.runLater(() -> {
-                    AsyncUiFeedback.showSuccess(btnAIRestock, spinnerRestock, txtAIRestock,
-                            RESTOCK_READY_LABEL, result);
-                }))
+        inventoryService.suggestRestock(prep.snapshot())
+                .thenAccept(result -> ctx.setResult(result))
                 .exceptionally(ex -> {
-                    Platform.runLater(() -> {
-                        AsyncUiFeedback.showError(btnAIRestock, spinnerRestock, txtAIRestock,
-                                RESTOCK_READY_LABEL, ex);
-                    });
+                    // Offline fallback: show the low-stock data directly
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Restock Suggestions (Local Analysis)\n\n");
+                    sb.append("⚠️ Low Stock Items:\n");
+                    sb.append(prep.snapshot());
+                    sb.append("\n\n💡 Tip: Configure your Cloud AI API key in Settings for AI-powered analysis.");
+                    ctx.setResult(sb.toString());
                     return null;
                 });
     }

@@ -138,21 +138,31 @@ public class MediManageApplication extends Application {
                                         System.out.println("✅ Environment '" + envPref + "' already ready.");
                                 }
 
-                                // Ensure environment (will be fast if already set up)
-                                String pythonExe;
-                                try {
-                                        pythonExe = envManager.ensureEnvironment();
-                                        System.out.println("🐍 Using Python: " + pythonExe);
-                                } catch (InterruptedException cancelEx) {
-                                        System.out.println("🛑 Python environment setup was cancelled.");
-                                        closeStartupPopup();
-                                        return;
-                                } catch (Exception envEx) {
-                                        System.err.println(
-                                                        "⚠️ Could not setup bundled Python env: " + envEx.getMessage());
-                                        if (startupPopup != null)
-                                                startupPopup.appendLog("⚠️ Falling back to system Python...");
-                                        pythonExe = "python";
+                                // Determine the appropriate Python executable and AI Engine script path.
+                                String pythonExe = "python";
+                                String serverScript = "ai_engine/server/server.py";
+
+                                java.io.File bundledExe = new java.io.File(System.getProperty("user.dir"), "ai_engine/python/python.exe");
+                                java.io.File protectedScript = new java.io.File(System.getProperty("user.dir"), "ai_engine/dist/server/server.py");
+
+                                if (bundledExe.exists() && protectedScript.exists()) {
+                                        System.out.println("📦 Detected offline bundled Python and protected AI Engine. Bypassing Conda setup.");
+                                        pythonExe = bundledExe.getAbsolutePath();
+                                        serverScript = protectedScript.getAbsolutePath();
+                                } else {
+                                        try {
+                                                pythonExe = envManager.ensureEnvironment();
+                                                System.out.println("🐍 Using Conda env Python: " + pythonExe);
+                                        } catch (InterruptedException cancelEx) {
+                                                System.out.println("🛑 Python environment setup was cancelled.");
+                                                closeStartupPopup();
+                                                return;
+                                        } catch (Exception envEx) {
+                                                System.err.println(
+                                                                "⚠️ Could not setup bundled/Conda Python env: " + envEx.getMessage());
+                                                if (startupPopup != null)
+                                                        startupPopup.appendLog("⚠️ Falling back to system Python...");
+                                        }
                                 }
 
                                 // Update popup status
@@ -161,14 +171,14 @@ public class MediManageApplication extends Application {
                                 }
 
                                 final String pythonExeFinal = pythonExe;
-                                System.out.println("🚀 Starting AI Engine (server.py)...");
-                                ProcessBuilder pb = new ProcessBuilder(pythonExe, "ai_engine/server/server.py");
+                                System.out.println("🚀 Starting AI Engine (" + serverScript + ")...");
+                                ProcessBuilder pb = new ProcessBuilder(pythonExe, serverScript);
                                 pb.redirectErrorStream(true);
                                 pb.environment().put(LocalAdminTokenManager.ENV_NAME,
                                                 LocalAdminTokenManager.getOrCreateToken());
 
                                 // Pass HuggingFace token for faster model downloads
-                                String hfToken = prefs.get("hf_token", "").trim();
+                                String hfToken = org.example.MediManage.security.SecureSecretStore.get("hf_token");
                                 if (!hfToken.isEmpty()) {
                                         pb.environment().put("HF_TOKEN", hfToken);
                                         System.out.println(
@@ -289,6 +299,9 @@ public class MediManageApplication extends Application {
                                         }
                                 }
 
+                                // Resolve Node.js executable (bundled or system)
+                                String nodeExe = org.example.MediManage.config.WhatsAppBridgeConfig.resolveNodeExe();
+
                                 // Check if Node.js is available on this system
                                 if (!org.example.MediManage.config.WhatsAppBridgeConfig.isNodeAvailable()) {
                                         System.out.println("⚠️ Node.js is not installed. WhatsApp Bridge requires Node.js. Skipping.");
@@ -300,6 +313,9 @@ public class MediManageApplication extends Application {
                                         System.out.println("⚠️ whatsapp-server/ directory not found. WhatsApp Bridge not started.");
                                         return;
                                 }
+
+                                // Resolve entry script (protected start_protected.js or raw index.js)
+                                String entryScript = org.example.MediManage.config.WhatsAppBridgeConfig.resolveEntryScript(serverDir);
 
                                 // Check if node_modules exists, run npm install if missing
                                 java.io.File nodeModules = new java.io.File(serverDir, "node_modules");
@@ -320,8 +336,8 @@ public class MediManageApplication extends Application {
                                         installProc.waitFor();
                                 }
 
-                                System.out.println("🟢 Starting WhatsApp Bridge (Node.js, port 3000)...");
-                                ProcessBuilder pb = new ProcessBuilder("node", "index.js");
+                                System.out.println("🟢 Starting WhatsApp Bridge (" + nodeExe + " " + entryScript + ", port 3000)...");
+                                ProcessBuilder pb = new ProcessBuilder(nodeExe, entryScript);
                                 pb.directory(serverDir);
                                 pb.redirectErrorStream(true);
                                 instance.whatsappBridgeProcess = pb.start();
@@ -385,7 +401,13 @@ public class MediManageApplication extends Application {
                                 }
 
                                 System.out.println("🔌 Starting MCP Server (port 5001)...");
-                                ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, "ai_engine/server/mcp_server.py");
+                                
+                                String mcpScript = "ai_engine/server/mcp_server.py";
+                                java.io.File protectedMcpScript = new java.io.File(System.getProperty("user.dir"), "ai_engine/dist/server/mcp_server.py");
+                                if (protectedMcpScript.exists()) {
+                                        mcpScript = protectedMcpScript.getAbsolutePath();
+                                }
+                                ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, mcpScript);
                                 mcpPb.redirectErrorStream(true);
                                 mcpProcess = mcpPb.start();
 
@@ -468,12 +490,29 @@ public class MediManageApplication extends Application {
                                                 LocalAdminTokenManager.getOrCreateToken());
                                 conn.getInputStream();
                                 System.out.println("🛑 Sent shutdown signal to existing AI Engine.");
-                        } catch (Exception e) {
-                                // Ignore, server probably not running
-                        }
+                        } catch (Exception ignored) {}
                 }
-                // NOTE: WhatsApp Bridge is intentionally left running
-                // so the session stays authenticated between app restarts.
+
+                if (mcpProcess != null) {
+                        System.out.println("🛑 Stopping MCP Server...");
+                        mcpProcess.destroyForcibly();
+                }
+
+                if (whatsappBridgeProcess != null) {
+                        System.out.println("🛑 Stopping WhatsApp Bridge...");
+                        whatsappBridgeProcess.destroyForcibly();
+                } else {
+                        // Force shutdown of bridge via local port if process handle lost
+                        try {
+                                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI
+                                                .create("http://127.0.0.1:3001/shutdown")
+                                                .toURL()
+                                                .openConnection();
+                                conn.setRequestMethod("POST");
+                                conn.getInputStream();
+                        } catch (Exception ignored) {}
+                }
+
                 org.example.MediManage.service.DatabaseService.shutdown();
                 AppExecutors.shutdown();
                 Platform.exit();

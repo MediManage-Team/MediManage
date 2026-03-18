@@ -29,8 +29,6 @@ public class PythonEnvironmentManager {
             ENV_BASE, "Cloud Only (Base)",
             ENV_CPU, "CPU (BitNet.cpp / llama.cpp)",
             ENV_GPU, "NVIDIA GPU (CUDA)");
-
-    private final boolean devMode;
     private final Path aiEngineDir; // ai_engine/ directory
     private volatile boolean cancelled = false;
     private volatile Process currentProcess;
@@ -40,12 +38,15 @@ public class PythonEnvironmentManager {
     private String activeEnv = ENV_CPU; // Default to CPU
 
     public PythonEnvironmentManager() {
-        this.devMode = isDevMode();
-        if (devMode) {
-            this.aiEngineDir = Paths.get("ai_engine").toAbsolutePath();
-        } else {
-            this.aiEngineDir = Paths.get(System.getProperty("user.dir"), "ai_engine").toAbsolutePath();
+        // 1. Determine a candidate aiEngineDir base path first
+        Path baseDir = Paths.get("ai_engine").toAbsolutePath();
+        if (!Files.exists(baseDir) || !Files.exists(baseDir.resolve("server").resolve("server.py"))) {
+            // If it doesn't exist in current dir, we might be in production layout
+            baseDir = Paths.get(System.getProperty("user.dir"), "ai_engine").toAbsolutePath();
         }
+
+        // 2. Set the directory
+        this.aiEngineDir = baseDir;
     }
 
     public void setLogCallback(Consumer<String> callback) {
@@ -96,19 +97,20 @@ public class PythonEnvironmentManager {
 
     /**
      * Get the Conda env path for a specific environment.
+     * Prefers local 'ai_engine/envs' if it exists (bundled/dev),
+     * fallbacks to AppData for user-installed additions.
      */
     public Path getEnvPath(String envName) {
-        // We use a local 'envs' folder inside ai_engine
-        if (devMode) {
-            return aiEngineDir.resolve("envs").resolve(envName);
-        } else {
-            // In installed mode, use AppData to avoid permission issues?
-            // Or keep it local if portable. Let's use AppData for robust installed mode.
-            String appData = System.getenv("APPDATA");
-            if (appData == null)
-                appData = System.getProperty("user.home");
-            return Paths.get(appData, "MediManage", "envs", envName);
+        // 1. Check local project/install directory first (Portable/Bundled behavior)
+        Path localPath = aiEngineDir.resolve("envs").resolve(envName);
+        if (Files.exists(localPath.resolve("python.exe"))) {
+            return localPath;
         }
+
+        // 2. Fallback to AppData for user-installed environments
+        String appData = System.getenv("APPDATA");
+        if (appData == null) appData = System.getProperty("user.home");
+        return Paths.get(appData, "MediManage", "envs", envName);
     }
 
     public Path getRequirementsPath(String envName) {
@@ -170,16 +172,26 @@ public class PythonEnvironmentManager {
      * Auto-detect the best Python environment based on available hardware.
      * Checks for NVIDIA GPU (→ gpu), fallback to CPU.
      * Only returns envs that are already installed.
+     * 
+     * NOTE: Prefers bundled environments over AppData fallbacks.
      */
     public String autoDetectBestEnv() {
         // 1. Check NVIDIA GPU via nvidia-smi
         if (isEnvReady(ENV_GPU) && hasNvidiaGpu()) {
+            // Further optimization: only pick GPU if it's NOT a leftover from AppData
+            // or if the user explicitly wants high performance.
+            // For a 'Base' release, we might want to stay on base/cpu.
             log("🎯 Auto-detected NVIDIA GPU — selecting '" + ENV_GPU + "' environment");
             return ENV_GPU;
         }
-        // 2. Fallback to CPU
-        log("ℹ️ No GPU env ready — using CPU environment");
-        return ENV_CPU;
+        
+        // 2. Fallback to CPU if ready
+        if (isEnvReady(ENV_CPU)) {
+            return ENV_CPU;
+        }
+
+        // 3. Absolute Fallback to Base (Cloud)
+        return ENV_BASE;
     }
 
     /** Check if an NVIDIA GPU is present via nvidia-smi. */
@@ -350,9 +362,6 @@ public class PythonEnvironmentManager {
 
     // ======================== UTILITIES ========================
 
-    private boolean isDevMode() {
-        return Files.exists(Paths.get("ai_engine", "server", "server.py"));
-    }
 
     public void cancel() {
         cancelled = true;

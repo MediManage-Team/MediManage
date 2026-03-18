@@ -319,7 +319,7 @@ public class LocalAIService implements AIService {
                 return new JSONObject(response.body()).getJSONArray("models");
             }
         } catch (Exception e) {
-            System.err.println("Failed to list models: " + e.getMessage());
+            // Silently return empty array when AI engine is not running
         }
         return new JSONArray();
     }

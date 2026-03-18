@@ -10,8 +10,6 @@ import org.example.MediManage.model.PaymentSplit;
 import org.example.MediManage.service.ai.AIOrchestrator;
 import org.example.MediManage.service.ai.LocalAIService;
 import org.junit.jupiter.api.Test;
-
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 

@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.chart.*?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/17"
@@ -211,32 +212,82 @@
 
             <!-- ==================== TAB 3: BUSINESS INTELLIGENCE ==================== -->
             <Tab text="Business Intelligence">
-                <VBox spacing="20" styleClass="dark-panel">
-                    <Label text="Inventory Intelligence (AI)" styleClass="page-title"/>
+                <ScrollPane fitToWidth="true" fitToHeight="true" pannable="true" styleClass="edge-to-edge">
+                    <content>
+                        <VBox spacing="16" styleClass="dark-panel">
+                            <padding>
+                                <Insets top="16" right="20" bottom="16" left="20"/>
+                            </padding>
 
-                    <HBox spacing="20">
-                        <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card">
-                            <Label text="Substitute Finder" styleClass="card-title"/>
-                            <HBox spacing="10">
-                                <TextField fx:id="substituteInput" promptText="Enter brand name..." HBox.hgrow="ALWAYS"/>
-                                <Button text="Find" onAction="#handleFindSubstitutes" styleClass="button-primary"/>
+                            <Label text="Business Intelligence" styleClass="page-title"/>
+
+                            <!-- ══════════ ROW 1: Revenue Trend + Payment Split ══════════ -->
+                            <HBox spacing="14">
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="📈  Revenue Trend (30 Days)" styleClass="section-title"/>
+                                    <LineChart fx:id="salesTrendChart" prefHeight="280" animated="false"
+                                               legendVisible="false" createSymbols="false">
+                                        <xAxis><CategoryAxis label="Date"/></xAxis>
+                                        <yAxis><NumberAxis label="Revenue (₹)"/></yAxis>
+                                    </LineChart>
+                                </VBox>
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="💳  Sales by Payment Mode" styleClass="section-title"/>
+                                    <PieChart fx:id="paymentModeChart" prefHeight="280" animated="true"
+                                              legendSide="BOTTOM" labelsVisible="true"/>
+                                </VBox>
                             </HBox>
-                            <TextArea fx:id="substituteResult" editable="false" wrapText="true" prefHeight="100"/>
-                        </VBox>
 
-                        <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card">
-                            <Label text="Restock Forecasting" styleClass="card-title"/>
-                            <Button text="Generate Forecast" onAction="#handleRestockReport" styleClass="button-secondary"/>
-                            <TextArea fx:id="forecastResult" editable="false" wrapText="true" prefHeight="100"/>
-                        </VBox>
-                    </HBox>
+                            <!-- ══════════ ROW 2: Top Products + Expense Breakdown ══════════ -->
+                            <HBox spacing="14">
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="🏆  Top 10 Selling Medicines" styleClass="section-title"/>
+                                    <BarChart fx:id="topProductsChart" prefHeight="280" animated="false"
+                                              legendVisible="false" barGap="2" categoryGap="8">
+                                        <xAxis><CategoryAxis label="Medicine"/></xAxis>
+                                        <yAxis><NumberAxis label="Units Sold"/></yAxis>
+                                    </BarChart>
+                                </VBox>
+                                <VBox spacing="8" styleClass="card" HBox.hgrow="ALWAYS">
+                                    <Label text="💰  Expense Breakdown" styleClass="section-title"/>
+                                    <PieChart fx:id="expenseCategoryChart" prefHeight="280" animated="true"
+                                              legendSide="BOTTOM" labelsVisible="true"/>
+                                </VBox>
+                            </HBox>
 
-                    <VBox spacing="10" styleClass="card">
-                        <Label text="Expiry Strategy" styleClass="card-title"/>
-                        <Button text="Analyze Expiry Risks" onAction="#handleExpiryReport" styleClass="button-outlined"/>
-                        <TextArea fx:id="expiryResult" editable="false" wrapText="true" prefHeight="100"/>
-                    </VBox>
-                </VBox>
+                            <Separator/>
+
+                            <!-- ══════════ ROW 3: AI-Powered Tools (compact cards) ══════════ -->
+                            <Label text="AI-Powered Tools" styleClass="section-title"/>
+
+                            <HBox spacing="14">
+                                <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
+                                    <Label text="🔍 Substitute Finder" styleClass="card-title"/>
+                                    <Label text="Search for generic substitutes in your inventory" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Button text="Open Search" onAction="#handleFindSubstitutes" styleClass="button-primary" maxWidth="Infinity"/>
+                                </VBox>
+
+                                <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
+                                    <Label text="📦 Restock Forecasting" styleClass="card-title"/>
+                                    <Label text="Analyze sales trends and low-stock warnings" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Button text="Generate Forecast" onAction="#handleRestockReport" styleClass="button-secondary" maxWidth="Infinity"/>
+                                </VBox>
+
+                                <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
+                                    <Label text="⏰ Expiry Strategy" styleClass="card-title"/>
+                                    <Label text="Categorize expiring medicines by urgency" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Button text="Analyze Risks" onAction="#handleExpiryReport" styleClass="button-outlined" maxWidth="Infinity"/>
+                                </VBox>
+
+                                <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
+                                    <Label text="💎 Profit Analyzer" styleClass="card-title"/>
+                                    <Label text="Analyze profit margins across inventory" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Button text="Analyze Margins" onAction="#handleProfitAnalysis" styleClass="button-primary" maxWidth="Infinity"/>
+                                </VBox>
+                            </HBox>
+                        </VBox>
+                    </content>
+                </ScrollPane>
             </Tab>
 
             <!-- ==================== TAB 4: AI ASSISTANT ==================== -->

@@ -99,14 +99,11 @@
             </VBox>
 
             <!-- Patient Care Assistant (Cloud AI) -->
-            <TitledPane text="🤖 Patient Care Assistant (AI)" expanded="false" animated="true">
-                <VBox spacing="10" styleClass="content-pad-10">
-                    <ScrollPane fitToWidth="true" prefHeight="350" VBox.vgrow="ALWAYS">
-                        <VBox fx:id="careProtocolContainer" spacing="8" styleClass="content-pad-10"/>
-                    </ScrollPane>
-                    <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="38" styleClass="button-purple"/>
-                </VBox>
-            </TitledPane>
+            <VBox spacing="10" styleClass="billing-section">
+                <Label text="Patient Care Assistant (AI)" styleClass="label-strong"/>
+                <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="45" styleClass="button-purple"/>
+                <Label text="Care Protocol results will appear in a popup dialog" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+            </VBox>
 
 
 

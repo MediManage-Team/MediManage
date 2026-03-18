@@ -91,15 +91,12 @@
                 </HBox>
 
                 <Separator/>
-                <TitledPane text="🤖 AI Restock Suggestions" expanded="false" animated="true">
-                    <VBox spacing="10" styleClass="content-pad-10 ai-panel">
-                        <HBox spacing="10" alignment="CENTER_LEFT">
-                            <Button fx:id="btnAIRestock" text="✨ Get AI Suggestions" onAction="#handleAIRestock" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
-                            <ProgressIndicator fx:id="spinnerRestock" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
-                        </HBox>
-                        <TextArea fx:id="txtAIRestock" editable="false" wrapText="true" prefHeight="120" promptText="AI restock suggestions will appear here..." styleClass="ai-panel-text"/>
-                    </VBox>
-                </TitledPane>
+                <!-- AI Restock Suggestions (Popup) -->
+                <VBox spacing="10" styleClass="billing-section">
+                    <Label text="AI Restock Suggestions" styleClass="label-strong"/>
+                    <Button fx:id="btnAIRestock" text="✨ Get AI Suggestions" onAction="#handleAIRestock" maxWidth="Infinity" prefHeight="45" styleClass="button-ai"/>
+                    <Label text="Restock analysis will open in a popup" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                </VBox>
             </VBox>
         </items>
     </SplitPane>

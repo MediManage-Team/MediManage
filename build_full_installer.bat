@@ -25,6 +25,15 @@ set "PATH=%JAVA_HOME%\bin;%PATH%"
 echo Using JAVA_HOME=%JAVA_HOME%
 
 echo ==========================================
+echo 0. Generating Demo Database...
+echo ==========================================
+node whatsapp-server/generate-db.js
+if %errorlevel% neq 0 (
+    echo Database generation failed!
+    exit /b %errorlevel%
+)
+
+echo ==========================================
 echo 1. Cleaning and Building with Maven...
 echo ==========================================
 call mvn clean package dependency:copy-dependencies
@@ -36,15 +45,15 @@ if %errorlevel% neq 0 (
 echo ==========================================
 echo 2. Preparing Distribution Directory...
 echo ==========================================
-if exist "dist\MediManage-0.1.5" rmdir /s /q "dist\MediManage-0.1.5"
-mkdir "dist\MediManage-0.1.5"
-mkdir "dist\MediManage-0.1.5\lib"
+if exist "dist\MediManage-1.0.0" rmdir /s /q "dist\MediManage-1.0.0"
+mkdir "dist\MediManage-1.0.0"
+mkdir "dist\MediManage-1.0.0\lib"
 
 echo Copying Application JAR...
-copy "target\Project_File-0.1.5.jar" "dist\MediManage-0.1.5\MediManage.jar" >nul
+copy "target\Project_File-1.0.0.jar" "dist\MediManage-1.0.0\MediManage.jar" >nul
 
 echo Copying Dependencies...
-copy "target\dependency\*.jar" "dist\MediManage-0.1.5\lib\" >nul
+copy "target\dependency\*.jar" "dist\MediManage-1.0.0\lib\" >nul
 
 
 echo ==========================================
@@ -54,13 +63,14 @@ if exist "dist\image" rmdir /s /q "dist\image"
 
 "%JAVA_HOME%\bin\jpackage.exe" ^
   --name "MediManage" ^
-  --input "dist\MediManage-0.1.5" ^
+  --input "dist\MediManage-1.0.0" ^
   --main-jar "MediManage.jar" ^
   --main-class "org.example.MediManage.Launcher" ^
   --type app-image ^
   --dest "dist\image" ^
-  --app-version "0.1.5" ^
+  --app-version "1.0.0" ^
   --icon "src\main\resources\app_icon.ico" ^
+  --java-options "--add-modules jdk.crypto.ec,jdk.naming.dns,java.naming" ^
   --vendor "MediManage Team" ^
   --copyright "Copyright 2024"
 
@@ -70,9 +80,71 @@ if %errorlevel% neq 0 (
 )
 
 echo ==========================================
+echo 3b. Preparing Offline ^& Protected Environments...
+echo ==========================================
+call scripts\prepare_offline_environments.bat
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to prepare offline environments.
+    exit /b %errorlevel%
+)
+
+call scripts\compile_source_code.bat
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to compile source code.
+    exit /b %errorlevel%
+)
+
+echo ==========================================
+echo 3c. Bundling Python AI Engine (Protected)...
+echo ==========================================
+set "AI_DEST=dist\image\MediManage\ai_engine"
+mkdir "%AI_DEST%" 2>nul
+mkdir "%AI_DEST%\python" 2>nul
+mkdir "%AI_DEST%\dist" 2>nul
+
+:: Create exclude file for xcopy
+echo __pycache__> "%TEMP%\xcopy_exclude.txt"
+echo .pyc>> "%TEMP%\xcopy_exclude.txt"
+
+:: Copy the portable python environment
+xcopy "ai_engine\python" "%AI_DEST%\python" /E /I /Y /Q /EXCLUDE:%TEMP%\xcopy_exclude.txt >nul 2>nul
+
+:: Copy ONLY the PyArmor obfuscated dist folder (NOT the raw app/server folders)
+xcopy "ai_engine\dist" "%AI_DEST%\dist" /E /I /Y /Q /EXCLUDE:%TEMP%\xcopy_exclude.txt >nul 2>nul
+
+del "%TEMP%\xcopy_exclude.txt" >nul 2>nul
+echo AI Engine (Offline ^& Protected) bundled.
+
+echo ==========================================
+echo 3d. Bundling WhatsApp Bridge Server (Protected)...
+echo ==========================================
+set "WA_DEST=dist\image\MediManage\whatsapp-server"
+mkdir "%WA_DEST%" 2>nul
+
+:: Copy WhatsApp Server binaries (ONLY the compiled .jsc and node.exe, plus node_modules)
+copy "whatsapp-server\node.exe" "%WA_DEST%\" >nul
+copy "whatsapp-server\index.jsc" "%WA_DEST%\" >nul
+copy "whatsapp-server\start_protected.js" "%WA_DEST%\" >nul
+copy "whatsapp-server\.env" "%WA_DEST%\" >nul 2>nul
+
+:: Create exclude file for xcopy WhatsApp
+echo __pycache__> "%TEMP%\wa_exclude.txt"
+xcopy "whatsapp-server\node_modules" "%WA_DEST%\node_modules" /E /I /Y /Q /EXCLUDE:%TEMP%\wa_exclude.txt >nul 2>nul
+del "%TEMP%\wa_exclude.txt" >nul 2>nul
+
+echo WhatsApp server (Offline ^& Protected) bundled.
+
+echo ==========================================
+echo 3d. Copying Launcher Scripts...
+echo ==========================================
+copy "start_ai_engine.bat" "dist\image\MediManage\" >nul
+copy "start_whatsapp_server.bat" "dist\image\MediManage\" >nul
+echo Launcher scripts copied.
+
+echo ==========================================
 echo 4. Compiling Installer with Inno Setup...
 echo ==========================================
-if exist "dist\MediManage_Setup_0.1.5.exe" del "dist\MediManage_Setup_0.1.5.exe"
+if exist "dist\MediManage_Setup_1.0.0.exe" del "dist\MediManage_Setup_1.0.0.exe"
 
 "C:\Users\ksvik\AppData\Local\Programs\Inno Setup 6\ISCC.exe" setup.iss
 if %errorlevel% neq 0 (
@@ -82,5 +154,5 @@ if %errorlevel% neq 0 (
 
 echo ==========================================
 echo BUILD SUCCESSFUL!
-echo Installer is located at: Output\MediManage_Setup_0.1.5.exe
+echo Installer is located at: Output\MediManage_Setup_1.0.0.exe
 echo ==========================================

@@ -98,28 +98,63 @@ public class DatabaseConfig {
     }
 
     private static java.io.File resolveDatabaseFile(String configuredPath) {
-        if (configuredPath != null) {
-            java.io.File configuredFile = new java.io.File(configuredPath.trim()).getAbsoluteFile();
+        // Reliably determine the actual installation directory, not just the working directory
+        String installPath = System.getProperty("user.dir");
+        try {
+            String path = DatabaseConfig.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+            // Handle Windows paths properly if they start with "/" like "/C:/..."
+            if (path.startsWith("/") && path.contains(":")) {
+                path = path.substring(1);
+            }
+            java.io.File appFile = new java.io.File(path);
+            
+            if (path.endsWith(".jar")) {
+                java.io.File appDir = appFile.getParentFile();
+                if (appDir != null && (appDir.getName().equals("app") || appDir.getName().equals("lib"))) {
+                    installPath = appDir.getParentFile().getAbsolutePath();
+                } else if (appDir != null) {
+                    installPath = appDir.getAbsolutePath();
+                }
+            } else {
+                installPath = appFile.getParentFile().getParentFile().getAbsolutePath(); 
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Could not determine code source location, falling back to user.dir: " + e.getMessage());
+        }
+
+        boolean isInstalled = installPath.contains("Program Files") || installPath.contains("Program Files (x86)") || new java.io.File(installPath, "runtime").exists();
+
+        if (configuredPath != null && !configuredPath.trim().isEmpty()) {
+            java.io.File configuredFile = new java.io.File(configuredPath.trim());
+            
+            // If the configured path is relative, resolve it against the calculated installPath rather than System32
+            if (!configuredFile.isAbsolute()) {
+                if (isInstalled && configuredPath.trim().equals("medimanage.db")) {
+                    // For the installed app, force the default "medimanage.db" into runtime/db
+                    java.io.File dbFolder = new java.io.File(installPath, "runtime/db");
+                    dbFolder.mkdirs();
+                    configuredFile = new java.io.File(dbFolder, "medimanage.db");
+                } else {
+                    configuredFile = new java.io.File(installPath, configuredPath.trim());
+                }
+            }
+            
             java.io.File parent = configuredFile.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
                 System.err.println("❌ Failed to create configured DB dir: " + parent.getAbsolutePath());
             }
-            return configuredFile;
+            return configuredFile.getAbsoluteFile();
         }
 
-        String userDir = System.getProperty("user.dir");
-
-        if (userDir.contains("Program Files") || userDir.contains("Program Files (x86)")) {
-            java.io.File dbFolder = new java.io.File(userDir, "runtime/db");
+        // Default logic if configuredPath is completely empty
+        if (isInstalled) {
+            java.io.File dbFolder = new java.io.File(installPath, "runtime/db");
             if (!dbFolder.exists()) {
-                boolean created = dbFolder.mkdirs();
-                if (!created && !dbFolder.exists()) {
-                    System.err.println("❌ Failed to create DB dir: " + dbFolder.getAbsolutePath());
-                }
+                dbFolder.mkdirs();
             }
             return new java.io.File(dbFolder, "medimanage.db");
         } else {
-            return new java.io.File(userDir, "medimanage.db");
+            return new java.io.File(installPath, "medimanage.db");
         }
     }
 

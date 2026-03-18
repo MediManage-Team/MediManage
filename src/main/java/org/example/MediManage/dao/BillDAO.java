@@ -648,4 +648,98 @@ public class BillDAO {
             double grossMarginPercent,
             double totalExpenses) {
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // BUSINESS INTELLIGENCE QUERIES
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Returns daily revenue totals for the last N days.
+     * Result: list of (date_string, total_revenue) pairs ordered chronologically.
+     */
+    public List<Map.Entry<String, Double>> getDailySalesTrend(int days) {
+        List<Map.Entry<String, Double>> trend = new ArrayList<>();
+        String sql = "SELECT DATE(bill_date) as sale_date, COALESCE(SUM(total_amount), 0) as revenue " +
+                "FROM bills WHERE bill_date >= date('now', '-' || ? || ' days') " +
+                "GROUP BY DATE(bill_date) ORDER BY sale_date ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, days);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    trend.add(Map.entry(rs.getString("sale_date"), rs.getDouble("revenue")));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("getDailySalesTrend error: " + e.getMessage());
+        }
+        return trend;
+    }
+
+    /**
+     * Returns total sales grouped by payment mode.
+     * Result: map of (payment_mode → total_amount).
+     */
+    public Map<String, Double> getSalesByPaymentMode() {
+        Map<String, Double> result = new LinkedHashMap<>();
+        String sql = "SELECT COALESCE(payment_mode, 'CASH') as mode, SUM(total_amount) as total " +
+                "FROM bills GROUP BY mode ORDER BY total DESC";
+        try (Connection conn = DatabaseUtil.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                result.put(rs.getString("mode"), rs.getDouble("total"));
+            }
+        } catch (SQLException e) {
+            System.err.println("getSalesByPaymentMode error: " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Returns the top N medicines by units sold.
+     * Result: list of (medicine_name, units_sold) pairs ordered by units descending.
+     */
+    public List<Map.Entry<String, Integer>> getTopSellingMedicines(int limit) {
+        List<Map.Entry<String, Integer>> result = new ArrayList<>();
+        String sql = "SELECT m.name, SUM(bi.quantity) as units " +
+                "FROM bill_items bi JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "GROUP BY bi.medicine_id ORDER BY units DESC LIMIT ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, limit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    result.add(Map.entry(rs.getString("name"), rs.getInt("units")));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("getTopSellingMedicines error: " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Returns revenue grouped by hour of day (0-23).
+     * Result: map of (hour → total_revenue).
+     */
+    public Map<Integer, Double> getHourlySalesDistribution() {
+        Map<Integer, Double> result = new LinkedHashMap<>();
+        // Initialize all hours
+        for (int h = 0; h < 24; h++) result.put(h, 0.0);
+        String sql = "SELECT CAST(strftime('%H', bill_date) AS INTEGER) as hour, " +
+                "SUM(total_amount) as revenue FROM bills " +
+                "WHERE bill_date >= date('now', '-30 days') " +
+                "GROUP BY hour ORDER BY hour";
+        try (Connection conn = DatabaseUtil.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                result.put(rs.getInt("hour"), rs.getDouble("revenue"));
+            }
+        } catch (SQLException e) {
+            System.err.println("getHourlySalesDistribution error: " + e.getMessage());
+        }
+        return result;
+    }
 }
