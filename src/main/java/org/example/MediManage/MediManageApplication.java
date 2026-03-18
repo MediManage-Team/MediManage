@@ -16,6 +16,8 @@ import org.example.MediManage.security.LocalAdminTokenManager;
 import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.controller.*;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class MediManageApplication extends Application {
@@ -141,6 +143,7 @@ public class MediManageApplication extends Application {
                                 // Determine the appropriate Python executable and AI Engine script path.
                                 String pythonExe = "python";
                                 String serverScript = "ai_engine/server/server.py";
+                                java.io.File protectedDistRoot = null;
 
                                 java.io.File bundledExe = new java.io.File(System.getProperty("user.dir"), "ai_engine/python/python.exe");
                                 java.io.File protectedScript = new java.io.File(System.getProperty("user.dir"), "ai_engine/dist/server/server.py");
@@ -149,6 +152,7 @@ public class MediManageApplication extends Application {
                                         System.out.println("📦 Detected offline bundled Python and protected AI Engine. Bypassing Conda setup.");
                                         pythonExe = bundledExe.getAbsolutePath();
                                         serverScript = protectedScript.getAbsolutePath();
+                                        protectedDistRoot = protectedScript.getParentFile().getParentFile();
                                 } else {
                                         try {
                                                 pythonExe = envManager.ensureEnvironment();
@@ -172,8 +176,9 @@ public class MediManageApplication extends Application {
 
                                 final String pythonExeFinal = pythonExe;
                                 System.out.println("🚀 Starting AI Engine (" + serverScript + ")...");
-                                ProcessBuilder pb = new ProcessBuilder(pythonExe, serverScript);
+                                ProcessBuilder pb = createPythonProcessBuilder(pythonExe, serverScript, protectedDistRoot);
                                 pb.redirectErrorStream(true);
+                                configureProtectedPythonPath(pb, protectedDistRoot);
                                 pb.environment().put(LocalAdminTokenManager.ENV_NAME,
                                                 LocalAdminTokenManager.getOrCreateToken());
 
@@ -237,6 +242,18 @@ public class MediManageApplication extends Application {
                                                 // Start MCP Server on port 5001 alongside Flask
                                                 startMcpServer(pythonExeFinal);
                                         }
+                                }
+
+                                int exitCode = pythonProcess.waitFor();
+                                if (!popupClosed) {
+                                        String failureMessage = "AI Engine exited before becoming ready (code " + exitCode + ").";
+                                        System.err.println("❌ " + failureMessage);
+                                        if (startupPopup != null && !startupPopup.isClosed()) {
+                                                startupPopup.appendLog("❌ " + failureMessage);
+                                                startupPopup.appendLog("ℹ️ Check the AI engine logs above for the exact Python error.");
+                                                startupPopup.setStatus("❌ Failed to start AI Engine");
+                                        }
+                                        org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                                 }
                         } catch (Exception e) {
                                 System.err.println("❌ Failed to start AI Engine: " + e.getMessage());
@@ -403,12 +420,15 @@ public class MediManageApplication extends Application {
                                 System.out.println("🔌 Starting MCP Server (port 5001)...");
                                 
                                 String mcpScript = "ai_engine/server/mcp_server.py";
+                                java.io.File protectedDistRoot = null;
                                 java.io.File protectedMcpScript = new java.io.File(System.getProperty("user.dir"), "ai_engine/dist/server/mcp_server.py");
                                 if (protectedMcpScript.exists()) {
                                         mcpScript = protectedMcpScript.getAbsolutePath();
+                                        protectedDistRoot = protectedMcpScript.getParentFile().getParentFile();
                                 }
-                                ProcessBuilder mcpPb = new ProcessBuilder(pythonExe, mcpScript);
+                                ProcessBuilder mcpPb = createPythonProcessBuilder(pythonExe, mcpScript, protectedDistRoot);
                                 mcpPb.redirectErrorStream(true);
+                                configureProtectedPythonPath(mcpPb, protectedDistRoot);
                                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences
                                                 .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
                                 mcpPb.environment().put(LocalAdminTokenManager.ENV_NAME,
@@ -431,6 +451,34 @@ public class MediManageApplication extends Application {
                                 System.err.println("⚠️ MCP Server failed to start: " + e.getMessage());
                         }
                 });
+        }
+
+        private void configureProtectedPythonPath(ProcessBuilder processBuilder, java.io.File distRoot) {
+                if (processBuilder == null || distRoot == null || !distRoot.isDirectory()) {
+                        return;
+                }
+
+                processBuilder.directory(distRoot);
+
+                Map<String, String> env = processBuilder.environment();
+                env.putIfAbsent("PYTHONIOENCODING", "utf-8");
+        }
+
+        private ProcessBuilder createPythonProcessBuilder(String pythonExe, String scriptPath, java.io.File distRoot) {
+                if (distRoot == null || !distRoot.isDirectory()) {
+                        return new ProcessBuilder(pythonExe, scriptPath);
+                }
+
+                String normalizedDistRoot = toPythonLiteralPath(distRoot.getAbsolutePath());
+                String normalizedScriptPath = toPythonLiteralPath(scriptPath);
+                String bootstrap = "import runpy, sys; sys.path.insert(0, '" + normalizedDistRoot
+                                + "'); runpy.run_path('" + normalizedScriptPath + "', run_name='__main__')";
+
+                return new ProcessBuilder(List.of(pythonExe, "-c", bootstrap));
+        }
+
+        private String toPythonLiteralPath(String path) {
+                return path.replace("\\", "/").replace("'", "\\'");
         }
 
         private void showLoginScreen(Stage stage) {

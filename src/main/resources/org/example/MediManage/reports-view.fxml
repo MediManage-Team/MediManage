@@ -4,6 +4,7 @@
 <?import javafx.scene.chart.*?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.web.WebView?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/17"
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.ReportsController" fitToWidth="true" fitToHeight="true" pannable="true">
@@ -119,7 +120,7 @@
                         <Button fx:id="btnAISummary" text="✨ Generate Care Assistance Report" onAction="#handleAISummary" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai"/>
                         <ProgressIndicator fx:id="spinnerSummary" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
                     </HBox>
-                    <TextArea fx:id="txtAISummary" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="AI-generated Patient Care Assistance insights will appear here..." styleClass="ai-panel-text" minHeight="400"/>
+                    <WebView fx:id="txtAISummary" VBox.vgrow="ALWAYS" minHeight="400"/>
                 </VBox>
             </TitledPane>
 

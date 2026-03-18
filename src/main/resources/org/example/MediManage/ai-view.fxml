@@ -26,8 +26,8 @@
             <fx:define>
                 <javafx.scene.control.ToggleGroup fx:id="engineToggleGroup"/>
             </fx:define>
-            <javafx.scene.control.RadioButton fx:id="cloudRadio" text="⚡ Cloud AI" toggleGroup="$engineToggleGroup" selected="true" style="-fx-text-fill: #a855f7; -fx-font-size: 11px;"/>
-            <javafx.scene.control.RadioButton fx:id="localRadio" text="💻 Local AI" toggleGroup="$engineToggleGroup" style="-fx-text-fill: #43e97b; -fx-font-size: 11px;"/>
+            <javafx.scene.control.RadioButton fx:id="cloudRadio" text="☁ Cloud Only" toggleGroup="$engineToggleGroup" selected="true" style="-fx-text-fill: #a855f7; -fx-font-size: 11px;"/>
+            <javafx.scene.control.RadioButton fx:id="localRadio" text="💻 Local Only" toggleGroup="$engineToggleGroup" style="-fx-text-fill: #43e97b; -fx-font-size: 11px;"/>
         </HBox>
         
         <Region HBox.hgrow="ALWAYS"/>

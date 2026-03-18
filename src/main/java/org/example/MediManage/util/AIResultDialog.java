@@ -6,8 +6,6 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
-
-import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -15,6 +13,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import javafx.scene.web.WebView;
 
 import java.util.function.Consumer;
 
@@ -29,10 +28,10 @@ public class AIResultDialog {
     public static Stage showResultPopup(String title, String icon, String content) {
         Stage dialog = createBaseDialog(title, icon);
 
-        TextArea resultArea = createResultArea();
-        resultArea.setText(content);
+        WebView resultView = createResultView();
+        loadResult(resultView, content);
 
-        VBox root = createDialogLayout(title, icon, resultArea, null);
+        VBox root = createDialogLayout(title, icon, resultView, null);
         showDialog(dialog, root);
         return dialog;
     }
@@ -65,10 +64,10 @@ public class AIResultDialog {
         HBox searchBox = new HBox(10, searchField, searchBtn, loadingIndicator);
         searchBox.setAlignment(Pos.CENTER_LEFT);
 
-        TextArea resultArea = createResultArea();
-        resultArea.setText("Enter a search term and click Search.");
+        WebView resultView = createResultView();
+        loadResult(resultView, "Search medicine name, generic, or composition details here.");
 
-        SearchContext ctx = new SearchContext(resultArea, searchField, searchBtn, loadingIndicator);
+        SearchContext ctx = new SearchContext(resultView, searchField, searchBtn, loadingIndicator);
 
         searchBtn.setOnAction(e -> {
             String query = searchField.getText().trim();
@@ -84,7 +83,7 @@ public class AIResultDialog {
         searchField.setOnAction(e -> searchBtn.fire());
 
         VBox inputSection = new VBox(10, searchBox);
-        VBox root = createDialogLayout(title, icon, resultArea, inputSection);
+        VBox root = createDialogLayout(title, icon, resultView, inputSection);
         showDialog(dialog, root);
         searchField.requestFocus();
         return dialog;
@@ -96,12 +95,12 @@ public class AIResultDialog {
     public static LoadingContext showLoadingPopup(String title, String icon, String loadingMessage) {
         Stage dialog = createBaseDialog(title, icon);
 
-        TextArea resultArea = createResultArea();
-        resultArea.setText(loadingMessage);
+        WebView resultView = createResultView();
+        loadResult(resultView, loadingMessage);
 
-        VBox root = createDialogLayout(title, icon, resultArea, null);
+        VBox root = createDialogLayout(title, icon, resultView, null);
         showDialog(dialog, root);
-        return new LoadingContext(dialog, resultArea);
+        return new LoadingContext(dialog, resultView);
     }
 
     // ── Internal helpers ──
@@ -114,19 +113,20 @@ public class AIResultDialog {
         return dialog;
     }
 
-    private static TextArea createResultArea() {
-        TextArea area = new TextArea();
-        area.setEditable(false);
-        area.setWrapText(true);
-        area.setStyle("-fx-background-color: #0d1117; -fx-text-fill: #c9d1d9; " +
-                "-fx-control-inner-background: #0d1117; -fx-font-family: 'Consolas', monospace; " +
-                "-fx-font-size: 12.5px; -fx-border-color: #1e2536; -fx-border-radius: 6; " +
-                "-fx-background-radius: 6;");
-        VBox.setVgrow(area, Priority.ALWAYS);
-        return area;
+    private static WebView createResultView() {
+        WebView view = new WebView();
+        view.setPrefHeight(420);
+        view.setContextMenuEnabled(false);
+        view.setStyle("-fx-background-color: transparent;");
+        VBox.setVgrow(view, Priority.ALWAYS);
+        return view;
     }
 
-    private static VBox createDialogLayout(String title, String icon, TextArea resultArea, VBox inputSection) {
+    private static void loadResult(WebView resultView, String content) {
+        resultView.getEngine().loadContent(AIHtmlRenderer.toHtmlDocument(content, AIHtmlRenderer.Theme.DIALOG));
+    }
+
+    private static VBox createDialogLayout(String title, String icon, WebView resultView, VBox inputSection) {
         // Title bar
         Label titleLabel = new Label(icon + "  " + title);
         titleLabel.setStyle("-fx-text-fill: #e0e6f0; -fx-font-size: 16px; -fx-font-weight: bold;");
@@ -160,7 +160,7 @@ public class AIResultDialog {
         if (inputSection != null) {
             content.getChildren().add(inputSection);
         }
-        content.getChildren().add(resultArea);
+        content.getChildren().add(resultView);
         VBox.setVgrow(content, Priority.ALWAYS);
 
         VBox root = new VBox(titleBar, content);
@@ -187,15 +187,15 @@ public class AIResultDialog {
      */
     public static class LoadingContext {
         private final Stage dialog;
-        private final TextArea resultArea;
+        private final WebView resultView;
 
-        LoadingContext(Stage dialog, TextArea resultArea) {
+        LoadingContext(Stage dialog, WebView resultView) {
             this.dialog = dialog;
-            this.resultArea = resultArea;
+            this.resultView = resultView;
         }
 
         public void setResult(String text) {
-            javafx.application.Platform.runLater(() -> resultArea.setText(text));
+            javafx.application.Platform.runLater(() -> loadResult(resultView, text));
         }
 
         public Stage getDialog() {
@@ -207,25 +207,25 @@ public class AIResultDialog {
      * Context for search popups — provides access to the result area.
      */
     public static class SearchContext {
-        private final TextArea resultArea;
+        private final WebView resultView;
         private final TextField searchField;
         private final Button searchButton;
         private final ProgressIndicator loadingIndicator;
 
-        SearchContext(TextArea resultArea, TextField searchField, Button searchButton, ProgressIndicator loadingIndicator) {
-            this.resultArea = resultArea;
+        SearchContext(WebView resultView, TextField searchField, Button searchButton, ProgressIndicator loadingIndicator) {
+            this.resultView = resultView;
             this.searchField = searchField;
             this.searchButton = searchButton;
             this.loadingIndicator = loadingIndicator;
         }
 
         public void setResult(String text) {
-            javafx.application.Platform.runLater(() -> resultArea.setText(text));
+            javafx.application.Platform.runLater(() -> loadResult(resultView, text));
         }
 
         public void setLoading(boolean loading, String message) {
             javafx.application.Platform.runLater(() -> {
-                resultArea.setText(message);
+                loadResult(resultView, message);
                 searchButton.setDisable(loading);
                 searchButton.setText(loading ? "Searching..." : "Search");
                 loadingIndicator.setVisible(loading);
@@ -235,7 +235,7 @@ public class AIResultDialog {
 
         public void finish(String text) {
             javafx.application.Platform.runLater(() -> {
-                resultArea.setText(text);
+                loadResult(resultView, text);
                 searchButton.setDisable(false);
                 searchButton.setText("Search");
                 loadingIndicator.setVisible(false);
@@ -247,8 +247,8 @@ public class AIResultDialog {
             return searchField.getText().trim();
         }
 
-        public TextArea getResultArea() {
-            return resultArea;
+        public WebView getResultView() {
+            return resultView;
         }
     }
 }

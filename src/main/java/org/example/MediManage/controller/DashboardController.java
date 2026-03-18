@@ -779,22 +779,6 @@ public class DashboardController {
     // ══════════════════════════════════════════════════════════════
 
     @FXML
-    private void handleFindSubstitutes() {
-        org.example.MediManage.util.AIResultDialog.showSearchPopup(
-                "Substitute Finder", "🔍", "Search medicine name or generic...",
-                ctx -> {
-                    String query = ctx.getQuery();
-                    if (query.isEmpty()) return;
-                    inventoryAIService.findSubstitutes(query)
-                            .thenAccept(ctx::finish)
-                            .exceptionally(ex -> {
-                                ctx.finish("Error: " + ex.getMessage());
-                                return null;
-                            });
-                });
-    }
-
-    @FXML
     private void handleRestockReport() {
         var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
                 "Restock Forecasting", "📦", "Analyzing sales history (last 30 days) for trends...");
@@ -824,6 +808,20 @@ public class DashboardController {
                 "Profit Analyzer", "💎", "Analyzing profit margins across inventory...");
         inventoryAIService.generateProfitAnalysis()
                 .thenAccept(result -> ctx.setResult(result))
+                .exceptionally(ex -> {
+                    ctx.setResult("Error: " + ex.getMessage());
+                    return null;
+                });
+    }
+
+    @FXML
+    private void handleBusinessPulse() {
+        var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
+                "Business Pulse", "🧭", "Reviewing sales, inventory, and expiry signals...");
+        inventoryAIService.askBusinessQuestion(
+                        "Give me a pharmacy business pulse. Cover demand hotspots, low-stock risks, expiry exposure, "
+                                + "cash tied in inventory, and finish with three actions for today.")
+                .thenAccept(ctx::setResult)
                 .exceptionally(ex -> {
                     ctx.setResult("Error: " + ex.getMessage());
                     return null;

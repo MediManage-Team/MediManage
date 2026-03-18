@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.web.WebView?>
 
 <VBox spacing="10"
     xmlns="http://javafx.com/javafx/17"
@@ -106,7 +107,7 @@
                                 <Button fx:id="btnAIAnalysis" text="✨ Analyze Customer Health" onAction="#handleAIAnalysis" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai" disable="true"/>
                                 <ProgressIndicator fx:id="spinnerAnalysis" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
                             </HBox>
-                            <TextArea fx:id="txtAIAnalysis" editable="false" wrapText="true" prefHeight="120" promptText="Select a customer and click to get AI health analysis..." styleClass="ai-panel-text"/>
+                            <WebView fx:id="txtAIAnalysis" prefHeight="190"/>
                         </VBox>
                     </TitledPane>
                 </VBox>

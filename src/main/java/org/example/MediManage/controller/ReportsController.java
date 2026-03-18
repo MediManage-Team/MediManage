@@ -11,10 +11,11 @@ import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.web.WebView;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.service.ai.AIAssistantService;
+import org.example.MediManage.util.AIHtmlRenderer;
 import org.example.MediManage.util.AppExecutors;
-import org.example.MediManage.util.AsyncUiFeedback;
 import org.example.MediManage.util.ReportingWindowUtils;
 
 import java.time.LocalDate;
@@ -53,7 +54,7 @@ public class ReportsController {
 
     // AI
     @FXML private Button btnAISummary;
-    @FXML private TextArea txtAISummary;
+    @FXML private WebView txtAISummary;
     @FXML private ProgressIndicator spinnerSummary;
 
     private final BillDAO billDAO = new BillDAO();
@@ -86,9 +87,14 @@ public class ReportsController {
                 .currentMondayToSunday(ZoneId.systemDefault());
         dateStart.setValue(weeklyWindow.startDate());
         dateEnd.setValue(weeklyWindow.endDate());
+        if (txtAISummary != null) {
+            txtAISummary.setContextMenuEnabled(false);
+            txtAISummary.setStyle("-fx-background-color: transparent;");
+        }
 
         setupTable();
         loadReport();
+        setAiSummaryContent("Generate a report, then run AI analysis to get patient-care and business insights.");
         setupKeyboardShortcuts();
     }
 
@@ -202,21 +208,56 @@ public class ReportsController {
     @FXML
     private void handleAISummary() {
         if (lastSalesData.isEmpty()) {
-            txtAISummary.setText("No sales data available. Generate a report first.");
+            setAiSummaryContent("No sales data available. Generate a report first.");
             return;
         }
-        AsyncUiFeedback.showLoading(btnAISummary, spinnerSummary, txtAISummary,
-                AI_SUMMARY_BUSY_LABEL, "\u23f3 Running AI sales analysis...");
+        btnAISummary.setDisable(true);
+        btnAISummary.setText(AI_SUMMARY_BUSY_LABEL);
+        setSpinnerVisible(true);
+        setAiSummaryContent("\u23f3 Running AI sales analysis...");
 
         aiService.generateReportSummary(lastSalesData, lastTotalRevenue, lastItemVolume)
-                .thenAccept(result -> Platform
-                        .runLater(() -> AsyncUiFeedback.showSuccess(btnAISummary, spinnerSummary, txtAISummary,
-                                AI_SUMMARY_READY_LABEL, result)))
+                .thenAccept(result -> Platform.runLater(() -> {
+                    btnAISummary.setDisable(false);
+                    btnAISummary.setText(AI_SUMMARY_READY_LABEL);
+                    setSpinnerVisible(false);
+                    setAiSummaryContent(result);
+                }))
                 .exceptionally(ex -> {
-                    Platform.runLater(() -> AsyncUiFeedback.showError(btnAISummary, spinnerSummary, txtAISummary,
-                            AI_SUMMARY_READY_LABEL, ex));
+                    Platform.runLater(() -> {
+                        btnAISummary.setDisable(false);
+                        btnAISummary.setText(AI_SUMMARY_READY_LABEL);
+                        setSpinnerVisible(false);
+                        setAiSummaryContent("❌ Request failed.\n" + rootCauseMessage(ex) + "\n\nPlease retry once the AI engine or cloud route is available.");
+                    });
                     return null;
                 });
+    }
+
+    private void setAiSummaryContent(String content) {
+        if (txtAISummary == null) {
+            return;
+        }
+        txtAISummary.getEngine().loadContent(AIHtmlRenderer.toHtmlDocument(content, AIHtmlRenderer.Theme.PANEL));
+    }
+
+    private void setSpinnerVisible(boolean visible) {
+        if (spinnerSummary == null) {
+            return;
+        }
+        spinnerSummary.setVisible(visible);
+        spinnerSummary.setManaged(visible);
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof java.util.concurrent.CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        if (current == null || current.getMessage() == null || current.getMessage().isBlank()) {
+            return "Unknown error";
+        }
+        return current.getMessage();
     }
 
     // ═══════════════════════════════════════════════

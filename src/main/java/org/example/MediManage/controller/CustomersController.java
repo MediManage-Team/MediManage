@@ -11,12 +11,13 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.web.WebView;
 
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.service.CustomerService;
+import org.example.MediManage.util.AIHtmlRenderer;
 import javafx.application.Platform;
 import org.example.MediManage.util.AppExecutors;
-import org.example.MediManage.util.AsyncUiFeedback;
 
 import java.util.List;
 
@@ -69,7 +70,7 @@ public class CustomersController {
     @FXML
     private Button btnAIAnalysis;
     @FXML
-    private TextArea txtAIAnalysis;
+    private WebView txtAIAnalysis;
     @FXML
     private ProgressIndicator spinnerAnalysis;
 
@@ -137,6 +138,11 @@ public class CustomersController {
 
         // Load data
         loadCustomers();
+        if (txtAIAnalysis != null) {
+            txtAIAnalysis.setContextMenuEnabled(false);
+            txtAIAnalysis.setStyle("-fx-background-color: transparent;");
+        }
+        setAnalysisContent("Select a customer and run AI health analysis to see medication, adherence, and follow-up insights.");
         setupKeyboardShortcuts();
     }
 
@@ -296,8 +302,7 @@ public class CustomersController {
         btnDelete.setDisable(true);
         if (btnAIAnalysis != null)
             btnAIAnalysis.setDisable(true);
-        if (txtAIAnalysis != null)
-            txtAIAnalysis.clear();
+        setAnalysisContent("Select a customer and run AI health analysis to see medication, adherence, and follow-up insights.");
         customerTable.getSelectionModel().clearSelection();
     }
 
@@ -307,25 +312,62 @@ public class CustomersController {
         CustomerService.HealthAnalysisPreparation analysis = customerService.prepareHealthAnalysis(selectedCustomer,
                 diseases);
         if (!analysis.canProceed()) {
-            if (txtAIAnalysis != null)
-                txtAIAnalysis.setText(analysis.message());
+            setAnalysisContent(analysis.message());
             return;
         }
 
-        AsyncUiFeedback.showLoading(btnAIAnalysis, spinnerAnalysis, txtAIAnalysis,
-                ANALYZE_BUSY_LABEL, "⏳ Running AI health analysis...");
+        if (btnAIAnalysis != null) {
+            btnAIAnalysis.setDisable(true);
+            btnAIAnalysis.setText(ANALYZE_BUSY_LABEL);
+        }
+        setSpinnerVisible(true);
+        setAnalysisContent("⏳ Running AI health analysis...");
 
         customerService.analyzeCustomerHealth(selectedCustomer, analysis.diseases())
                 .thenAccept(result -> Platform.runLater(() -> {
-                    AsyncUiFeedback.showSuccess(btnAIAnalysis, spinnerAnalysis, txtAIAnalysis,
-                            ANALYZE_READY_LABEL, result);
+                    if (btnAIAnalysis != null) {
+                        btnAIAnalysis.setDisable(false);
+                        btnAIAnalysis.setText(ANALYZE_READY_LABEL);
+                    }
+                    setSpinnerVisible(false);
+                    setAnalysisContent(result);
                 })).exceptionally(ex -> {
                     Platform.runLater(() -> {
-                        AsyncUiFeedback.showError(btnAIAnalysis, spinnerAnalysis, txtAIAnalysis,
-                                ANALYZE_READY_LABEL, ex);
+                        if (btnAIAnalysis != null) {
+                            btnAIAnalysis.setDisable(false);
+                            btnAIAnalysis.setText(ANALYZE_READY_LABEL);
+                        }
+                        setSpinnerVisible(false);
+                        setAnalysisContent("❌ Request failed.\n" + rootCauseMessage(ex) + "\n\nPlease retry using the same action button.");
                     });
                     return null;
                 });
+    }
+
+    private void setAnalysisContent(String content) {
+        if (txtAIAnalysis == null) {
+            return;
+        }
+        txtAIAnalysis.getEngine().loadContent(AIHtmlRenderer.toHtmlDocument(content, AIHtmlRenderer.Theme.PANEL));
+    }
+
+    private void setSpinnerVisible(boolean visible) {
+        if (spinnerAnalysis == null) {
+            return;
+        }
+        spinnerAnalysis.setVisible(visible);
+        spinnerAnalysis.setManaged(visible);
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof java.util.concurrent.CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        if (current == null || current.getMessage() == null || current.getMessage().isBlank()) {
+            return "Unknown error";
+        }
+        return current.getMessage();
     }
 
     // ======================== UTILS ========================

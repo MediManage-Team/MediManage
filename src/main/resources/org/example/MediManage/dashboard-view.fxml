@@ -262,26 +262,26 @@
 
                             <HBox spacing="14">
                                 <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
-                                    <Label text="🔍 Substitute Finder" styleClass="card-title"/>
-                                    <Label text="Search for generic substitutes in your inventory" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
-                                    <Button text="Open Search" onAction="#handleFindSubstitutes" styleClass="button-primary" maxWidth="Infinity"/>
+                                    <Label text="🧭 Business Pulse" styleClass="card-title"/>
+                                    <Label text="Get one executive snapshot of demand, risk, and next actions" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Button text="Generate Pulse" onAction="#handleBusinessPulse" styleClass="button-primary" maxWidth="Infinity"/>
                                 </VBox>
 
                                 <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
                                     <Label text="📦 Restock Forecasting" styleClass="card-title"/>
-                                    <Label text="Analyze sales trends and low-stock warnings" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Label text="Blend 30-day demand with current shortages and reorder pressure" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
                                     <Button text="Generate Forecast" onAction="#handleRestockReport" styleClass="button-secondary" maxWidth="Infinity"/>
                                 </VBox>
 
                                 <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
                                     <Label text="⏰ Expiry Strategy" styleClass="card-title"/>
-                                    <Label text="Categorize expiring medicines by urgency" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Label text="Spot expiry write-off risk and decide discount, return, or disposal" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
                                     <Button text="Analyze Risks" onAction="#handleExpiryReport" styleClass="button-outlined" maxWidth="Infinity"/>
                                 </VBox>
 
                                 <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" alignment="CENTER">
-                                    <Label text="💎 Profit Analyzer" styleClass="card-title"/>
-                                    <Label text="Analyze profit margins across inventory" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                                    <Label text="💎 Margin Intelligence" styleClass="card-title"/>
+                                    <Label text="Find margin leaks, below-cost items, and stronger profit pockets" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
                                     <Button text="Analyze Margins" onAction="#handleProfitAnalysis" styleClass="button-primary" maxWidth="Infinity"/>
                                 </VBox>
                             </HBox>

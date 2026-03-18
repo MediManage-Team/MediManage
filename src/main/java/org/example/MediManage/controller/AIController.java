@@ -12,13 +12,12 @@ import javafx.scene.layout.*;
 import javafx.util.Duration;
 import org.example.MediManage.service.ai.AIOrchestrator;
 import org.example.MediManage.service.ai.AIServiceProvider;
+import org.example.MediManage.service.ai.AssistantReportService;
+import org.example.MediManage.util.AIHtmlRenderer;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
-import com.vladsch.flexmark.html.HtmlRenderer;
-import com.vladsch.flexmark.parser.Parser;
-import com.vladsch.flexmark.util.data.MutableDataSet;
 import javafx.scene.web.WebView;
 import java.util.concurrent.CancellationException;
 import java.io.File;
@@ -47,21 +46,16 @@ public class AIController {
     private Button stopButton;
 
     private final AIOrchestrator aiOrchestrator;
+    private final AssistantReportService assistantReportService;
     private CompletableFuture<?> currentRequest;
-
-    private static final Parser MARKDOWN_PARSER;
-    private static final HtmlRenderer HTML_RENDERER;
-    static {
-        MutableDataSet options = new MutableDataSet();
-        MARKDOWN_PARSER = Parser.builder(options).build();
-        HTML_RENDERER = HtmlRenderer.builder(options).build();
-    }
     private boolean modelAutoLoadTriggered = false;
     private HBox typingIndicator;
     private Timeline typingAnimation;
+    private Timeline statusRefreshTimer;
 
     public AIController() {
         this.aiOrchestrator = AIServiceProvider.get().getOrchestrator();
+        this.assistantReportService = new AssistantReportService();
     }
 
     @FXML
@@ -77,7 +71,7 @@ public class AIController {
             engineToggleGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
                 boolean useCloud = (newVal == cloudRadio);
                 aiOrchestrator.setForceCloud(useCloud);
-                addSystemMessage("⚡ Routing set to " + (useCloud ? "Cloud Only" : "Auto/Local") + ".");
+                addSystemMessage("⚡ Routing set to " + (useCloud ? "Cloud Only" : "Local Only") + ".");
                 if (!useCloud) {
                     ensureModelLoaded();
                 }
@@ -91,6 +85,7 @@ public class AIController {
 
         // Auto-load model in background
         ensureModelLoaded();
+        startStatusPolling();
     }
 
     // ======================== MODEL STATUS ========================
@@ -127,11 +122,11 @@ public class AIController {
                                 if (currentSelection != null) {
                                     modelSelector.getSelectionModel().select(currentSelection);
                                 } else {
-                                    modelSelector.setPromptText("✅ " + provider);
+                                    modelSelector.setPromptText("🟢 " + provider);
                                 }
                                 modelSelector.setStyle("-fx-text-fill: #43e97b; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
                             } else {
-                                modelSelector.setPromptText("⏳ Model pending...");
+                                modelSelector.setPromptText("🟡 Engine online - model pending");
                                 modelSelector.setStyle("-fx-text-fill: #ffd700; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
                             }
                         }
@@ -139,7 +134,7 @@ public class AIController {
                 } else {
                     Platform.runLater(() -> {
                         if (modelSelector != null) {
-                            modelSelector.setPromptText("🔴 Engine offline");
+                            modelSelector.setPromptText("🔴 Local engine unavailable");
                             modelSelector.setStyle("-fx-text-fill: #f5576c; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
                         }
                     });
@@ -153,6 +148,18 @@ public class AIController {
                 });
             }
         });
+    }
+
+    private void startStatusPolling() {
+        if (statusRefreshTimer != null) {
+            statusRefreshTimer.stop();
+        }
+        statusRefreshTimer = new Timeline(new KeyFrame(Duration.seconds(4), e -> {
+            updateModelStatus();
+            ensureModelLoaded();
+        }));
+        statusRefreshTimer.setCycleCount(Animation.INDEFINITE);
+        statusRefreshTimer.play();
     }
 
     @FXML
@@ -230,40 +237,48 @@ public class AIController {
         if (aiOrchestrator.isForceCloud()) {
             return;
         }
-        if (modelAutoLoadTriggered)
-            return;
-        modelAutoLoadTriggered = true;
 
         CompletableFuture.runAsync(() -> {
             try {
-                if (aiOrchestrator.isLocalAvailable()) {
-                    org.json.JSONObject health = aiOrchestrator.getLocalHealth();
-                    if (!health.optBoolean("model_loaded", false)) {
-                        Platform.runLater(() -> addSystemMessage("⏳ Loading AI model in background..."));
-                        aiOrchestrator.loadLocalModel();
+                if (!aiOrchestrator.isLocalAvailable()) {
+                    return;
+                }
 
-                        // Poll until model is loaded, then update status
-                        for (int i = 0; i < 60; i++) {
-                            Thread.sleep(2000);
-                            org.json.JSONObject polled = aiOrchestrator.getLocalHealth();
-                            if (polled.optBoolean("model_loaded", false)) {
-                                String provider = polled.optString("provider", "loaded");
-                                Platform.runLater(() -> {
-                                    addSystemMessage("✅ AI model ready (" + provider + ")");
-                                    if (modelSelector != null) {
-                                        modelSelector.setPromptText("✅ " + provider);
-                                        modelSelector.setStyle("-fx-text-fill: #43e97b; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
-                                        updateModelStatus(); // Refresh dropdown items
-                                    }
-                                });
-                                break;
-                            }
-                        }
-                    } else {
-                        Platform.runLater(this::updateModelStatus);
+                synchronized (this) {
+                    if (modelAutoLoadTriggered) {
+                        return;
                     }
+                    modelAutoLoadTriggered = true;
+                }
+
+                org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+                if (!health.optBoolean("model_loaded", false)) {
+                    Platform.runLater(() -> addSystemMessage("⏳ Loading local AI model in background..."));
+                    aiOrchestrator.loadLocalModel();
+
+                    for (int i = 0; i < 60; i++) {
+                        Thread.sleep(2000);
+                        org.json.JSONObject polled = aiOrchestrator.getLocalHealth();
+                        if (polled.optBoolean("model_loaded", false)) {
+                            String provider = polled.optString("provider", "loaded");
+                            Platform.runLater(() -> {
+                                addSystemMessage("✅ Local AI ready (" + provider + ")");
+                                if (modelSelector != null) {
+                                    modelSelector.setPromptText("🟢 " + provider);
+                                    modelSelector.setStyle("-fx-text-fill: #43e97b; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
+                                    updateModelStatus();
+                                }
+                            });
+                            break;
+                        }
+                    }
+                } else {
+                    Platform.runLater(this::updateModelStatus);
                 }
             } catch (Exception e) {
+                synchronized (this) {
+                    modelAutoLoadTriggered = false;
+                }
                 System.err.println("Auto-load check failed: " + e.getMessage());
             }
         });
@@ -281,6 +296,7 @@ public class AIController {
 
     private void sendMessage(String msg) {
         boolean useSearch = webSearchCheck.isSelected();
+        boolean useLocal = engineToggleGroup == null || engineToggleGroup.getSelectedToggle() == localRadio;
 
         addUserMessage(msg);
         inputField.clear();
@@ -291,14 +307,22 @@ public class AIController {
         }
         showTypingIndicator();
 
-        boolean requiresPrecision = msg.toLowerCase().contains("dosage") ||
-                msg.toLowerCase().contains("side effect") ||
-                msg.toLowerCase().contains("interaction");
+        if (useLocal && !aiOrchestrator.isLocalAvailable()) {
+            removeTypingIndicator();
+            addSystemMessage("⚠️ Local AI is not ready yet. Wait for the engine to start or switch to Cloud AI.");
+            sendButton.setDisable(false);
+            if (stopButton != null) {
+                stopButton.setVisible(false);
+                stopButton.setManaged(false);
+            }
+            return;
+        }
 
-        currentRequest = aiOrchestrator.processQuery(msg, requiresPrecision, useSearch)
+        org.json.JSONObject data = new org.json.JSONObject().put("prompt", msg);
+        currentRequest = aiOrchestrator.processOrchestration("raw_chat", data, selectedRouting(), useSearch)
                 .thenAccept(response -> Platform.runLater(() -> {
                     removeTypingIndicator();
-                    addAIMessage(response);
+                    addAIMessage(response, currentModeLabel());
                     sendButton.setDisable(false);
                     if (stopButton != null) {
                         stopButton.setVisible(false);
@@ -341,19 +365,25 @@ public class AIController {
      * Phase 1 — Instant DB data (sub-second)
      * Phase 2 — AI-generated analysis and insights (background)
      */
-    private void sendDbQuery(String queryPrompt, String displayName) {
+    private void sendDbQuery(String displayName) {
         addUserMessage(displayName);
         inputField.clear();
         sendButton.setDisable(true);
         showTypingIndicator();
 
-        aiOrchestrator.queryDatabase(queryPrompt)
+        assistantReportService.generate(resolveReportType(displayName))
                 .thenAccept(dbData -> Platform.runLater(() -> {
                     removeTypingIndicator();
-                    // Phase 1: Show raw DB data instantly
                     addReportMessage(displayName, dbData);
 
-                    // Phase 2: Send to AI for polished analysis
+                    if (engineToggleGroup == null || engineToggleGroup.getSelectedToggle() == localRadio) {
+                        if (!aiOrchestrator.isLocalAvailable()) {
+                            addSystemMessage("💡 Local AI is offline. Showing the live database snapshot only.");
+                            sendButton.setDisable(false);
+                            return;
+                        }
+                    }
+
                     if (stopButton != null) {
                         stopButton.setVisible(true);
                         stopButton.setManaged(true);
@@ -372,10 +402,10 @@ public class AIController {
                         .put("prompt", analysisPrompt)
                         .put("business_context", dbData);
 
-                    currentRequest = aiOrchestrator.processOrchestration("raw_chat", data, "local_fallback", false)
+                    currentRequest = aiOrchestrator.processOrchestration("raw_chat", data, selectedRouting(), false)
                             .thenAccept(aiResponse -> Platform.runLater(() -> {
                                 removeTypingIndicator();
-                                addAIAnalysisMessage(aiResponse);
+                                addAIAnalysisMessage(aiResponse, currentModeLabel());
                                 sendButton.setDisable(false);
                                 if (stopButton != null) {
                                     stopButton.setVisible(false);
@@ -400,7 +430,7 @@ public class AIController {
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
                         removeTypingIndicator();
-                        addSystemMessage("❌ DB query failed: " + ex.getMessage());
+                        addSystemMessage("❌ Report generation failed: " + ex.getMessage());
                         sendButton.setDisable(false);
                     });
                     return null;
@@ -411,57 +441,57 @@ public class AIController {
 
     @FXML
     private void handleInventoryReport() {
-        sendDbQuery("Show inventory summary - list top medicines with stock quantities and prices", "📦 Inventory Summary");
+        sendDbQuery("📦 Inventory Summary");
     }
 
     @FXML
     private void handleLowStockReport() {
-        sendDbQuery("Show low stock medicines that are running out", "⚠️ Low Stock Alert");
+        sendDbQuery("⚠️ Low Stock Alert");
     }
 
     @FXML
     private void handleExpiryReport() {
-        sendDbQuery("Show medicines expiring soon within the next 90 days", "⏰ Expiring Medicines");
+        sendDbQuery("⏰ Expiring Medicines");
     }
 
     @FXML
     private void handleSalesReport() {
-        sendDbQuery("Show today's sales summary and revenue", "💰 Sales Report");
+        sendDbQuery("💰 Sales Report");
     }
 
     @FXML
     private void handleCustomerReport() {
-        sendDbQuery("Show customer balances and outstanding debts", "👥 Customer Balances");
+        sendDbQuery("👥 Customer Balances");
     }
 
     @FXML
     private void handleTopSellersReport() {
-        sendDbQuery("Show top 20 best-selling medicines by total quantity sold from bill items", "🏆 Top Selling Medicines");
+        sendDbQuery("🏆 Top Selling Medicines");
     }
 
     @FXML
     private void handleProfitReport() {
-        sendDbQuery("Show profit analysis - total revenue, total bills, average bill value, and revenue by payment mode", "📊 Profit Analysis");
+        sendDbQuery("📊 Profit Analysis");
     }
 
     @FXML
     private void handlePrescriptionReport() {
-        sendDbQuery("Show recent prescriptions with patient name, doctor, status, and medicines prescribed", "📋 Prescription Overview");
+        sendDbQuery("📋 Prescription Overview");
     }
 
     @FXML
     private void handleDrugInteractions() {
-        sendDbQuery("Show recent bills with multiple medicines to check for potential drug-drug interactions. List patient and all medicines per bill", "💊 Drug Interaction Check");
+        sendDbQuery("💊 Drug Interaction Check");
     }
 
     @FXML
     private void handleReorderSuggestions() {
-        sendDbQuery("Show medicines with stock below 20 units that have been sold recently - suggest reorder quantities based on past sales velocity", "🔄 Reorder Suggestions");
+        sendDbQuery("🔄 Reorder Suggestions");
     }
 
     @FXML
     private void handleDailySummary() {
-        sendDbQuery("Give a complete daily summary: total sales today, number of bills, new customers, pending prescriptions, low stock alerts, and expiring medicines count", "📅 Daily Summary");
+        sendDbQuery("📅 Daily Summary");
     }
 
     @FXML
@@ -532,50 +562,6 @@ public class AIController {
 
         bubble.getChildren().addAll(msgLabel, timeLabel);
         box.getChildren().add(bubble);
-        chatBox.getChildren().add(box);
-    }
-
-    private void addAIMessage(String text) {
-        HBox box = new HBox(8);
-        box.setAlignment(Pos.TOP_LEFT);
-        box.setPadding(new Insets(4, 30, 4, 10));
-
-        Label avatar = new Label("🤖");
-        avatar.setStyle("-fx-font-size: 18px; -fx-padding: 4 0 0 0;");
-
-        VBox bubble = new VBox(2);
-        bubble.setMaxWidth(550);
-        bubble.setStyle(
-                "-fx-background-color: #2a2d3e;" +
-                        "-fx-padding: 8 12; -fx-background-radius: 16 16 16 4;");
-
-        String htmlContent = HTML_RENDERER.render(MARKDOWN_PARSER.parse(text));
-        String wrappedHtml = "<html><body style='background-color:#2a2d3e; color:#e0e0e0; font-family:-apple-system, Segoe UI, sans-serif; font-size:13px; line-height:1.4; margin:0; padding:0;'>"
-                           + htmlContent + "</body></html>";
-
-        WebView webView = new WebView();
-        webView.setMaxWidth(530);
-        webView.setPrefHeight(30);
-        webView.getEngine().loadContent(wrappedHtml);
-
-        webView.getEngine().getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
-            if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
-                Platform.runLater(() -> {
-                    try {
-                        Object height = webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
-                        if (height instanceof Number) {
-                            webView.setPrefHeight(((Number) height).doubleValue() + 20);
-                        }
-                    } catch (Exception e) {}
-                });
-            }
-        });
-
-        Label timeLabel = new Label(timestamp());
-        timeLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 9px;");
-
-        bubble.getChildren().addAll(webView, timeLabel);
-        box.getChildren().addAll(avatar, bubble);
         chatBox.getChildren().add(box);
     }
 
@@ -748,10 +734,12 @@ public class AIController {
     private void addSystemMessage(String text) {
         HBox box = new HBox();
         box.setAlignment(Pos.CENTER);
-        box.setPadding(new Insets(3));
+        box.setPadding(new Insets(6, 0, 6, 0));
 
         Label label = new Label(text);
-        label.setStyle("-fx-text-fill: #888; -fx-font-size: 11px;");
+        label.setStyle("-fx-text-fill: #a7b0c8; -fx-font-size: 11px; -fx-background-color: rgba(255,255,255,0.04);"
+                + "-fx-padding: 6 12; -fx-background-radius: 999; -fx-border-color: rgba(125,211,252,0.16);"
+                + "-fx-border-radius: 999;");
 
         box.getChildren().add(label);
         chatBox.getChildren().add(box);
@@ -761,7 +749,7 @@ public class AIController {
      * AI Analysis card — styled distinctly from the raw DB report.
      * Shows the AI-generated insights with a sparkle accent.
      */
-    private void addAIAnalysisMessage(String text) {
+    private void addAIAnalysisMessage(String text, String sourceLabel) {
         HBox box = new HBox(8);
         box.setAlignment(Pos.TOP_LEFT);
         box.setPadding(new Insets(4, 30, 4, 10));
@@ -785,14 +773,10 @@ public class AIController {
         sep.setStyle("-fx-background-color: #333;");
 
         // AI response text
-        String htmlContent = HTML_RENDERER.render(MARKDOWN_PARSER.parse(text));
-        String wrappedHtml = "<html><body style='background-color:#1a1e2e; color:#d0d0d0; font-family:-apple-system, Segoe UI, sans-serif; font-size:12.5px; line-height:1.4; margin:0; padding:0;'>"
-                           + htmlContent + "</body></html>";
-
         WebView webView = new WebView();
         webView.setMaxWidth(560);
         webView.setPrefHeight(30);
-        webView.getEngine().loadContent(wrappedHtml);
+        webView.getEngine().loadContent(AIHtmlRenderer.toHtmlDocument(text, AIHtmlRenderer.Theme.PANEL));
 
         webView.getEngine().documentProperty().addListener((obs, oldDoc, newDoc) -> {
             if (newDoc != null) {
@@ -808,11 +792,87 @@ public class AIController {
         });
 
         // Timestamp
-        Label timeLabel = new Label("🤖 AI-generated • " + timestamp());
+        Label timeLabel = new Label(sourceLabel + " • " + timestamp());
         timeLabel.setStyle("-fx-text-fill: #a855f7; -fx-font-size: 9px; -fx-padding: 4 0 0 0;");
 
         card.getChildren().addAll(header, sep, webView, timeLabel);
         box.getChildren().addAll(avatar, card);
         chatBox.getChildren().add(box);
+    }
+
+    private void addAIMessage(String text, String sourceLabel) {
+        HBox box = new HBox(8);
+        box.setAlignment(Pos.TOP_LEFT);
+        box.setPadding(new Insets(4, 30, 4, 10));
+
+        Label avatar = new Label("🤖");
+        avatar.setStyle("-fx-font-size: 18px; -fx-padding: 4 0 0 0;");
+
+        VBox bubble = new VBox(6);
+        bubble.setMaxWidth(550);
+        bubble.setStyle(
+                "-fx-background-color: #20263c;" +
+                        "-fx-padding: 10 12; -fx-background-radius: 18 18 18 4;" +
+                        "-fx-border-color: rgba(125,211,252,0.16); -fx-border-radius: 18 18 18 4;");
+
+        Label sourceBadge = new Label(sourceLabel);
+        sourceBadge.setStyle("-fx-text-fill: #7dd3fc; -fx-font-size: 10px; -fx-font-weight: bold;"
+                + "-fx-background-color: rgba(125,211,252,0.10); -fx-background-radius: 999;"
+                + "-fx-padding: 3 8;");
+
+        WebView webView = new WebView();
+        webView.setMaxWidth(530);
+        webView.setPrefHeight(30);
+        webView.getEngine().loadContent(AIHtmlRenderer.toHtmlDocument(text, AIHtmlRenderer.Theme.CHAT));
+        webView.getEngine().getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
+            if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
+                Platform.runLater(() -> {
+                    try {
+                        Object height = webView.getEngine().executeScript("document.documentElement.scrollHeight || document.body.scrollHeight");
+                        if (height instanceof Number) {
+                            webView.setPrefHeight(((Number) height).doubleValue() + 20);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                });
+            }
+        });
+
+        Label timeLabel = new Label(timestamp());
+        timeLabel.setStyle("-fx-text-fill: #7580a4; -fx-font-size: 9px;");
+
+        bubble.getChildren().addAll(sourceBadge, webView, timeLabel);
+        box.getChildren().addAll(avatar, bubble);
+        chatBox.getChildren().add(box);
+    }
+
+    private AssistantReportService.ReportType resolveReportType(String displayName) {
+        if (displayName.contains("Inventory")) return AssistantReportService.ReportType.INVENTORY;
+        if (displayName.contains("Low Stock")) return AssistantReportService.ReportType.LOW_STOCK;
+        if (displayName.contains("Expir")) return AssistantReportService.ReportType.EXPIRING;
+        if (displayName.contains("Sales")) return AssistantReportService.ReportType.SALES;
+        if (displayName.contains("Customer")) return AssistantReportService.ReportType.CUSTOMERS;
+        if (displayName.contains("Top Selling")) return AssistantReportService.ReportType.TOP_SELLERS;
+        if (displayName.contains("Profit")) return AssistantReportService.ReportType.PROFIT;
+        if (displayName.contains("Prescription")) return AssistantReportService.ReportType.PRESCRIPTIONS;
+        if (displayName.contains("Interaction")) return AssistantReportService.ReportType.DRUG_INTERACTIONS;
+        if (displayName.contains("Reorder")) return AssistantReportService.ReportType.REORDER;
+        return AssistantReportService.ReportType.DAILY_SUMMARY;
+    }
+
+    private String selectedRouting() {
+        if (engineToggleGroup != null && engineToggleGroup.getSelectedToggle() == cloudRadio) {
+            return "cloud_only";
+        }
+        return "local_only";
+    }
+
+    private String currentModeLabel() {
+        if (engineToggleGroup != null && engineToggleGroup.getSelectedToggle() == cloudRadio) {
+            return "☁️ Cloud AI";
+        }
+        org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+        String provider = health.optString("provider", "Local AI");
+        return "💻 " + provider;
     }
 }
