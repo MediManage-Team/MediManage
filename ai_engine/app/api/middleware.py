@@ -1,4 +1,3 @@
-import threading
 import hmac
 import logging
 import os
@@ -11,29 +10,10 @@ logger = logging.getLogger(__name__)
 ADMIN_TOKEN_ENV = "MEDIMANAGE_LOCAL_API_TOKEN"
 ADMIN_TOKEN_HEADER = "X-MediManage-Admin-Token"
 ADMIN_PROTECTED_ROUTES = {
-    "/load_model",
-    "/download_model",
-    "/stop_download",
-    "/delete_model",
     "/shutdown",
-    "/update_config",
     "/orchestrate",
 }
 ADMIN_TOKEN = (os.getenv(ADMIN_TOKEN_ENV, "") or "").strip()
-
-# Thread-safe download progress state
-_progress_lock = threading.Lock()
-_download_progress = {"status": "idle", "percent": 0, "message": "", "speed": ""}
-_download_cancel = threading.Event()
-
-def set_progress(data):
-    global _download_progress
-    with _progress_lock:
-        _download_progress = data
-
-def get_progress():
-    with _progress_lock:
-        return dict(_download_progress)
 
 def setup_middleware(app):
     @app.before_request

@@ -2,7 +2,7 @@
 setlocal
 
 :: ==========================================
-:: MediManage AI Engine Server Launcher (Offline/Protected)
+:: MediManage AI Engine Server Launcher (Protected Cloud Backend)
 :: ==========================================
 
 :: Get the directory where this script is located (the install root)

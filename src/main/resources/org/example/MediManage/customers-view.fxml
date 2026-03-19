@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.web.WebView?>
@@ -9,7 +8,6 @@
     xmlns="http://javafx.com/javafx/17"
     xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.CustomersController" styleClass="dark-panel">
 
-    <!-- Top Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT">
         <Label text="Customer Management" styleClass="page-title"/>
         <Region HBox.hgrow="ALWAYS"/>
@@ -18,7 +16,6 @@
 
     <SplitPane dividerPositions="0.65" VBox.vgrow="ALWAYS">
         <items>
-            <!-- Left: Table -->
             <TableView fx:id="customerTable">
                 <columns>
                     <TableColumn fx:id="colId" text="ID" prefWidth="50"/>
@@ -33,78 +30,100 @@
                 </columnResizePolicy>
             </TableView>
 
-            <!-- Right: Form -->
-            <ScrollPane fitToWidth="true" fitToHeight="true">
-                <VBox spacing="12" styleClass="dark-form-panel">
-                    <Label text="Customer Details" styleClass="section-title"/>
-
-                    <VBox spacing="4">
-                        <Label text="Full Name *"/>
-                        <TextField fx:id="txtName" promptText="Full Name"/>
-                    </VBox>
-                    <HBox spacing="10">
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <Label text="Phone *"/>
-                            <TextField fx:id="txtPhone" promptText="Phone Number"/>
+            <ScrollPane fitToWidth="true" pannable="true" hbarPolicy="NEVER">
+                <VBox spacing="16" styleClass="dark-form-panel">
+                    <VBox spacing="10" styleClass="customer-summary-card">
+                        <VBox spacing="4">
+                            <Label text="Customer Details" styleClass="section-title"/>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Label fx:id="lblSelectedCustomerName" text="New Customer" styleClass="customer-summary-name" HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="lblSelectionState" text="New Profile" styleClass="customer-summary-badge"/>
+                            </HBox>
+                            <Label fx:id="lblSelectedCustomerMeta" text="Create a new profile or select an existing customer from the table." styleClass="customer-summary-meta" wrapText="true"/>
                         </VBox>
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <Label text="Email"/>
-                            <TextField fx:id="txtEmail" promptText="Email"/>
-                        </VBox>
-                    </HBox>
-                    <VBox spacing="4">
-                        <Label text="Address"/>
-                        <TextField fx:id="txtAddress" promptText="Address"/>
+                        <Separator/>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Current Balance" styleClass="customer-summary-label"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="lblSelectedCustomerBalance" text="₹0.00" styleClass="customer-summary-balance"/>
+                        </HBox>
                     </VBox>
 
-                    <Separator/>
-
-                    <Label text="Emergency Contact" styleClass="section-title-compact"/>
-                    <HBox spacing="10">
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <Label text="Nominee Name"/>
-                            <TextField fx:id="txtNomineeName" promptText="Nominee"/>
+                    <VBox spacing="12" styleClass="dark-section">
+                        <VBox spacing="2">
+                            <Label text="Primary Information" styleClass="section-title-compact"/>
+                            <Label text="Basic customer contact information used for billing and follow-up." styleClass="text-muted" wrapText="true"/>
                         </VBox>
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <Label text="Relation"/>
-                            <TextField fx:id="txtNomineeRelation" promptText="Relation"/>
+                        <VBox spacing="4">
+                            <Label text="Full Name *"/>
+                            <TextField fx:id="txtName" promptText="Customer full name"/>
                         </VBox>
-                    </HBox>
-
-                    <Separator/>
-
-                    <Label text="Insurance" styleClass="section-title-compact"/>
-                    <HBox spacing="10">
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <Label text="Provider"/>
-                            <TextField fx:id="txtInsuranceProvider" promptText="Insurance Provider"/>
+                        <HBox spacing="10">
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Phone *"/>
+                                <TextField fx:id="txtPhone" promptText="Primary contact number"/>
+                            </VBox>
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Email"/>
+                                <TextField fx:id="txtEmail" promptText="Optional email address"/>
+                            </VBox>
+                        </HBox>
+                        <VBox spacing="4">
+                            <Label text="Address"/>
+                            <TextArea fx:id="txtAddress" promptText="House / street / area / city" prefRowCount="3" wrapText="true"/>
                         </VBox>
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <Label text="Policy No"/>
-                            <TextField fx:id="txtInsurancePolicyNo" promptText="Policy Number"/>
-                        </VBox>
-                    </HBox>
-
-                    <Separator/>
-
-                    <VBox spacing="4">
-                        <Label text="Known Conditions / Diseases"/>
-                        <TextArea fx:id="txtDiseases" promptText="e.g. Diabetes, Hypertension" prefRowCount="2"/>
                     </VBox>
 
-                    <Region VBox.vgrow="ALWAYS"/>
+                    <VBox spacing="12" styleClass="dark-section">
+                        <VBox spacing="2">
+                            <Label text="Emergency Contact" styleClass="section-title-compact"/>
+                            <Label text="Optional nominee or family contact for follow-up records." styleClass="text-muted" wrapText="true"/>
+                        </VBox>
+                        <HBox spacing="10">
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Nominee Name"/>
+                                <TextField fx:id="txtNomineeName" promptText="Emergency contact / nominee"/>
+                            </VBox>
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Relation"/>
+                                <TextField fx:id="txtNomineeRelation" promptText="Relation to customer"/>
+                            </VBox>
+                        </HBox>
+                    </VBox>
 
-                    <Button fx:id="btnSave" text="Add Customer" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSave"/>
-                    <HBox spacing="10">
-                        <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="btnDelete" text="Delete" disable="true" styleClass="button-danger" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
-                    </HBox>
+                    <VBox spacing="12" styleClass="dark-section">
+                        <VBox spacing="2">
+                            <Label text="Insurance and Medical Notes" styleClass="section-title-compact"/>
+                            <Label text="Store policy details and key health conditions in one place." styleClass="text-muted" wrapText="true"/>
+                        </VBox>
+                        <HBox spacing="10">
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Insurance Provider"/>
+                                <TextField fx:id="txtInsuranceProvider" promptText="Insurance provider"/>
+                            </VBox>
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Policy Number"/>
+                                <TextField fx:id="txtInsurancePolicyNo" promptText="Policy / card number"/>
+                            </VBox>
+                        </HBox>
+                        <VBox spacing="4">
+                            <Label text="Known Conditions / Diseases"/>
+                            <TextArea fx:id="txtDiseases" promptText="e.g. Diabetes, Hypertension, Asthma" prefRowCount="3" wrapText="true"/>
+                        </VBox>
+                    </VBox>
 
-                    <Separator/>
-                    <TitledPane text="🤖 AI Health Analysis" expanded="false" animated="true">
+                    <VBox spacing="10">
+                        <Button fx:id="btnSave" text="Add Customer" styleClass="button-primary" maxWidth="Infinity" onAction="#handleSave"/>
+                        <HBox spacing="10">
+                            <Button text="Clear Form" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="btnDelete" text="Delete Customer" disable="true" styleClass="button-danger" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
+                        </HBox>
+                    </VBox>
+
+                    <TitledPane text="AI Health Analysis" expanded="false" animated="true">
                         <VBox spacing="10" styleClass="content-pad-10 ai-panel">
                             <HBox spacing="10" alignment="CENTER_LEFT">
-                                <Button fx:id="btnAIAnalysis" text="✨ Analyze Customer Health" onAction="#handleAIAnalysis" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai" disable="true"/>
+                                <Button fx:id="btnAIAnalysis" text="Analyze Customer Health" onAction="#handleAIAnalysis" HBox.hgrow="ALWAYS" maxWidth="Infinity" styleClass="button-ai" disable="true"/>
                                 <ProgressIndicator fx:id="spinnerAnalysis" prefWidth="24" prefHeight="24" visible="false" managed="false"/>
                             </HBox>
                             <WebView fx:id="txtAIAnalysis" prefHeight="190"/>

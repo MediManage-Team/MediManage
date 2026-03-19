@@ -2,90 +2,87 @@ package org.example.MediManage.service.ai;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.example.MediManage.MediManageApplication;
+import org.json.JSONObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.opentest4j.TestAbortedException;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.prefs.Preferences;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalAIServiceRegressionTest {
-    private final Preferences prefs = Preferences.userNodeForPackage(MediManageApplication.class);
     private HttpServer server;
-    private Path tempModelPath;
 
     @AfterEach
-    void tearDown() throws Exception {
-        prefs.remove("local_model_path");
+    void tearDown() {
         if (server != null) {
             server.stop(0);
-        }
-        if (tempModelPath != null) {
-            java.nio.file.Files.deleteIfExists(tempModelPath);
-            tempModelPath = null;
+            server = null;
         }
     }
 
     @Test
-    void loadModelBlockingReturnsSuccessfulContract() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 5000), 0);
-        server.createContext("/load_model", exchange -> respond(exchange, 200,
-                "{\"status\":\"success\",\"provider\":\"stub-provider\",\"model_path\":\"C:/models/current.gguf\",\"model_name\":\"current.gguf\"}"));
+    void chatReturnsResponseFieldFromPythonEngine() throws Exception {
+        startServer();
+        server.createContext("/chat", exchange -> respond(exchange, 200, "{\"response\":\"hello from python\"}"));
         server.start();
 
         LocalAIService service = new LocalAIService(false);
-        LocalAIService.ModelLoadResult result = service.loadModelBlocking("C:/models/requested.gguf", "cpu");
 
-        assertTrue(result.success());
-        assertEquals("stub-provider", result.provider());
-        assertEquals("C:/models/current.gguf", result.modelPath());
+        assertEquals("hello from python", service.chat("hello").join());
     }
 
     @Test
-    void failedLoadDoesNotOverwriteSavedModelPreference() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 5000), 0);
-        server.createContext("/load_model", exchange -> respond(exchange, 500,
-                "{\"status\":\"error\",\"message\":\"Load failed\"}"));
+    void orchestratePostsActionPayloadWithCloudConfigAndFlags() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>("");
+        startServer();
+        server.createContext("/orchestrate", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, "{\"response\":\"orchestrated\"}");
+        });
         server.start();
 
-        tempModelPath = java.nio.file.Files.createTempFile("previous-model-", ".gguf");
-        prefs.put("local_model_path", tempModelPath.toString());
         LocalAIService service = new LocalAIService(false);
-        LocalAIService.ModelLoadResult result = service.loadModelBlocking("C:/models/new.gguf", "cpu");
+        JSONObject data = new JSONObject().put("prompt", "Summarize inventory");
+        JSONObject cloudConfig = new JSONObject().put("provider", "GEMINI").put("model", "gemini-2.5-flash");
 
-        assertFalse(result.success());
-        assertEquals(tempModelPath.toString(), prefs.get("local_model_path", ""));
+        assertEquals("orchestrated",
+                service.orchestrate("combined_analysis", data, cloudConfig, "cloud_only", true).join());
+
+        JSONObject sent = new JSONObject(requestBody.get());
+        assertEquals("combined_analysis", sent.getString("action"));
+        assertTrue(sent.getBoolean("use_search"));
+        assertEquals("cloud_only", sent.getString("routing"));
+        assertEquals("Summarize inventory", sent.getJSONObject("data").getString("prompt"));
+        assertEquals("GEMINI", sent.getJSONObject("cloud_config").getString("provider"));
     }
 
     @Test
-    void constructorClearsMissingSavedModelPreference() throws Exception {
-        Path missingPath = Path.of(System.getProperty("java.io.tmpdir"), "missing-model-" + System.nanoTime() + ".gguf");
-        prefs.put("local_model_path", missingPath.toString());
-
-        new LocalAIService(false);
-
-        assertEquals("", prefs.get("local_model_path", ""));
-    }
-
-    @Test
-    void deletingActiveModelClearsSavedPreference() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 5000), 0);
-        server.createContext("/delete_model", exchange -> respond(exchange, 200,
-                "{\"status\":\"deleted\",\"path\":\"C:/models/current.gguf\",\"was_loaded\":true}"));
+    void healthEndpointDrivesAvailabilityAndHealthPayload() throws Exception {
+        startServer();
+        server.createContext("/health", exchange -> respond(exchange, 200, "{\"status\":\"ok\",\"engine\":\"python\"}"));
         server.start();
 
-        prefs.put("local_model_path", "C:/models/current.gguf");
         LocalAIService service = new LocalAIService(false);
 
-        assertTrue(service.deleteModel("C:/models/current.gguf"));
-        assertEquals("", prefs.get("local_model_path", ""));
+        assertTrue(service.isAvailable());
+        JSONObject health = service.getHealth();
+        assertEquals("ok", health.getString("status"));
+        assertEquals("python", health.getString("engine"));
+    }
+
+    private void startServer() throws IOException {
+        try {
+            server = HttpServer.create(new InetSocketAddress("127.0.0.1", 5000), 0);
+        } catch (BindException ex) {
+            throw new TestAbortedException("Port 5000 is already in use; skipping LocalAIService contract test.", ex);
+        }
     }
 
     private void respond(HttpExchange exchange, int statusCode, String body) throws IOException {

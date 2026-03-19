@@ -440,7 +440,7 @@ public class InventoryController implements NavigationGuard {
             listBatches.getItems().clear();
         }
         if (lblBatchSummary != null) {
-            lblBatchSummary.setText("Select a medicine to inspect FEFO batches.");
+            lblBatchSummary.setText("Select a medicine to view active batches, nearest expiry, and available units.");
         }
         suppressDirtyTracking = false;
         dirty = false;
@@ -521,7 +521,7 @@ public class InventoryController implements NavigationGuard {
         InventoryService.RestockPreparation prep = inventoryService.prepareRestock(snapshot);
 
         var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
-                "Restock Analysis", "📦", "Analyzing stock levels and sales trends...");
+                "Restock Analysis", "", "Analyzing stock levels and sales trends...");
 
         if (!prep.requiresAi()) {
             ctx.setResult(prep.message());
@@ -534,9 +534,9 @@ public class InventoryController implements NavigationGuard {
                     // Offline fallback: show the low-stock data directly
                     StringBuilder sb = new StringBuilder();
                     sb.append("Restock Suggestions (Local Analysis)\n\n");
-                    sb.append("⚠️ Low Stock Items:\n");
+                    sb.append("Low Stock Items:\n");
                     sb.append(prep.snapshot());
-                    sb.append("\n\n💡 Tip: Configure your Cloud AI API key in Settings for AI-powered analysis.");
+                    sb.append("\n\nTip: Configure your Cloud AI API key in Settings for deeper analysis.");
                     ctx.setResult(sb.toString());
                     return null;
                 });
@@ -665,15 +665,15 @@ public class InventoryController implements NavigationGuard {
                         int totalQty = batches.stream().mapToInt(InventoryBatch::availableQuantity).sum();
                         lblBatchSummary.setText(
                                 batches.isEmpty()
-                                        ? "No active batches recorded yet."
-                                        : "FEFO batches: " + batches.size() + " | Available units: " + totalQty);
+                                        ? "No active batches recorded for this medicine yet."
+                                        : "Active batches: " + batches.size() + " | Available units: " + totalQty);
                     }
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     listBatches.setItems(FXCollections.observableArrayList());
                     if (lblBatchSummary != null) {
-                        lblBatchSummary.setText("Batch ledger unavailable: " + e.getMessage());
+                        lblBatchSummary.setText("Batch overview unavailable: " + e.getMessage());
                     }
                 });
             }
@@ -688,10 +688,10 @@ public class InventoryController implements NavigationGuard {
         }
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Record Return / Damage / Dump");
+        dialog.setTitle("Record Stock Write-Off");
         dialog.setHeaderText("Record a stock reduction for " + selectedMedicine.getName());
 
-        ButtonType saveButtonType = new ButtonType("Record Adjustment", ButtonBar.ButtonData.OK_DONE);
+        ButtonType saveButtonType = new ButtonType("Save Adjustment", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
 
         ComboBox<String> typeCombo = new ComboBox<>(FXCollections.observableArrayList("DAMAGED", "RETURN", "DUMP"));

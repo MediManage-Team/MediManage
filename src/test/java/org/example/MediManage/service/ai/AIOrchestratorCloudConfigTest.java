@@ -1,11 +1,14 @@
 package org.example.MediManage.service.ai;
 
 import org.example.MediManage.security.CloudApiKeyStore;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CompletableFuture;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AIOrchestratorCloudConfigTest {
@@ -42,69 +45,73 @@ class AIOrchestratorCloudConfigTest {
     }
 
     @Test
-    void combinedAnalysisCloudFallbackPromptIncludesBusinessContext() {
+    void processOrchestrationForwardsActionDataAndCloudConfigToPythonService() {
+        StubPythonAIService pythonService = new StubPythonAIService();
+        JSONObject cloudConfig = new JSONObject()
+                .put("provider", "GROQ")
+                .put("model", "llama-3.3-70b-versatile")
+                .put("api_key", "test-key");
+
+        AIOrchestrator orchestrator = new TestableAIOrchestrator(pythonService, cloudConfig);
         JSONObject data = new JSONObject()
                 .put("prompt", "Recommend safer expiry actions")
                 .put("business_context", "Expiring items: Paracetamol");
 
-        String prompt = AIActionPromptBuilder.buildDirectCloudFallbackPrompt("combined_analysis", data);
+        String result = orchestrator.processOrchestration("combined_analysis", data, "cloud_only", true).join();
 
-        assertTrue(prompt.contains("Business Data Summary:\nExpiring items: Paracetamol"));
-        assertTrue(prompt.contains("Recommend safer expiry actions"));
+        assertEquals("python-service-response", result);
+        assertEquals("combined_analysis", pythonService.lastAction);
+        assertSame(data, pythonService.lastData);
+        assertEquals(cloudConfig.toString(), pythonService.lastCloudConfig.toString());
+        assertEquals("cloud_only", pythonService.lastRouting);
+        assertTrue(pythonService.lastUseSearch);
     }
 
     @Test
-    void cloudOnlyRequestsFallbackDirectlyWhenPythonSidecarIsDown() {
-        StubLocalAIService localAI = new StubLocalAIService();
-        StubCloudAIService cloudAI = new StubCloudAIService();
-        JSONObject cloudConfig = new JSONObject()
-                .put("provider", "GROQ")
-                .put("model", "")
-                .put("api_key", "test-key");
+    void queryDatabaseUsesCloudOnlyRoutingWithoutSearch() {
+        StubPythonAIService pythonService = new StubPythonAIService();
+        AIOrchestrator orchestrator = new TestableAIOrchestrator(pythonService, new JSONObject());
 
-        AIOrchestrator orchestrator = new TestableAIOrchestrator(localAI, cloudAI, cloudConfig);
-        JSONObject data = new JSONObject()
-                .put("medicines", new JSONArray().put("Ace T 100mg/4mg Tablet"));
+        String result = orchestrator.queryDatabase("inventory_summary").join();
 
-        String result = orchestrator.processOrchestration("detailed_protocol", data, "cloud_only", false).join();
-
-        assertEquals("cloud-fallback-response", result);
-        assertTrue(cloudAI.lastPrompt.contains("Patient Care Protocol"));
-        assertTrue(cloudAI.lastPrompt.contains("Ace T 100mg/4mg Tablet"));
+        assertEquals("python-service-response", result);
+        assertEquals("inventory_summary", pythonService.lastAction);
+        assertEquals("cloud_only", pythonService.lastRouting);
+        assertFalse(pythonService.lastUseSearch);
     }
 
-    private static final class StubLocalAIService extends LocalAIService {
-        StubLocalAIService() {
+    private static final class StubPythonAIService extends LocalAIService {
+        private String lastAction;
+        private JSONObject lastData;
+        private JSONObject lastCloudConfig;
+        private String lastRouting;
+        private boolean lastUseSearch;
+
+        StubPythonAIService() {
             super(false);
         }
 
         @Override
-        public java.util.concurrent.CompletableFuture<String> orchestrate(
+        public CompletableFuture<String> orchestrate(
                 String action,
                 JSONObject data,
                 JSONObject cloudConfig,
                 String routing,
                 boolean useSearch) {
-            return java.util.concurrent.CompletableFuture.failedFuture(
-                    new java.net.ConnectException("Connection refused"));
-        }
-    }
-
-    private static final class StubCloudAIService extends CloudAIService {
-        private String lastPrompt = "";
-
-        @Override
-        java.util.concurrent.CompletableFuture<String> chat(JSONObject cloudConfig, String prompt) {
-            lastPrompt = prompt;
-            return java.util.concurrent.CompletableFuture.completedFuture("cloud-fallback-response");
+            lastAction = action;
+            lastData = data;
+            lastCloudConfig = cloudConfig;
+            lastRouting = routing;
+            lastUseSearch = useSearch;
+            return CompletableFuture.completedFuture("python-service-response");
         }
     }
 
     private static final class TestableAIOrchestrator extends AIOrchestrator {
         private final JSONObject cloudConfig;
 
-        TestableAIOrchestrator(LocalAIService pythonService, CloudAIService cloudService, JSONObject cloudConfig) {
-            super(pythonService, cloudService);
+        TestableAIOrchestrator(LocalAIService pythonService, JSONObject cloudConfig) {
+            super(pythonService);
             this.cloudConfig = cloudConfig;
         }
 

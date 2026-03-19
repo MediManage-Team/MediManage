@@ -2,7 +2,7 @@
 setlocal
 
 echo ==========================================
-echo 0. Preparing Offline Environments
+echo 0. Preparing Portable Runtime Environments
 echo ==========================================
 
 :: 1. Prepare Node.js Environment
@@ -69,14 +69,14 @@ if not exist "%PY_SRC%\python.exe" (
 findstr /x /c:"Lib\site-packages" "%PY_SRC%\python311._pth" >nul 2>nul || echo Lib\site-packages>> "%PY_SRC%\python311._pth"
 findstr /x /c:"import site" "%PY_SRC%\python311._pth" >nul 2>nul || echo import site>> "%PY_SRC%\python311._pth"
 
-echo [Python] Installing build tools...
-"%PY_SRC%\python.exe" -m pip install --upgrade pip setuptools wheel cmake scikit-build-core
+echo [Python] Installing core packaging tools...
+"%PY_SRC%\python.exe" -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 (
-    echo [ERROR] Failed to install build tools.
+    echo [ERROR] Failed to install core packaging tools.
     exit /b 1
 )
 
-echo [Python] Installing AI dependencies into portable python...
+echo [Python] Installing cloud AI dependencies into portable python...
 "%PY_SRC%\python.exe" -m pip install -r ai_engine\requirements\requirements.txt
 if errorlevel 1 (
     echo [ERROR] pip install requirements failed.

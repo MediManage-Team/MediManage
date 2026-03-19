@@ -128,7 +128,8 @@ public class AIResultDialog {
 
     private static VBox createDialogLayout(String title, String icon, WebView resultView, VBox inputSection) {
         // Title bar
-        Label titleLabel = new Label(icon + "  " + title);
+        String titleText = icon == null || icon.isBlank() ? title : icon.trim() + "  " + title;
+        Label titleLabel = new Label(titleText);
         titleLabel.setStyle("-fx-text-fill: #e0e6f0; -fx-font-size: 16px; -fx-font-weight: bold;");
         HBox.setHgrow(titleLabel, Priority.ALWAYS);
 

@@ -7,9 +7,8 @@ logger = logging.getLogger(__name__)
 
 class CloudAPIClient:
     """
-    Python replacement for Java's CloudAIService.
-    Handles multi-provider HTTP logic, retries, and API keys dynamically provided per request.
-    Supported: GEMINI, GROQ, OPENROUTER, OPENAI, CLAUDE
+    Cloud-only provider client for the MediManage Python AI engine.
+    Handles provider HTTP calls, retries, and per-request API keys.
     """
 
     def __init__(self):

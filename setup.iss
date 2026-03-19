@@ -1,6 +1,6 @@
 #define MyAppVersion GetEnv('APP_VERSION')
 #if MyAppVersion == ""
-  #define MyAppVersion "6.5.0"
+  #define MyAppVersion "7.0.0"
 #endif
 
 [Setup]

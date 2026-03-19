@@ -71,18 +71,18 @@ public class InventoryAIService {
         StringBuilder sb = new StringBuilder();
         sb.append("Search: \"").append(brand).append("\"");
         if (!brand.equalsIgnoreCase(keyword)) {
-            sb.append(" → Generic: ").append(keyword);
+            sb.append(" -> Generic: ").append(keyword);
         }
         sb.append("\n\n");
 
         if (substitutes.isEmpty()) {
-            sb.append("❌ No matching medicines found.\n");
-            sb.append("• Check the spelling and try again\n");
-            sb.append("• Try searching by generic name (e.g. \"paracetamol\")\n");
+            sb.append("No matching medicines found.\n");
+            sb.append("- Check the spelling and try again\n");
+            sb.append("- Try searching by generic name (e.g. \"paracetamol\")\n");
         } else {
-            sb.append("✅ ").append(substitutes.size()).append(" result(s):\n\n");
+            sb.append(substitutes.size()).append(" result(s):\n\n");
             for (Medicine m : substitutes) {
-                sb.append("▸ ").append(m.getName());
+                sb.append("- ").append(m.getName());
                 if (m.getCompany() != null && !m.getCompany().isBlank()) {
                     sb.append("  [").append(m.getCompany()).append("]");
                 }
@@ -117,7 +117,7 @@ public class InventoryAIService {
 
         org.json.JSONObject data = new org.json.JSONObject().put("sales_data", context.toString());
 
-        return aiOrchestrator.processOrchestration("inventory_trend", data, "local_fallback", false)
+        return aiOrchestrator.processOrchestration("inventory_trend", data, "cloud_only", false)
                 .exceptionally(ex -> generateLocalRestockReport(sales));
     }
 
@@ -129,26 +129,26 @@ public class InventoryAIService {
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .collect(Collectors.toList());
 
-        sb.append("🔥 Top Sellers (High Priority Restock)\n");
+        sb.append("Top Sellers (High Priority Restock)\n");
         sorted.stream().limit(10).forEach(e ->
-                sb.append("• ").append(e.getKey()).append(" — ").append(e.getValue()).append(" units sold\n"));
+                sb.append("- ").append(e.getKey()).append(" - ").append(e.getValue()).append(" units sold\n"));
 
-        sb.append("\n⚠️ Low Stock Warnings\n");
+        sb.append("\nLow Stock Warnings\n");
         List<MedicineDAO.ReorderNeededRow> lowStock = medicineDAO.getReorderNeeded();
         if (lowStock.isEmpty()) {
-            sb.append("✅ All items above reorder threshold.\n");
+            sb.append("All items are above the reorder threshold.\n");
         } else {
             lowStock.stream().limit(15).forEach(m ->
-                    sb.append("• ").append(m.medicineName())
-                            .append(" — Stock: ").append(m.currentStock())
+                    sb.append("- ").append(m.medicineName())
+                            .append(" - Stock: ").append(m.currentStock())
                             .append(" (Reorder at: ").append(m.reorderThreshold()).append(")\n"));
         }
 
-        sb.append("\n📊 Summary\n");
-        sb.append("• Unique medicines sold: ").append(sales.size()).append("\n");
+        sb.append("\nSummary\n");
+        sb.append("- Unique medicines sold: ").append(sales.size()).append("\n");
         int totalUnits = sales.values().stream().mapToInt(Integer::intValue).sum();
-        sb.append("• Total units sold: ").append(totalUnits).append("\n");
-        sb.append("• Items needing reorder: ").append(lowStock.size()).append("\n");
+        sb.append("- Total units sold: ").append(totalUnits).append("\n");
+        sb.append("- Items needing reorder: ").append(lowStock.size()).append("\n");
 
         return sb.toString();
     }
@@ -161,7 +161,7 @@ public class InventoryAIService {
         List<Medicine> expiring = medicineDAO.getExpiringMedicines(60);
 
         if (expiring.isEmpty()) {
-            return CompletableFuture.completedFuture("✅ No medicines are expiring in the next 60 days.");
+            return CompletableFuture.completedFuture("No medicines are expiring in the next 60 days.");
         }
 
         StringBuilder context = new StringBuilder();
@@ -205,16 +205,16 @@ public class InventoryAIService {
         double atRiskValue = expiring.stream().mapToDouble(m -> m.getPrice() * m.getStock()).sum();
 
         if (!expired.isEmpty()) {
-            sb.append("🔴 EXPIRED (").append(expired.size()).append(" items)\n");
-            expired.forEach(m -> sb.append("• ").append(m.getName())
+            sb.append("Expired (").append(expired.size()).append(" items)\n");
+            expired.forEach(m -> sb.append("- ").append(m.getName())
                     .append(" | Expired: ").append(m.getExpiry())
                     .append(" | Stock: ").append(m.getStock()).append("\n"));
             sb.append("\n");
         }
 
         if (!within30.isEmpty()) {
-            sb.append("🟠 Expiring in 0-30 Days (").append(within30.size()).append(" items)\n");
-            within30.forEach(m -> sb.append("• ").append(m.getName())
+            sb.append("Expiring in 0-30 Days (").append(within30.size()).append(" items)\n");
+            within30.forEach(m -> sb.append("- ").append(m.getName())
                     .append(" | Expiry: ").append(m.getExpiry())
                     .append(" | Stock: ").append(m.getStock())
                     .append(" | Value: ₹").append(String.format("%.0f", m.getPrice() * m.getStock())).append("\n"));
@@ -222,18 +222,18 @@ public class InventoryAIService {
         }
 
         if (!within60.isEmpty()) {
-            sb.append("🟡 Expiring in 31-60 Days (").append(within60.size()).append(" items)\n");
-            within60.forEach(m -> sb.append("• ").append(m.getName())
+            sb.append("Expiring in 31-60 Days (").append(within60.size()).append(" items)\n");
+            within60.forEach(m -> sb.append("- ").append(m.getName())
                     .append(" | Expiry: ").append(m.getExpiry())
                     .append(" | Stock: ").append(m.getStock()).append("\n"));
             sb.append("\n");
         }
 
-        sb.append("💰 Total Inventory at Risk: ₹").append(String.format("%.2f", atRiskValue)).append("\n\n");
+        sb.append("Total Inventory at Risk: ₹").append(String.format("%.2f", atRiskValue)).append("\n\n");
         sb.append("Recommendations:\n");
-        sb.append("• Run clearance sales on items expiring within 30 days\n");
-        sb.append("• Contact suppliers for return/exchange on high-value items\n");
-        sb.append("• Dispose of expired items per regulatory guidelines\n");
+        sb.append("- Run clearance sales on items expiring within 30 days\n");
+        sb.append("- Contact suppliers for return or exchange on high-value items\n");
+        sb.append("- Dispose of expired items per regulatory guidelines\n");
 
         return sb.toString();
     }
@@ -253,23 +253,23 @@ public class InventoryAIService {
             if (withMargin.isEmpty()) return "No purchase price data available. Add purchase prices to analyze margins.";
 
             StringBuilder sb = new StringBuilder();
-            sb.append("💎 Profit Margin Analysis\n\n");
+            sb.append("Profit Margin Analysis\n\n");
 
             withMargin.sort(Comparator.comparingDouble(Medicine::getProfitMarginPercent).reversed());
 
-            sb.append("🟢 Top 5 High-Margin Medicines:\n");
-            withMargin.stream().limit(5).forEach(m -> sb.append("• ").append(m.getName())
+            sb.append("Top 5 High-Margin Medicines:\n");
+            withMargin.stream().limit(5).forEach(m -> sb.append("- ").append(m.getName())
                     .append(" | Margin: ").append(String.format("%.1f%%", m.getProfitMarginPercent()))
                     .append(" | Sell: ₹").append(String.format("%.2f", m.getPrice()))
                     .append(" | Buy: ₹").append(String.format("%.2f", m.getPurchasePrice()))
                     .append("\n"));
 
-            sb.append("\n🔴 Bottom 5 Low-Margin Medicines:\n");
+            sb.append("\nBottom 5 Low-Margin Medicines:\n");
             List<Medicine> bottom = withMargin.stream()
                     .sorted(Comparator.comparingDouble(Medicine::getProfitMarginPercent))
                     .limit(5)
                     .collect(Collectors.toList());
-            bottom.forEach(m -> sb.append("• ").append(m.getName())
+            bottom.forEach(m -> sb.append("- ").append(m.getName())
                     .append(" | Margin: ").append(String.format("%.1f%%", m.getProfitMarginPercent()))
                     .append(" | Sell: ₹").append(String.format("%.2f", m.getPrice()))
                     .append(" | Buy: ₹").append(String.format("%.2f", m.getPurchasePrice()))
@@ -279,12 +279,12 @@ public class InventoryAIService {
             double totalStockValue = all.stream().mapToDouble(m -> m.getPrice() * m.getStock()).sum();
             long negativeMarginCount = withMargin.stream().filter(m -> m.getProfitMarginPercent() < 0).count();
 
-            sb.append("\n📊 Summary\n");
-            sb.append("• Medicines with pricing data: ").append(withMargin.size()).append("\n");
-            sb.append("• Average profit margin: ").append(String.format("%.1f%%", avgMargin)).append("\n");
-            sb.append("• Total stock retail value: ₹").append(String.format("%.2f", totalStockValue)).append("\n");
+            sb.append("\nSummary\n");
+            sb.append("- Medicines with pricing data: ").append(withMargin.size()).append("\n");
+            sb.append("- Average profit margin: ").append(String.format("%.1f%%", avgMargin)).append("\n");
+            sb.append("- Total stock retail value: ₹").append(String.format("%.2f", totalStockValue)).append("\n");
             if (negativeMarginCount > 0) {
-                sb.append("• ⚠️ Medicines sold below cost: ").append(negativeMarginCount).append("\n");
+                sb.append("- Medicines sold below cost: ").append(negativeMarginCount).append("\n");
             }
 
             return sb.toString();
@@ -329,6 +329,6 @@ public class InventoryAIService {
             .put("prompt", question)
             .put("business_context", context.toString());
 
-        return aiOrchestrator.processOrchestration("raw_chat", data, "local_fallback", false);
+        return aiOrchestrator.processOrchestration("raw_chat", data, "cloud_only", false);
     }
 }

@@ -2,12 +2,10 @@ package org.example.MediManage.service.ai;
 
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.MedicineDAO;
-import org.example.MediManage.dao.PrescriptionDAO;
 import org.example.MediManage.model.BillHistoryRecord;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
 import org.example.MediManage.model.Medicine;
-import org.example.MediManage.model.Prescription;
 import org.example.MediManage.storage.StorageFactory;
 import org.example.MediManage.storage.customer.CustomerStore;
 import org.example.MediManage.util.AppExecutors;
@@ -29,7 +27,6 @@ public class AssistantReportService {
         CUSTOMERS,
         TOP_SELLERS,
         PROFIT,
-        PRESCRIPTIONS,
         DRUG_INTERACTIONS,
         REORDER,
         DAILY_SUMMARY
@@ -37,18 +34,15 @@ public class AssistantReportService {
 
     private final MedicineDAO medicineDAO;
     private final BillDAO billDAO;
-    private final PrescriptionDAO prescriptionDAO;
     private final CustomerStore customerStore;
 
     public AssistantReportService() {
-        this(new MedicineDAO(), new BillDAO(), new PrescriptionDAO(), StorageFactory.customerStore());
+        this(new MedicineDAO(), new BillDAO(), StorageFactory.customerStore());
     }
 
-    AssistantReportService(MedicineDAO medicineDAO, BillDAO billDAO, PrescriptionDAO prescriptionDAO,
-            CustomerStore customerStore) {
+    AssistantReportService(MedicineDAO medicineDAO, BillDAO billDAO, CustomerStore customerStore) {
         this.medicineDAO = medicineDAO;
         this.billDAO = billDAO;
-        this.prescriptionDAO = prescriptionDAO;
         this.customerStore = customerStore;
     }
 
@@ -61,7 +55,6 @@ public class AssistantReportService {
             case CUSTOMERS -> customerBalanceSummary();
             case TOP_SELLERS -> topSellersSummary();
             case PROFIT -> profitSummary();
-            case PRESCRIPTIONS -> prescriptionSummary();
             case DRUG_INTERACTIONS -> drugInteractionSummary();
             case REORDER -> reorderSummary();
             case DAILY_SUMMARY -> dailySummary();
@@ -185,21 +178,6 @@ public class AssistantReportService {
         return sb.toString().trim();
     }
 
-    private String prescriptionSummary() {
-        List<Prescription> prescriptions = prescriptionDAO.getAllPrescriptions();
-        StringBuilder sb = new StringBuilder("[Prescription Overview]\n");
-        prescriptions.stream().limit(15).forEach(p -> sb.append("- ")
-                .append(safe(p.getCustomerName()))
-                .append(" | Doctor: ").append(blankToDash(p.getDoctorName()))
-                .append(" | Status: ").append(blankToDash(p.getStatus()))
-                .append(" | Medicines: ").append(blankToDash(p.getMedicinesText()))
-                .append('\n'));
-        if (prescriptions.isEmpty()) {
-            sb.append("- Status | Value: No prescriptions are available\n");
-        }
-        return sb.toString().trim();
-    }
-
     private String drugInteractionSummary() {
         List<BillHistoryRecord> history = billDAO.getBillHistoryPage(0, 25);
         StringBuilder sb = new StringBuilder("[Recent Multi-Medicine Bills]\n");
@@ -251,7 +229,6 @@ public class AssistantReportService {
         LocalDate today = LocalDate.now();
         int lowStockCount = medicineDAO.getReorderNeeded().size();
         int expiringSoonCount = medicineDAO.getExpiringMedicines(60).size();
-        int pendingPrescriptions = prescriptionDAO.countByStatus("PENDING");
         double totalRevenue = billDAO.getSalesBetweenDates(today, today).values().stream().mapToDouble(Double::doubleValue).sum();
         int customersServed = billDAO.countTodaysUniqueCustomers();
         int totalBills = billDAO.countTodaysBills();
@@ -260,7 +237,6 @@ public class AssistantReportService {
         sb.append("- Revenue Today | Value: ").append(currency(totalRevenue)).append('\n');
         sb.append("- Bills Today | Value: ").append(totalBills).append('\n');
         sb.append("- Customers Served | Value: ").append(customersServed).append('\n');
-        sb.append("- Pending Prescriptions | Value: ").append(pendingPrescriptions).append('\n');
         sb.append("- Low Stock Alerts | Value: ").append(lowStockCount).append('\n');
         sb.append("- Expiring Within 60d | Value: ").append(expiringSoonCount).append('\n');
         return sb.toString().trim();

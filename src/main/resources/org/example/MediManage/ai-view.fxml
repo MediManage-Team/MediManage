@@ -1,66 +1,50 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
-<?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.Priority?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
-<?import javafx.scene.layout.FlowPane?>
 
 <VBox xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.AIController" spacing="8" styleClass="dark-panel">
+    xmlns:fx="http://javafx.com/fxml/1"
+    fx:controller="org.example.MediManage.controller.AIController"
+    spacing="8"
+    styleClass="dark-panel">
 
-    <!-- Header Bar -->
     <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 8 12;">
-        <Label text="🤖 AI Assistant" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;"/>
-        
+        <Label text="AI Assistant" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;"/>
+        <Label text="Cloud AI via Python backend" style="-fx-text-fill: #7dd3fc; -fx-font-size: 11px;"/>
         <Region HBox.hgrow="ALWAYS"/>
-        
-        <HBox alignment="CENTER" spacing="10" style="-fx-background-color: #2a2d3e; -fx-padding: 4 12; -fx-background-radius: 12;">
-            <fx:define>
-                <javafx.scene.control.ToggleGroup fx:id="engineToggleGroup"/>
-            </fx:define>
-            <javafx.scene.control.RadioButton fx:id="cloudRadio" text="☁ Cloud Only" toggleGroup="$engineToggleGroup" selected="true" style="-fx-text-fill: #a855f7; -fx-font-size: 11px;"/>
-            <javafx.scene.control.RadioButton fx:id="localRadio" text="💻 Local Only" toggleGroup="$engineToggleGroup" style="-fx-text-fill: #43e97b; -fx-font-size: 11px;"/>
-        </HBox>
-        
-        <Region HBox.hgrow="ALWAYS"/>
-        
-        <javafx.scene.control.ComboBox fx:id="modelSelector" promptText="⏳ Checking..." onAction="#handleModelSelection" style="-fx-background-color: transparent; -fx-text-fill: #43e97b; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;"/>
-        <Button text="🗑 Clear" onAction="#handleClearChat" style="-fx-background-color: transparent; -fx-text-fill: #888; -fx-border-color: #555; -fx-border-radius: 12; -fx-background-radius: 12; -fx-padding: 3 10; -fx-font-size: 10px; -fx-cursor: hand;"/>
+        <Button text="Clear" onAction="#handleClearChat"
+                style="-fx-background-color: transparent; -fx-text-fill: #888; -fx-border-color: #555; -fx-border-radius: 12; -fx-background-radius: 12; -fx-padding: 3 10; -fx-font-size: 10px; -fx-cursor: hand;"/>
     </HBox>
 
-    <!-- Quick Report Buttons - Row 1: Reports -->
     <FlowPane hgap="6" vgap="6" alignment="CENTER_LEFT" style="-fx-padding: 0 12;">
-        <Button text="📦 Inventory" onAction="#handleInventoryReport" style="-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="⚠ Low Stock" onAction="#handleLowStockReport" style="-fx-background-color: linear-gradient(to right, #f093fb, #f5576c); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="⏰ Expiring" onAction="#handleExpiryReport" style="-fx-background-color: linear-gradient(to right, #f6d365, #fda085); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="💰 Sales" onAction="#handleSalesReport" style="-fx-background-color: linear-gradient(to right, #a8edea, #fed6e3); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="👥 Customers" onAction="#handleCustomerReport" style="-fx-background-color: linear-gradient(to right, #43e97b, #38f9d7); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="🏆 Top Sellers" onAction="#handleTopSellersReport" style="-fx-background-color: linear-gradient(to right, #fa709a, #fee140); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="📊 Profit" onAction="#handleProfitReport" style="-fx-background-color: linear-gradient(to right, #a18cd1, #fbc2eb); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="📋 Prescriptions" onAction="#handlePrescriptionReport" style="-fx-background-color: linear-gradient(to right, #89f7fe, #66a6ff); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="💊 Drug Interactions" onAction="#handleDrugInteractions" style="-fx-background-color: linear-gradient(to right, #ff6a00, #ee0979); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="🔄 Reorder" onAction="#handleReorderSuggestions" style="-fx-background-color: linear-gradient(to right, #00c6fb, #005bea); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
-        <Button text="📅 Daily Summary" onAction="#handleDailySummary" style="-fx-background-color: linear-gradient(to right, #fddb92, #d1fdff); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Inventory" onAction="#handleInventoryReport" style="-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Low Stock" onAction="#handleLowStockReport" style="-fx-background-color: linear-gradient(to right, #f093fb, #f5576c); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Expiring" onAction="#handleExpiryReport" style="-fx-background-color: linear-gradient(to right, #f6d365, #fda085); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Sales" onAction="#handleSalesReport" style="-fx-background-color: linear-gradient(to right, #a8edea, #fed6e3); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Customers" onAction="#handleCustomerReport" style="-fx-background-color: linear-gradient(to right, #43e97b, #38f9d7); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Top Sellers" onAction="#handleTopSellersReport" style="-fx-background-color: linear-gradient(to right, #fa709a, #fee140); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Profit" onAction="#handleProfitReport" style="-fx-background-color: linear-gradient(to right, #a18cd1, #fbc2eb); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Drug Interactions" onAction="#handleDrugInteractions" style="-fx-background-color: linear-gradient(to right, #ff6a00, #ee0979); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Reorder" onAction="#handleReorderSuggestions" style="-fx-background-color: linear-gradient(to right, #00c6fb, #005bea); -fx-text-fill: white; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
+        <Button text="Daily Summary" onAction="#handleDailySummary" style="-fx-background-color: linear-gradient(to right, #fddb92, #d1fdff); -fx-text-fill: #222; -fx-background-radius: 16; -fx-padding: 5 12; -fx-font-size: 11px; -fx-cursor: hand;"/>
     </FlowPane>
 
-    <!-- Chat Area -->
     <ScrollPane fx:id="scrollPane" fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background: #181a28; -fx-background-color: #181a28;">
         <VBox fx:id="chatBox" spacing="6" style="-fx-padding: 10; -fx-background-color: #181a28;"/>
     </ScrollPane>
 
-    <!-- Input Bar -->
     <HBox spacing="8" alignment="CENTER" style="-fx-padding: 6 12 10 12;">
-        <TextField fx:id="inputField" promptText="Ask about inventory, sales, expiring medicines, or any question..." HBox.hgrow="ALWAYS" onAction="#handleSendMessage" style="-fx-background-radius: 20; -fx-padding: 8 16;"/>
-        <CheckBox fx:id="webSearchCheck" text="🔍 DB + Web" selected="true" style="-fx-text-fill: #aaa; -fx-font-size: 11px;"/>
-        <Button fx:id="stopButton" text="🛑 Stop" onAction="#handleStopGeneration" visible="false" managed="false" style="-fx-background-color: #f5576c; -fx-text-fill: white; -fx-background-radius: 20; -fx-padding: 8 18; -fx-font-size: 12px; -fx-cursor: hand;"/>
+        <TextField fx:id="inputField" promptText="Ask about inventory, sales, expiring medicines, or any pharmacy question..." HBox.hgrow="ALWAYS" onAction="#handleSendMessage" style="-fx-background-radius: 20; -fx-padding: 8 16;"/>
+        <CheckBox fx:id="webSearchCheck" text="Web Search" selected="true" style="-fx-text-fill: #aaa; -fx-font-size: 11px;"/>
+        <Button fx:id="stopButton" text="Stop" onAction="#handleStopGeneration" visible="false" managed="false" style="-fx-background-color: #f5576c; -fx-text-fill: white; -fx-background-radius: 20; -fx-padding: 8 18; -fx-font-size: 12px; -fx-cursor: hand;"/>
         <Button fx:id="sendButton" text="Send ➤" onAction="#handleSendMessage" style="-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-background-radius: 20; -fx-padding: 8 18; -fx-font-size: 12px; -fx-cursor: hand;"/>
     </HBox>
 </VBox>

@@ -197,23 +197,7 @@ ALTER TABLE medicines
 ADD COLUMN active INTEGER DEFAULT 1;
 -- Index on the new generic_name column
 CREATE INDEX IF NOT EXISTS idx_medicines_generic ON medicines(generic_name);
--- 8. PRESCRIPTIONS
-CREATE TABLE IF NOT EXISTS prescriptions (
-    prescription_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER,
-    customer_name TEXT NOT NULL,
-    doctor_name TEXT,
-    status TEXT DEFAULT 'PENDING',
-    prescribed_date TEXT DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT,
-    medicines_text TEXT,
-    ai_validation TEXT,
-    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-);
-CREATE INDEX IF NOT EXISTS idx_prescriptions_customer ON prescriptions(customer_id);
-CREATE INDEX IF NOT EXISTS idx_prescriptions_status ON prescriptions(status);
-CREATE INDEX IF NOT EXISTS idx_prescriptions_status_date ON prescriptions(status, prescribed_date DESC);
--- 8A. AI PROMPT REGISTRY
+-- 8. AI PROMPT REGISTRY
 CREATE TABLE IF NOT EXISTS ai_prompt_registry (
     prompt_version_id INTEGER PRIMARY KEY AUTOINCREMENT,
     prompt_key TEXT NOT NULL,
@@ -431,70 +415,16 @@ ADD COLUMN selling_price REAL DEFAULT 0.0;
 ALTER TABLE purchase_order_items
 ADD COLUMN reorder_threshold INTEGER DEFAULT 10;
 -- ======================== PHASE 3: ADVANCED FEATURES ========================
--- 29. LOCATIONS (multi-pharmacy/warehouse)
-CREATE TABLE IF NOT EXISTS locations (
-    location_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    address TEXT,
-    phone TEXT,
-    location_type TEXT NOT NULL DEFAULT 'PHARMACY',
-    active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (
-        location_type IN ('PHARMACY', 'WAREHOUSE', 'CLINIC')
-    )
-);
--- 30. LOCATION STOCK (per-location inventory)
-CREATE TABLE IF NOT EXISTS location_stock (
-    location_stock_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    location_id INTEGER NOT NULL,
-    medicine_id INTEGER NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 0,
-    min_stock INTEGER NOT NULL DEFAULT 5,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (location_id) REFERENCES locations(location_id),
-    FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id),
-    UNIQUE(location_id, medicine_id)
-);
-CREATE INDEX IF NOT EXISTS idx_location_stock_loc ON location_stock(location_id);
-CREATE INDEX IF NOT EXISTS idx_location_stock_med ON location_stock(medicine_id);
--- 31. STOCK TRANSFERS
-CREATE TABLE IF NOT EXISTS stock_transfers (
-    transfer_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_location_id INTEGER NOT NULL,
-    to_location_id INTEGER NOT NULL,
-    medicine_id INTEGER NOT NULL,
-    quantity INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'PENDING',
-    requested_by INTEGER,
-    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at TEXT,
-    FOREIGN KEY (from_location_id) REFERENCES locations(location_id),
-    FOREIGN KEY (to_location_id) REFERENCES locations(location_id),
-    FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id),
-    FOREIGN KEY (requested_by) REFERENCES users(user_id),
-    CHECK (
-        status IN (
-            'PENDING',
-            'IN_TRANSIT',
-            'COMPLETED',
-            'CANCELLED'
-        )
-    )
-);
--- 32. LOCATION ON BILLS
-ALTER TABLE bills
-ADD COLUMN location_id INTEGER;
--- 33. PURCHASE PRICE ON MEDICINES (profit margin tracking)
+-- 29. PURCHASE PRICE ON MEDICINES (profit margin tracking)
 ALTER TABLE medicines
 ADD COLUMN purchase_price REAL DEFAULT 0.0;
--- 34. CUSTOMER LOYALTY POINTS
+-- 30. CUSTOMER LOYALTY POINTS
 ALTER TABLE customers
 ADD COLUMN loyalty_points INTEGER DEFAULT 0;
--- 35. REORDER THRESHOLD ON MEDICINES (low stock reorder workflow)
+-- 31. REORDER THRESHOLD ON MEDICINES (low stock reorder workflow)
 ALTER TABLE medicines
 ADD COLUMN reorder_threshold INTEGER DEFAULT 10;
--- 36. ADD CHECK CONSTRAINT TO STOCK
+-- 32. ADD CHECK CONSTRAINT TO STOCK
 DROP VIEW IF EXISTS v_medicine_management_overview;
 DROP VIEW IF EXISTS v_inventory_batch_expiry_timeline;
 

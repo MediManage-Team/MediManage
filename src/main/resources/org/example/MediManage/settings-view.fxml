@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.image.*?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/17"
-    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.SettingsController" fitToWidth="true" styleClass="edge-to-edge">
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MediManage.controller.SettingsController" fitToWidth="true" pannable="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="edge-to-edge">
     <VBox spacing="20" styleClass="dark-panel">
+        <padding>
+            <Insets top="20" right="20" bottom="32" left="20"/>
+        </padding>
         <Label text="System Settings" styleClass="page-title"/>
 
-        <!-- Database Configuration -->
         <TitledPane text="Database Configuration" collapsible="false">
             <VBox spacing="10">
                 <VBox spacing="6">
@@ -22,7 +25,7 @@
 
                 <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
                     <Button text="Test Database Connection" onAction="#handleTestDatabaseConnection" styleClass="button-outlined"/>
-                    <Button text="🗑️ Clear Demo Data" onAction="#handleClearDemoData" styleClass="button-danger"/>
+                    <Button text="Clear Demo Data" onAction="#handleClearDemoData" styleClass="button-danger"/>
                     <Button text="Save Database Settings" onAction="#handleSaveDatabase" styleClass="button-success"/>
                 </HBox>
             </VBox>
@@ -72,51 +75,10 @@
             </VBox>
         </TitledPane>
 
-        <!-- Local AI Configuration -->
-        <TitledPane text="Local AI Configuration" collapsible="false">
-            <VBox spacing="10">
-                <HBox spacing="10" alignment="CENTER_LEFT">
-                    <Button text="Open Model Store" onAction="#handleOpenModelStore" styleClass="button-purple"/>
-                    <Button text="Refresh Installed Models" onAction="#handleRefreshLocalModels" styleClass="button-outlined"/>
-                </HBox>
-                <Label text="Current Model:" style="-fx-font-weight: bold;"/>
-                <HBox spacing="10" alignment="CENTER_LEFT">
-                    <ComboBox fx:id="localModelCombo" promptText="Select local model..." HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                    <Button text="Browse" onAction="#handleBrowseModel" style="-fx-min-width: 80px;"/>
-                    <Button text="Load Selected" onAction="#handleLoadSelectedModel" styleClass="button-primary" style="-fx-min-width: 110px;"/>
-                </HBox>
-                <Label fx:id="localModelStatusLabel" text="Checking local AI engine..." styleClass="text-muted" wrapText="true"/>
-
-                <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
-                <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
-                <Label text="Select 'Auto' to let the system decide, or force a specific provider." styleClass="text-muted"/>
-
-                <VBox fx:id="envContainer" spacing="8" style="-fx-padding: 10 0 0 0;">
-                    <!-- Environment cards dynamically injected here -->
-                </VBox>
-
-                <Separator/>
-
-                <Label text="HuggingFace Token (Optional — for faster downloads)" style="-fx-font-weight: bold;"/>
-                <HBox spacing="8" alignment="CENTER_LEFT">
-                    <PasswordField fx:id="hfTokenField" promptText="hf_xxxxxxxxxxxxxxx" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                    <Button text="Test" onAction="#handleTestHfToken" styleClass="button-primary" style="-fx-min-width: 60;"/>
-                </HBox>
-                <Label text="Get a free token at: huggingface.co/settings/tokens" styleClass="text-muted" wrapText="true"/>
-
-                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
-                    <Button text="View Engine Logs" onAction="#handleViewEngineLogs" styleClass="button-outlined"/>
-                    <Button text="Save Local AI Settings" onAction="#handleSaveLocalAI" styleClass="button-success"/>
-                </HBox>
-            </VBox>
-        </TitledPane>
-
-        <!-- Cloud AI Configuration -->
         <TitledPane text="Cloud AI Configuration" collapsible="false">
             <VBox spacing="12">
-                <Label text="Select your Cloud AI provider and model for Care Protocols and medical tasks." styleClass="text-muted"/>
+                <Label text="Cloud AI is the only supported AI mode. Configure the provider and model used by the Python backend." styleClass="text-muted"/>
 
-                <!-- Provider + Model Selection -->
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <VBox spacing="3" HBox.hgrow="ALWAYS">
                         <Label text="Provider" style="-fx-font-weight: bold;"/>
@@ -130,7 +92,6 @@
 
                 <Separator/>
 
-                <!-- API Keys per Provider -->
                 <Label text="API Keys" style="-fx-font-weight: bold; -fx-font-size: 13px;"/>
                 <Label text="Enter API keys for each provider you want to use. Keys are stored locally." styleClass="text-muted"/>
 
@@ -168,28 +129,26 @@
             </VBox>
         </TitledPane>
 
-        <!-- Communication Configuration -->
         <TitledPane text="Communication Configuration" collapsible="false">
             <VBox spacing="10">
                 <HBox spacing="20">
-                    <!-- Email Settings -->
                     <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;">
                         <Label text="Email Settings (SMTP)" style="-fx-font-weight: bold;"/>
                         <Label text="Used for sending PDF Invoices." styleClass="text-muted" wrapText="true"/>
-                        
+
                         <GridPane hgap="10" vgap="8">
                             <Label text="SMTP Host:" GridPane.rowIndex="0" GridPane.columnIndex="0" styleClass="text-muted"/>
                             <TextField fx:id="smtpHostField" promptText="smtp.gmail.com" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
+
                             <Label text="SMTP Port:" GridPane.rowIndex="1" GridPane.columnIndex="0" styleClass="text-muted"/>
                             <TextField fx:id="smtpPortField" promptText="587" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
+
                             <Label text="Username:" GridPane.rowIndex="2" GridPane.columnIndex="0" styleClass="text-muted"/>
                             <TextField fx:id="smtpUserField" promptText="pharmacy@gmail.com" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
+
                             <Label text="Password:" GridPane.rowIndex="3" GridPane.columnIndex="0" styleClass="text-muted"/>
                             <PasswordField fx:id="smtpPassField" promptText="App Password" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
-                            
+
                             <columnConstraints>
                                 <ColumnConstraints minWidth="80" prefWidth="85"/>
                                 <ColumnConstraints hgrow="ALWAYS"/>
@@ -197,7 +156,6 @@
                         </GridPane>
                     </VBox>
 
-                    <!-- WhatsApp Bridge Settings -->
                     <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;" alignment="TOP_LEFT">
                         <Label text="Local WhatsApp Bridge" style="-fx-font-weight: bold;"/>
                         <Label text="Uses whatsapp-web.js to send free invoices." styleClass="text-muted" wrapText="true"/>
@@ -281,7 +239,6 @@
                     <Button text="Save Receipt Branding" onAction="#handleSaveReceiptSettings" styleClass="button-success"/>
                 </HBox>
 
-                <!-- Customer Communication Templates (inside Communication section) -->
                 <javafx.scene.control.Separator/>
                 <Label text="Customer Communication Templates" style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #00d4ff;"/>
                 <Label text="Customize messages sent to customers via WhatsApp and Email. Use placeholders to insert dynamic data." styleClass="text-muted" wrapText="true"/>
@@ -316,8 +273,8 @@
                     <Region HBox.hgrow="ALWAYS"/>
                     <Button text="Refresh Audit" onAction="#handleRefreshAuditTrail" styleClass="button-outlined"/>
                 </HBox>
-                <ListView fx:id="listAuditEvents" prefHeight="180" maxHeight="220"/>
-                <Label text="Includes medicine changes, stock write-offs, purchase receipts, location transfer actions, approvals, and backup/restore activity." styleClass="text-muted" wrapText="true"/>
+                <ListView fx:id="listAuditEvents" prefHeight="150" maxHeight="170"/>
+                <Label text="Shows recent medicine changes, stock write-offs, purchase receipts, approvals, and backup or restore activity." styleClass="text-muted" wrapText="true"/>
             </VBox>
         </TitledPane>
     </VBox>

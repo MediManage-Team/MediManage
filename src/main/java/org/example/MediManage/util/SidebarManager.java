@@ -26,7 +26,6 @@ public class SidebarManager {
                     addButton(container, "\ud83d\udc64 Users", "users-view", switcher);
                     addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
                     addButton(container, "\ud83d\udea8 Alerts", "alerts-view", switcher);
-                    addButton(container, "\ud83d\udccd Locations", "locations-view", switcher);
                     addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
                     addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
                     addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
@@ -39,7 +38,6 @@ public class SidebarManager {
                 case MANAGER:
                     addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
                     addButton(container, "\ud83d\udea8 Alerts", "alerts-view", switcher);
-                    addButton(container, "\ud83d\udccd Locations", "locations-view", switcher);
                     addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
                     addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
                     addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
@@ -49,7 +47,6 @@ public class SidebarManager {
                     break;
                 case PHARMACIST:
                     addButton(container, "\ud83d\udd0d Medicine Search", "medicine-search-view", switcher);
-                    addButton(container, "\ud83d\udccb Prescriptions", "prescriptions-view", switcher);
                     break;
                 case CASHIER:
                     addButton(container, "\ud83d\udcb3 Billing", "billing-view", switcher);

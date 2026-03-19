@@ -22,8 +22,8 @@ import org.example.MediManage.util.AppExecutors;
 import java.util.List;
 
 public class CustomersController {
-    private static final String ANALYZE_READY_LABEL = "✨ Analyze Customer Health";
-    private static final String ANALYZE_BUSY_LABEL = "⏳ Analyzing...";
+    private static final String ANALYZE_READY_LABEL = "Analyze Customer Health";
+    private static final String ANALYZE_BUSY_LABEL = "Analyzing...";
 
     // ======================== FXML BINDINGS ========================
 
@@ -51,7 +51,7 @@ public class CustomersController {
     @FXML
     private TextField txtEmail;
     @FXML
-    private TextField txtAddress;
+    private TextArea txtAddress;
     @FXML
     private TextField txtNomineeName;
     @FXML
@@ -62,6 +62,14 @@ public class CustomersController {
     private TextField txtInsurancePolicyNo;
     @FXML
     private TextArea txtDiseases;
+    @FXML
+    private Label lblSelectedCustomerName;
+    @FXML
+    private Label lblSelectedCustomerMeta;
+    @FXML
+    private Label lblSelectionState;
+    @FXML
+    private Label lblSelectedCustomerBalance;
 
     @FXML
     private Button btnSave;
@@ -116,6 +124,7 @@ public class CustomersController {
         // Filtered list for search
         filteredList = new FilteredList<>(customerList, p -> true);
         customerTable.setItems(filteredList);
+        customerTable.setPlaceholder(new Label("No customers found for the current search."));
 
         // Search listener
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
@@ -142,6 +151,7 @@ public class CustomersController {
             txtAIAnalysis.setContextMenuEnabled(false);
             txtAIAnalysis.setStyle("-fx-background-color: transparent;");
         }
+        updateSelectionSummary(null);
         setAnalysisContent("Select a customer and run AI health analysis to see medication, adherence, and follow-up insights.");
         setupKeyboardShortcuts();
     }
@@ -222,6 +232,7 @@ public class CustomersController {
         btnDelete.setDisable(false);
         if (btnAIAnalysis != null)
             btnAIAnalysis.setDisable(false);
+        updateSelectionSummary(c);
     }
 
     private Customer buildCustomerFromForm() {
@@ -302,6 +313,7 @@ public class CustomersController {
         btnDelete.setDisable(true);
         if (btnAIAnalysis != null)
             btnAIAnalysis.setDisable(true);
+        updateSelectionSummary(null);
         setAnalysisContent("Select a customer and run AI health analysis to see medication, adherence, and follow-up insights.");
         customerTable.getSelectionModel().clearSelection();
     }
@@ -321,7 +333,7 @@ public class CustomersController {
             btnAIAnalysis.setText(ANALYZE_BUSY_LABEL);
         }
         setSpinnerVisible(true);
-        setAnalysisContent("⏳ Running AI health analysis...");
+        setAnalysisContent("Running AI health analysis...");
 
         customerService.analyzeCustomerHealth(selectedCustomer, analysis.diseases())
                 .thenAccept(result -> Platform.runLater(() -> {
@@ -338,7 +350,7 @@ public class CustomersController {
                             btnAIAnalysis.setText(ANALYZE_READY_LABEL);
                         }
                         setSpinnerVisible(false);
-                        setAnalysisContent("❌ Request failed.\n" + rootCauseMessage(ex) + "\n\nPlease retry using the same action button.");
+                        setAnalysisContent("Request failed.\n" + rootCauseMessage(ex) + "\n\nPlease retry using the same action button.");
                     });
                     return null;
                 });
@@ -368,6 +380,33 @@ public class CustomersController {
             return "Unknown error";
         }
         return current.getMessage();
+    }
+
+    private void updateSelectionSummary(Customer customer) {
+        if (lblSelectedCustomerName == null || lblSelectedCustomerMeta == null
+                || lblSelectionState == null || lblSelectedCustomerBalance == null) {
+            return;
+        }
+
+        if (customer == null) {
+            lblSelectedCustomerName.setText("New Customer");
+            lblSelectedCustomerMeta.setText("Create a new profile or select an existing customer from the table.\nPhone, email, and balance will appear here after selection.");
+            lblSelectionState.setText("New Profile");
+            lblSelectedCustomerBalance.setText("₹0.00");
+            return;
+        }
+
+        lblSelectedCustomerName.setText(valueOrFallback(customer.getName(), "Unnamed Customer"));
+        lblSelectedCustomerMeta.setText(
+                "Customer ID #" + customer.getCustomerId()
+                        + "\nPhone: " + valueOrFallback(customer.getPhoneNumber(), "Not provided")
+                        + "\nEmail: " + valueOrFallback(customer.getEmail(), "Not provided"));
+        lblSelectionState.setText("Saved Record");
+        lblSelectedCustomerBalance.setText(String.format("₹%.2f", customer.getCurrentBalance()));
+    }
+
+    private String valueOrFallback(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     // ======================== UTILS ========================

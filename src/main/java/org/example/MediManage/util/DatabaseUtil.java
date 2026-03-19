@@ -1,6 +1,9 @@
 package org.example.MediManage.util;
 
 import org.example.MediManage.config.DatabaseConfig;
+import org.example.MediManage.dao.MessageTemplateDAO;
+import org.example.MediManage.model.UserRole;
+import org.example.MediManage.security.PasswordHasher;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -35,6 +38,9 @@ public class DatabaseUtil {
             LOGGER.info("Connected to database successfully.");
 
             runSchema(conn);
+            dropLegacyPrescriptionTableIfPresent(conn);
+            dropLegacyLocationTablesIfPresent(conn);
+            migrateBillsTableToRemoveLocationColumn(conn);
             reconcileInventoryBatches(conn);
             purgeLegacyDemoAdminIfPresent(conn);
 
@@ -50,6 +56,9 @@ public class DatabaseUtil {
 
             LOGGER.info("Connected to database successfully.");
             runSchema(conn);
+            dropLegacyPrescriptionTableIfPresent(conn);
+            dropLegacyLocationTablesIfPresent(conn);
+            migrateBillsTableToRemoveLocationColumn(conn);
             reconcileInventoryBatches(conn);
             purgeLegacyDemoAdminIfPresent(conn);
             seedMessageTemplatesIfNeeded(conn);
@@ -106,6 +115,7 @@ public class DatabaseUtil {
     }
 
     private static void seedMessageTemplatesIfNeeded(Connection conn) {
+        MessageTemplateDAO dao = new MessageTemplateDAO();
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM message_templates")) {
             if (rs.next() && rs.getInt(1) > 0) {
@@ -117,22 +127,17 @@ public class DatabaseUtil {
         }
 
         LOGGER.info("Seeding default message templates.");
-        org.example.MediManage.dao.MessageTemplateDAO dao = new org.example.MediManage.dao.MessageTemplateDAO();
         try {
-            dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE, null, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE)));
-            dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT), dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT)));
-            dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY, null, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY)));
+            insertMessageTemplate(conn, MessageTemplateDAO.KEY_WHATSAPP_INVOICE, null,
+                    dao.getDefaultBody(MessageTemplateDAO.KEY_WHATSAPP_INVOICE));
+            insertMessageTemplate(conn, MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT,
+                    dao.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT),
+                    dao.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT));
+            insertMessageTemplate(conn, MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY, null,
+                    dao.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY));
             LOGGER.info("Default message templates seeded.");
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to seed templates: {0}", e.getMessage());
-        }
-    }
-
-    public static void seedDemoData() throws SQLException {
-        try (Connection conn = getConnection()) {
-            LOGGER.info("Seeding demo data explicitly.");
-            runSqlResource(conn, "/db/seed_data.sql");
-            runSqlResource(conn, "/db/seed_dashboard.sql");
         }
     }
 
@@ -246,6 +251,102 @@ public class DatabaseUtil {
         }
     }
 
+    private static void dropLegacyPrescriptionTableIfPresent(Connection conn) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS prescriptions");
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Failed to remove legacy prescriptions table: {0}", e.getMessage());
+        }
+    }
+
+    private static void dropLegacyLocationTablesIfPresent(Connection conn) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS stock_transfers");
+            stmt.execute("DROP TABLE IF EXISTS location_stock");
+            stmt.execute("DROP TABLE IF EXISTS locations");
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Failed to remove legacy location tables: {0}", e.getMessage());
+        }
+    }
+
+    private static void migrateBillsTableToRemoveLocationColumn(Connection conn) {
+        try {
+            if (!columnExists(conn, "bills", "location_id")) {
+                return;
+            }
+
+            boolean previousAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA foreign_keys = OFF");
+                stmt.execute("""
+                        CREATE TABLE IF NOT EXISTS bills_migrated (
+                            bill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            customer_id INTEGER,
+                            user_id INTEGER,
+                            total_amount REAL,
+                            bill_date TEXT DEFAULT CURRENT_TIMESTAMP,
+                            payment_mode TEXT DEFAULT 'CASH',
+                            ai_care_protocol TEXT,
+                            subscription_enrollment_id INTEGER,
+                            subscription_plan_id INTEGER,
+                            subscription_discount_percent REAL DEFAULT 0.0,
+                            subscription_savings_amount REAL DEFAULT 0.0,
+                            subscription_approval_reference TEXT,
+                            FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+                            FOREIGN KEY (user_id) REFERENCES users(user_id),
+                            FOREIGN KEY (subscription_enrollment_id) REFERENCES subscription_enrollments(enrollment_id),
+                            FOREIGN KEY (subscription_plan_id) REFERENCES subscription_plans(plan_id)
+                        )
+                        """);
+                stmt.execute("""
+                        INSERT INTO bills_migrated (
+                            bill_id,
+                            customer_id,
+                            user_id,
+                            total_amount,
+                            bill_date,
+                            payment_mode,
+                            ai_care_protocol,
+                            subscription_enrollment_id,
+                            subscription_plan_id,
+                            subscription_discount_percent,
+                            subscription_savings_amount,
+                            subscription_approval_reference
+                        )
+                        SELECT
+                            bill_id,
+                            customer_id,
+                            user_id,
+                            total_amount,
+                            bill_date,
+                            payment_mode,
+                            ai_care_protocol,
+                            subscription_enrollment_id,
+                            subscription_plan_id,
+                            subscription_discount_percent,
+                            subscription_savings_amount,
+                            subscription_approval_reference
+                        FROM bills
+                        """);
+                stmt.execute("DROP TABLE bills");
+                stmt.execute("ALTER TABLE bills_migrated RENAME TO bills");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(bill_date)");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customer_id)");
+                stmt.execute("PRAGMA foreign_keys = ON");
+                conn.commit();
+                LOGGER.info("Removed legacy bills.location_id column from the database.");
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Failed to migrate bills table away from location_id: {0}", e.getMessage());
+        }
+    }
+
     private static List<String> loadSqlStatements(String resourcePath) throws SQLException {
         List<String> statements = new ArrayList<>();
         try (InputStream is = DatabaseUtil.class.getResourceAsStream(resourcePath)) {
@@ -273,36 +374,6 @@ public class DatabaseUtil {
             return collapsed;
         }
         return collapsed.substring(0, 117) + "...";
-    }
-
-    /**
-     * Executes all SQL statements from a classpath resource file.
-     */
-    private static void runSqlResource(Connection conn, String resourcePath) {
-        try (InputStream is = DatabaseUtil.class.getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                LOGGER.log(Level.WARNING, "SQL resource not found: {0}", resourcePath);
-                return;
-            }
-            try (java.util.Scanner scanner = new java.util.Scanner(is, StandardCharsets.UTF_8.name())) {
-                scanner.useDelimiter(";");
-                try (Statement stmt = conn.createStatement()) {
-                    while (scanner.hasNext()) {
-                        String sql = scanner.next().trim();
-                        if (!sql.isEmpty() && !sql.startsWith("--")) {
-                            try {
-                                stmt.execute(sql);
-                            } catch (SQLException e) {
-                                LOGGER.log(Level.WARNING, "SQL resource warning for {0}: {1}",
-                                        new Object[] { resourcePath, e.getMessage() });
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (java.io.IOException | SQLException e) {
-            LOGGER.log(Level.WARNING, "Failed to execute SQL resource " + resourcePath, e);
-        }
     }
 
     private static String resolveSchemaResource(Connection conn) throws SQLException {
@@ -401,46 +472,77 @@ public class DatabaseUtil {
     }
 
     /**
-     * Wipes all operational database tables, retaining only the Users and Message Templates.
-     * This is intended for customers to clear out the demo database before starting real operations.
+     * Wipes all application data, restores the default admin credential, and re-seeds
+     * only the minimum system templates needed for runtime flows.
      */
     public static void clearDemoData() throws SQLException {
-        String[] tablesToClear = {
-            "inventory_adjustments",
-            "expenses",
-            "held_order_items",
-            "held_orders",
-            "order_items",
-            "orders",
-            "bill_items",
-            "bills",
-            "suppliers",
-            "stock",
-            "medicines",
-            "customers"
-        };
-        
         try (Connection conn = getConnection()) {
+            List<String> tablesToClear = getApplicationTables(conn);
             conn.setAutoCommit(false);
             try (Statement stmt = conn.createStatement()) {
-                // Temporarily disable FK checks to allow bulk deletion in any order
                 stmt.execute("PRAGMA foreign_keys = OFF;");
-                
+
                 for (String table : tablesToClear) {
-                    stmt.execute("DELETE FROM " + table + ";");
-                    // Reset sqlite_sequence for this table if it exists
-                    stmt.execute("DELETE FROM sqlite_sequence WHERE name='" + table + "';");
+                    stmt.executeUpdate("DELETE FROM " + table);
                 }
-                
+
+                stmt.executeUpdate("DELETE FROM sqlite_sequence");
+                restoreDefaultAdmin(conn);
+                seedMessageTemplatesIfNeeded(conn);
                 stmt.execute("PRAGMA foreign_keys = ON;");
                 conn.commit();
-                LOGGER.info("Successfully cleared demo data.");
+                LOGGER.info("Successfully cleared demo data and restored the default admin account.");
             } catch (SQLException e) {
                 conn.rollback();
                 throw new SQLException("Failed to clear demo data. Transaction rolled back.", e);
             } finally {
                 conn.setAutoCommit(true);
             }
+        }
+    }
+
+    private static void insertMessageTemplate(Connection conn, String key, String subject, String body)
+            throws SQLException {
+        String sql = """
+                INSERT INTO message_templates (template_key, subject, body_template)
+                VALUES (?, ?, ?)
+                ON CONFLICT(template_key) DO UPDATE SET
+                    subject = excluded.subject,
+                    body_template = excluded.body_template
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, key);
+            stmt.setString(2, subject);
+            stmt.setString(3, body);
+            stmt.executeUpdate();
+        }
+    }
+
+    private static List<String> getApplicationTables(Connection conn) throws SQLException {
+        List<String> tables = new ArrayList<>();
+        String sql = """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                tables.add(rs.getString(1));
+            }
+        }
+        return tables;
+    }
+
+    private static void restoreDefaultAdmin(Connection conn) throws SQLException {
+        String sql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, "admin");
+            stmt.setString(2, PasswordHasher.hash("admin"));
+            stmt.setString(3, UserRole.ADMIN.name());
+            stmt.executeUpdate();
         }
     }
 }

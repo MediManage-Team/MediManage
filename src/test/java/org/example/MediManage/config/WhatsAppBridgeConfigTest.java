@@ -7,21 +7,19 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.prefs.Preferences;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WhatsAppBridgeConfigTest {
-    private final Preferences prefs = Preferences.userNodeForPackage(MediManageApplication.class);
     private final String originalUserDir = System.getProperty("user.dir");
     private Path tempRoot;
 
     @AfterEach
     void tearDown() throws Exception {
-        prefs.remove("whatsapp_server_path");
-        prefs.remove("whatsapp_bridge_port");
+        System.clearProperty(WhatsAppBridgeConfig.SERVER_PATH_OVERRIDE_PROPERTY);
+        System.clearProperty(WhatsAppBridgeConfig.PORT_OVERRIDE_PROPERTY);
         System.setProperty("user.dir", originalUserDir);
         if (tempRoot != null) {
             deleteRecursively(tempRoot);
@@ -38,8 +36,8 @@ class WhatsAppBridgeConfigTest {
         Files.createFile(serverDir.resolve("index.js"));
         Files.createFile(serverDir.resolve("start_protected.js"));
 
-        prefs.put("whatsapp_server_path", serverDir.toString());
-        prefs.putInt("whatsapp_bridge_port", 4123);
+        System.setProperty(WhatsAppBridgeConfig.SERVER_PATH_OVERRIDE_PROPERTY, serverDir.toString());
+        System.setProperty(WhatsAppBridgeConfig.PORT_OVERRIDE_PROPERTY, "4123");
         System.setProperty("user.dir", isolatedUserDir.toString());
 
         ProcessBuilder builder = WhatsAppBridgeConfig.createStartProcessBuilder();
@@ -55,7 +53,7 @@ class WhatsAppBridgeConfigTest {
 
     @Test
     void shutdownUrlUsesConfiguredPort() {
-        prefs.putInt("whatsapp_bridge_port", 4555);
+        System.setProperty(WhatsAppBridgeConfig.PORT_OVERRIDE_PROPERTY, "4555");
 
         assertEquals("http://127.0.0.1:4555/shutdown", WhatsAppBridgeConfig.shutdownUrl());
     }

@@ -15,7 +15,6 @@ import javafx.stage.StageStyle;
 import org.example.MediManage.config.WhatsAppBridgeConfig;
 import org.example.MediManage.security.LocalAdminTokenManager;
 import org.example.MediManage.service.AdminBootstrapService;
-import org.example.MediManage.service.ai.PythonEnvironmentManager;
 import org.example.MediManage.service.sidecar.SidecarHttpProbe;
 import org.example.MediManage.service.sidecar.SidecarOwnershipMetadata;
 import org.example.MediManage.service.sidecar.SidecarProbeResult;
@@ -29,7 +28,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -42,8 +40,6 @@ public class MediManageApplication extends Application {
         private volatile Process pythonProcess;
         private volatile Process mcpProcess;
         private volatile Process whatsappBridgeProcess;
-        private org.example.MediManage.service.ai.PythonEnvironmentManager envManager;
-        private volatile StartupProgressController startupPopup;
 
         public static MediManageApplication getInstance() {
                 return instance;
@@ -128,66 +124,8 @@ public class MediManageApplication extends Application {
                                                         .warning("AI Engine port 5000 is occupied by another process.");
                                         return;
                                 }
-
-                                // Get environment manager
-                                envManager = org.example.MediManage.service.ai.AIServiceProvider.get().getEnvManager();
-
-                                // Read user preference for active environment
                                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences
                                                 .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
-                                String envPref = prefs.get("active_python_env", "cpu");
-
-                                // Auto-detect best GPU environment when hardware is set to "Auto"
-                                String aiHardware = prefs.get("ai_hardware", "Auto");
-                                if ("Auto".equals(aiHardware)) {
-                                        String detected = envManager.autoDetectBestEnv();
-                                        if (!detected.equals(envPref)) {
-                                                LOGGER.info("🎯 Auto-switching environment: "
-                                                                + envPref + " → " + detected);
-                                                envPref = detected;
-                                                prefs.put("active_python_env", envPref);
-                                        }
-                                }
-
-                                envManager.setActiveEnvironment(envPref);
-
-                                // Check if environment needs setup
-                                boolean needsSetup = !envManager.isEnvReady(envPref);
-
-                                if (needsSetup) {
-                                        // Show progress popup only when setup is actually required
-                                        LOGGER.info("📦 Environment '" + envPref
-                                                        + "' needs setup. Showing progress popup...");
-                                        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(
-                                                        1);
-                                        Platform.runLater(() -> {
-                                                startupPopup = StartupProgressController.show();
-                                                if (startupPopup != null) {
-                                                        startupPopup.setStatus("⚙️ Setting up "
-                                                                        + envManager.getActiveLabel() + "...");
-                                                        startupPopup.appendLog(
-                                                                        "🔧 First-time setup — installing Python environment.");
-                                                        startupPopup.appendLog(
-                                                                        "⏳ This may take a few minutes. Sorry for the inconvenience!");
-                                                        startupPopup.appendLog("");
-                                                }
-                                                latch.countDown();
-                                        });
-                                        latch.await(); // Wait for popup to be created
-
-                                        // Connect log streaming to popup
-                                        envManager.setLogCallback(msg -> {
-                                                if (startupPopup != null && !startupPopup.isClosed()) {
-                                                        startupPopup.appendLog(msg);
-                                                }
-                                        });
-                                } else {
-                                        LOGGER.info("✅ Environment '" + envPref + "' already ready.");
-                                }
-
-                                // Prefer raw source during normal development. The PyArmor-protected
-                                // bundle is reserved for packaged installs where the raw source is absent.
-                                String pythonExe = "python";
                                 java.io.File rawServerScript = new java.io.File(System.getProperty("user.dir"),
                                                 "ai_engine/server/server.py");
                                 java.io.File bundledExe = new java.io.File(System.getProperty("user.dir"),
@@ -198,48 +136,13 @@ public class MediManageApplication extends Application {
                                                 && bundledExe.exists()
                                                 && protectedScript.exists();
 
+                                String pythonExe = bundledExe.exists() ? bundledExe.getAbsolutePath() : "python";
                                 String serverScript = useProtectedBundle
                                                 ? protectedScript.getAbsolutePath()
                                                 : rawServerScript.getAbsolutePath();
                                 java.io.File protectedDistRoot = useProtectedBundle
                                                 ? protectedScript.getParentFile().getParentFile()
                                                 : null;
-
-                                boolean cloudOnlyEnv = PythonEnvironmentManager.ENV_BASE.equalsIgnoreCase(envPref);
-                                if (useProtectedBundle && cloudOnlyEnv) {
-                                        LOGGER.info(
-                                                        "📦 Detected packaged install with bundled base Python for cloud-only mode.");
-                                        pythonExe = bundledExe.getAbsolutePath();
-                                } else {
-                                        try {
-                                                pythonExe = envManager.ensureEnvironment(envPref);
-                                                LOGGER.info("🐍 Using managed Python environment '" + envPref + "': " + pythonExe);
-                                        } catch (InterruptedException cancelEx) {
-                                                LOGGER.info("🛑 Python environment setup was cancelled.");
-                                                closeStartupPopup();
-                                                return;
-                                        } catch (Exception envEx) {
-                                                LOGGER.warning(
-                                                                "⚠️ Could not setup managed Python env '" + envPref + "': " + envEx.getMessage());
-                                                if (useProtectedBundle && bundledExe.exists()) {
-                                                        pythonExe = bundledExe.getAbsolutePath();
-                                                        LOGGER.warning(
-                                                                        "⚠️ Falling back to bundled base Python. Local model features may remain unavailable.");
-                                                        if (startupPopup != null) {
-                                                                startupPopup.appendLog(
-                                                                                "⚠️ Managed environment failed. Falling back to bundled base Python.");
-                                                        }
-                                                } else if (startupPopup != null) {
-                                                        startupPopup.appendLog("⚠️ Falling back to system Python...");
-                                                }
-                                        }
-                                }
-
-                                // Update popup status
-                                if (startupPopup != null && !startupPopup.isClosed()) {
-                                        startupPopup.setStatus("🚀 Starting AI Engine...");
-                                }
-
                                 final String pythonExeFinal = pythonExe;
                                 LOGGER.info("🚀 Starting AI Engine (" + serverScript + ")...");
                                 ProcessBuilder pb = createPythonProcessBuilder(pythonExe, serverScript, protectedDistRoot);
@@ -247,14 +150,6 @@ public class MediManageApplication extends Application {
                                 configureProtectedPythonPath(pb, protectedDistRoot);
                                 pb.environment().put(LocalAdminTokenManager.ENV_NAME,
                                                 LocalAdminTokenManager.getOrCreateToken());
-
-                                // Pass HuggingFace token for faster model downloads
-                                String hfToken = org.example.MediManage.security.SecureSecretStore.get("hf_token");
-                                if (!hfToken.isEmpty()) {
-                                        pb.environment().put("HF_TOKEN", hfToken);
-                                        LOGGER.info(
-                                                        "🔑 HF_TOKEN provided — authenticated HuggingFace downloads enabled.");
-                                }
 
                                 pb.environment().put("MEDIMANAGE_DB_BACKEND", "sqlite");
                                 pb.environment().put("MEDIMANAGE_DB_PATH",
@@ -278,70 +173,34 @@ public class MediManageApplication extends Application {
                                         }
                                 }, false));
 
-                                // Consume output — close popup once server is ready
                                 java.io.BufferedReader reader = new java.io.BufferedReader(
                                                 new java.io.InputStreamReader(pythonProcess.getInputStream()));
                                 String line;
-                                boolean popupClosed = false;
+                                boolean serverReady = false;
                                 while ((line = reader.readLine()) != null) {
                                         LOGGER.info("[AI Engine]: " + line);
-                                        if (startupPopup != null && !startupPopup.isClosed()) {
-                                                startupPopup.appendLog("[AI Engine]: " + line);
-                                        }
-                                        // Close popup once Flask reports "Running on"
-                                        if (!popupClosed && line.contains("Running on")) {
-                                                if (startupPopup != null && !startupPopup.isClosed()) {
-                                                        startupPopup.setStatus("✅ AI Engine Ready!");
-                                                        startupPopup.setProgress(1.0);
-                                                        startupPopup.appendLog("");
-                                                        startupPopup.appendLog(
-                                                                        "✅ Setup complete! This window will close shortly.");
-                                                }
+                                        if (!serverReady && line.contains("Running on")) {
                                                 org.example.MediManage.util.ToastNotification
                                                                 .success("AI Engine Ready");
-                                                // Auto-close after 2 seconds
-                                                AppExecutors.schedule(
-                                                                () -> Platform.runLater(
-                                                                                this::closeStartupPopup),
-                                                                2,
-                                                                TimeUnit.SECONDS);
-                                                popupClosed = true;
-
-                                                // Start MCP Server on port 5001 alongside Flask
+                                                serverReady = true;
                                                 startMcpServer(pythonExeFinal);
                                         }
                                 }
 
                                 int exitCode = pythonProcess.waitFor();
                                 SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
-                                if (!popupClosed) {
+                                if (!serverReady) {
                                         String failureMessage = "AI Engine exited before becoming ready (code " + exitCode + ").";
                                         LOGGER.warning("❌ " + failureMessage);
-                                        if (startupPopup != null && !startupPopup.isClosed()) {
-                                                startupPopup.appendLog("❌ " + failureMessage);
-                                                startupPopup.appendLog("ℹ️ Check the AI engine logs above for the exact Python error.");
-                                                startupPopup.setStatus("❌ Failed to start AI Engine");
-                                        }
                                         org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                                 }
                         } catch (Exception e) {
                                 SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
                                 LOGGER.log(Level.SEVERE, "❌ Failed to start AI Engine: " + e.getMessage(), e);
-                                if (startupPopup != null && !startupPopup.isClosed()) {
-                                        startupPopup.appendLog("❌ Error: " + e.getMessage());
-                                        startupPopup.setStatus("❌ Failed to start AI Engine");
-                                }
                                 org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                         }
                 });
 
-        }
-
-        private void closeStartupPopup() {
-                if (startupPopup != null) {
-                        startupPopup.close();
-                        startupPopup = null;
-                }
         }
 
         private SidecarStartupAdvisor.Decision evaluateAiEngineStartup() {
@@ -602,12 +461,6 @@ public class MediManageApplication extends Application {
         @Override
         public void stop() throws Exception {
                 super.stop();
-                // Close startup popup if still open
-                closeStartupPopup();
-                // Cancel any in-progress env setup
-                if (envManager != null) {
-                        envManager.cancel();
-                }
                 if (pythonProcess != null) {
                         LOGGER.info("🛑 Stopping AI Engine...");
                         pythonProcess.destroyForcibly();

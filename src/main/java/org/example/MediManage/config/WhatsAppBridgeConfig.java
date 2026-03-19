@@ -11,6 +11,8 @@ import java.util.prefs.Preferences;
  * All bridge URLs and paths are resolved here for consistent deployment.
  */
 public class WhatsAppBridgeConfig {
+    public static final String SERVER_PATH_OVERRIDE_PROPERTY = "medimanage.whatsapp.server.path";
+    public static final String PORT_OVERRIDE_PROPERTY = "medimanage.whatsapp.bridge.port";
 
     private static final Preferences prefs = Preferences.userNodeForPackage(
             org.example.MediManage.MediManageApplication.class);
@@ -22,6 +24,13 @@ public class WhatsAppBridgeConfig {
 
     /** Get configured bridge port */
     public static int getPort() {
+        String portOverride = System.getProperty(PORT_OVERRIDE_PROPERTY, "").trim();
+        if (!portOverride.isBlank()) {
+            try {
+                return Integer.parseInt(portOverride);
+            } catch (NumberFormatException ignored) {
+            }
+        }
         return prefs.getInt("whatsapp_bridge_port", DEFAULT_PORT);
     }
 
@@ -41,7 +50,10 @@ public class WhatsAppBridgeConfig {
      * Resolves the whatsapp-server directory, trying multiple locations.
      */
     public static File resolveServerDir() {
-        String customPath = prefs.get("whatsapp_server_path", "");
+        String customPath = System.getProperty(SERVER_PATH_OVERRIDE_PROPERTY, "").trim();
+        if (customPath.isBlank()) {
+            customPath = prefs.get("whatsapp_server_path", "");
+        }
         if (!customPath.isBlank()) {
             File customDir = new File(customPath);
             if (customDir.isDirectory()) return customDir;

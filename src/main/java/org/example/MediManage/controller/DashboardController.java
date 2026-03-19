@@ -46,8 +46,6 @@ public class DashboardController {
     @FXML
     private Label lowStock;
     @FXML
-    private Label pendingRx;
-    @FXML
     private Label totalProfit;
     // ── TODAY'S SUMMARY LABELS ──
     @FXML
@@ -239,8 +237,6 @@ public class DashboardController {
                     lowStock.setText(String.valueOf(kpis.lowStockCount()));
                 if (totalProfit != null)
                     totalProfit.setText(String.format("₹%.2f", kpis.netProfit()));
-                if (pendingRx != null)
-                    pendingRx.setText(String.valueOf(kpis.pendingRxCount()));
                 if (avgMargin != null)
                     avgMargin.setText(String.format("%.1f%%", kpis.avgProfitMargin()));
 
@@ -781,7 +777,7 @@ public class DashboardController {
     @FXML
     private void handleRestockReport() {
         var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
-                "Restock Forecasting", "📦", "Analyzing sales history (last 30 days) for trends...");
+                "Restock Forecasting", "", "Analyzing sales history (last 30 days) for trends...");
         inventoryAIService.generateRestockReport()
                 .thenAccept(result -> ctx.setResult(result))
                 .exceptionally(ex -> {
@@ -793,7 +789,7 @@ public class DashboardController {
     @FXML
     private void handleExpiryReport() {
         var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
-                "Expiry Strategy", "⏰", "Scanning inventory for expiring items...");
+                "Expiry Strategy", "", "Scanning inventory for expiring items...");
         inventoryAIService.generateExpiryReport()
                 .thenAccept(result -> ctx.setResult(result))
                 .exceptionally(ex -> {
@@ -805,7 +801,7 @@ public class DashboardController {
     @FXML
     private void handleProfitAnalysis() {
         var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
-                "Profit Analyzer", "💎", "Analyzing profit margins across inventory...");
+                "Profit Analyzer", "", "Analyzing profit margins across inventory...");
         inventoryAIService.generateProfitAnalysis()
                 .thenAccept(result -> ctx.setResult(result))
                 .exceptionally(ex -> {
@@ -817,7 +813,7 @@ public class DashboardController {
     @FXML
     private void handleBusinessPulse() {
         var ctx = org.example.MediManage.util.AIResultDialog.showLoadingPopup(
-                "Business Pulse", "🧭", "Reviewing sales, inventory, and expiry signals...");
+                "Business Pulse", "", "Reviewing sales, inventory, and expiry signals...");
         inventoryAIService.askBusinessQuestion(
                         "Give me a pharmacy business pulse. Cover demand hotspots, low-stock risks, expiry exposure, "
                                 + "cash tied in inventory, and finish with three actions for today.")

@@ -98,9 +98,9 @@
                 </VBox>
 
                 <VBox spacing="8" styleClass="billing-section">
-                    <Label text="Batch Ledger (FEFO)" styleClass="label-strong"/>
-                    <Label fx:id="lblBatchSummary" text="Select a medicine to inspect FEFO batches." style="-fx-text-fill: #7a8399; -fx-font-size: 11px;" wrapText="true"/>
-                    <ListView fx:id="listBatches" prefHeight="110" maxHeight="130"/>
+                    <Label text="Batch Overview" styleClass="label-strong"/>
+                    <Label fx:id="lblBatchSummary" text="Select a medicine to view active batches, nearest expiry, and available units." style="-fx-text-fill: #7a8399; -fx-font-size: 11px;" wrapText="true"/>
+                    <ListView fx:id="listBatches" prefHeight="116" maxHeight="140"/>
                 </VBox>
 
                 <Region VBox.vgrow="ALWAYS"/>
@@ -113,18 +113,17 @@
 
                 <Separator/>
                 <VBox spacing="10" styleClass="billing-section">
-                    <Label text="Stock Adjustments" styleClass="label-strong"/>
-                    <Button fx:id="btnRecordAdjustment" text="Record Return / Damage / Dump" disable="true" onAction="#handleRecordAdjustment" maxWidth="Infinity" styleClass="button-outlined"/>
+                    <Label text="Stock Write-Offs" styleClass="label-strong"/>
+                    <Button fx:id="btnRecordAdjustment" text="Record Stock Write-Off" disable="true" onAction="#handleRecordAdjustment" maxWidth="Infinity" styleClass="button-outlined"/>
                     <ListView fx:id="listRecentAdjustments" prefHeight="140" maxHeight="160"/>
-                    <Label text="Use this for supplier returns, expired stock, dump / waste disposal, breakage, or other write-offs. Adjustments reduce on-hand stock and feed analytics." wrapText="true" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                    <Label text="Use this for supplier returns, expired stock, damage, breakage, or waste disposal. Each entry reduces on-hand stock and stays visible in recent activity." wrapText="true" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
                 </VBox>
 
                 <Separator/>
-                <!-- AI Restock Suggestions (Popup) -->
                 <VBox spacing="10" styleClass="billing-section">
-                    <Label text="AI Restock Suggestions" styleClass="label-strong"/>
-                    <Button fx:id="btnAIRestock" text="✨ Get AI Suggestions" onAction="#handleAIRestock" maxWidth="Infinity" prefHeight="45" styleClass="button-ai"/>
-                    <Label text="Restock analysis will open in a popup" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                    <Label text="Restock Analysis" styleClass="label-strong"/>
+                    <Button fx:id="btnAIRestock" text="Open Restock Analysis" onAction="#handleAIRestock" maxWidth="Infinity" prefHeight="45" styleClass="button-ai"/>
+                    <Label text="Reviews recent sales, stock levels, and reorder gaps in a popup report." wrapText="true" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
                 </VBox>
             </VBox>
         </items>

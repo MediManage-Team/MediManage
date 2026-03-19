@@ -18,14 +18,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SidecarSupportTest {
     private HttpServer server;
     private String metadataServiceName;
+    private final String originalUserHome = System.getProperty("user.home");
+    private java.nio.file.Path tempHome;
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         if (server != null) {
             server.stop(0);
         }
         if (metadataServiceName != null) {
             SidecarOwnershipMetadata.delete(metadataServiceName);
+        }
+        System.setProperty("user.home", originalUserHome);
+        if (tempHome != null) {
+            try (var stream = java.nio.file.Files.walk(tempHome)) {
+                stream.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                    try {
+                        java.nio.file.Files.deleteIfExists(path);
+                    } catch (IOException ignored) {
+                    }
+                });
+            }
+            tempHome = null;
         }
     }
 
@@ -68,7 +82,9 @@ class SidecarSupportTest {
     }
 
     @Test
-    void clearsStaleOwnershipMetadataBeforeStartingNewProcess() {
+    void clearsStaleOwnershipMetadataBeforeStartingNewProcess() throws Exception {
+        tempHome = java.nio.file.Files.createTempDirectory("sidecar-metadata-home-");
+        System.setProperty("user.home", tempHome.toString());
         metadataServiceName = "test-sidecar-" + System.nanoTime();
         SidecarOwnershipMetadata.write(metadataServiceName, 6553, 999999L);
 

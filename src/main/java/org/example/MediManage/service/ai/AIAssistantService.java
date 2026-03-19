@@ -34,17 +34,6 @@ public class AIAssistantService {
         return orchestrator.processOrchestration("detailed_protocol", data, "cloud_only", false);
     }
 
-    // ======================== PRESCRIPTION VALIDATION ========================
-
-    /**
-     * Validate a prescription for drug interactions and safety issues.
-     */
-    public CompletableFuture<String> validatePrescription(List<String> medicineNames) {
-        String medicines = String.join(", ", medicineNames);
-        JSONObject data = new JSONObject().put("medicines_text", medicines);
-        return orchestrator.processOrchestration("validate_prescription", data, "cloud_only", false);
-    }
-
     // ======================== CUSTOMER ANALYSIS ========================
 
     /**
@@ -54,7 +43,7 @@ public class AIAssistantService {
         JSONObject data = new JSONObject()
             .put("customer_name", customerName)
             .put("diseases", diseases);
-        return orchestrator.processOrchestration("customer_history", data, "auto", false);
+        return orchestrator.processOrchestration("customer_history", data, "cloud_only", false);
     }
 
     // ======================== REPORTS ANALYSIS ========================
@@ -77,6 +66,6 @@ public class AIAssistantService {
      */
     public CompletableFuture<String> suggestRestock(String inventorySnapshot) {
         JSONObject data = new JSONObject().put("inventory_snapshot", inventorySnapshot);
-        return orchestrator.processOrchestration("restock_suggestion", data, "auto", false);
+        return orchestrator.processOrchestration("restock_suggestion", data, "cloud_only", false);
     }
 }

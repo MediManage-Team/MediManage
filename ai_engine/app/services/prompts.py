@@ -31,12 +31,6 @@ def detailed_care_protocol_prompt(medicines: list[str]) -> str:
         f"Do NOT use markdown formatting like ** or #."
     )
 
-def prescription_validation_prompt(medicines_text: str) -> str:
-    return (
-        f"Validate the following prescription for drug-drug interactions, dosage safety, and contraindications. "
-        f"List any concerns concisely:\n\n{medicines_text}"
-    )
-
 def generic_composition_prompt(brand_name: str) -> str:
     return (
         f"What is the generic composition of the medicine '{brand_name}'? "
@@ -148,7 +142,6 @@ SALES_DB_QUERY = "Show today's sales summary and revenue"
 CUSTOMER_BALANCES_DB_QUERY = "Show customer balances and outstanding debts"
 TOP_SELLERS_DB_QUERY = "Show top 20 best-selling medicines by total quantity sold from bill items"
 PROFIT_DB_QUERY = "Show profit analysis - total revenue, total bills, average bill value, and revenue by payment mode"
-PRESCRIPTION_OVERVIEW_DB_QUERY = "Show recent prescriptions with patient name, doctor, status, and medicines prescribed"
 DRUG_INTERACTION_DB_QUERY = "Show recent bills with multiple medicines to check for potential drug-drug interactions. List patient and all medicines per bill"
 REORDER_SUGGESTIONS_DB_QUERY = "Show medicines with stock below 20 units that have been sold recently - suggest reorder quantities based on past sales velocity"
-DAILY_SUMMARY_DB_QUERY = "Give a complete daily summary: total sales today, number of bills, new customers, pending prescriptions, low stock alerts, and expiring medicines count"
+DAILY_SUMMARY_DB_QUERY = "Give a complete daily summary: total sales today, number of bills, customers served, low stock alerts, and expiring medicines count"

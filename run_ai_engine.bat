@@ -1,6 +1,6 @@
 @echo off
 echo =============================================
-echo   MediManage AI Engine - Standalone Launcher
+echo   MediManage AI Engine - Cloud Backend Launcher
 echo =============================================
 echo.
 
@@ -22,8 +22,8 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 )
 
 :: Install/update dependencies
-echo [2/3] Installing dependencies...
-"%VENV_DIR%\Scripts\pip.exe" install -r ai_engine\requirements.txt
+echo [2/3] Installing cloud AI dependencies...
+"%VENV_DIR%\Scripts\pip.exe" install -r ai_engine\requirements\requirements.txt
 if errorlevel 1 (
     echo WARNING: Some packages may have failed to install.
 )

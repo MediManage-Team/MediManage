@@ -3,7 +3,6 @@ package org.example.MediManage.service;
 import org.example.MediManage.dao.BillDAO;
 import org.example.MediManage.dao.ExpenseDAO;
 import org.example.MediManage.dao.MedicineDAO;
-import org.example.MediManage.dao.PrescriptionDAO;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.util.ReportingWindowUtils;
 
@@ -16,7 +15,6 @@ public class DashboardKpiService {
     public record DashboardKpis(
             double dailySales,
             double monthlyExpenses,
-            int pendingRxCount,
             long lowStockCount,
             double netProfit,
             int dailyBillCount,
@@ -34,7 +32,6 @@ public class DashboardKpiService {
 
     private final BillDAO billDAO;
     private final ExpenseDAO expenseDAO;
-    private final PrescriptionDAO prescriptionDAO;
     private final MedicineDAO medicineDAO;
 
     private final Object lock = new Object();
@@ -43,25 +40,17 @@ public class DashboardKpiService {
     private double cachedMonthlyGrossProfit;
     private double cachedMonthlyExpenses;
     private long monthlyExpensesCachedAt;
-    private int cachedPendingRxCount;
-    private long pendingRxCachedAt;
     private int cachedDailyBillCount;
     private int cachedDailyCustomerCount;
     private long dailyBillsCachedAt;
 
     public DashboardKpiService() {
-        this(new BillDAO(), new ExpenseDAO(), new PrescriptionDAO(), new MedicineDAO());
+        this(new BillDAO(), new ExpenseDAO(), new MedicineDAO());
     }
 
-    DashboardKpiService(BillDAO billDAO, ExpenseDAO expenseDAO, PrescriptionDAO prescriptionDAO) {
-        this(billDAO, expenseDAO, prescriptionDAO, new MedicineDAO());
-    }
-
-    DashboardKpiService(BillDAO billDAO, ExpenseDAO expenseDAO, PrescriptionDAO prescriptionDAO,
-            MedicineDAO medicineDAO) {
+    DashboardKpiService(BillDAO billDAO, ExpenseDAO expenseDAO, MedicineDAO medicineDAO) {
         this.billDAO = billDAO;
         this.expenseDAO = expenseDAO;
-        this.prescriptionDAO = prescriptionDAO;
         this.medicineDAO = medicineDAO;
     }
 
@@ -73,7 +62,6 @@ public class DashboardKpiService {
         double sales = getDailySales();
         double expenses = getMonthlyExpenses();
         double grossProfit = getMonthlyGrossProfit();
-        int pendingRx = getPendingRxCount();
         long lowStockCount = countLowStock(inventorySnapshot);
         ExpiryBuckets expiryBuckets = countExpiryBuckets(inventorySnapshot);
         refreshDailyBillStats();
@@ -82,7 +70,6 @@ public class DashboardKpiService {
         return new DashboardKpis(
                 sales,
                 expenses,
-                pendingRx,
                 lowStockCount,
                 netProfit,
                 cachedDailyBillCount,
@@ -100,10 +87,6 @@ public class DashboardKpiService {
 
     public static void invalidateExpenseMetrics() {
         INSTANCE.invalidateExpenses();
-    }
-
-    public static void invalidatePrescriptionMetrics() {
-        INSTANCE.invalidatePendingRx();
     }
 
     public static void invalidateAllMetrics() {
@@ -144,18 +127,6 @@ public class DashboardKpiService {
             cachedMonthlyGrossProfit = billDAO.getMonthlyGrossProfit(); // refresh parallel metric
             monthlyExpensesCachedAt = now;
             return cachedMonthlyExpenses;
-        }
-    }
-
-    private int getPendingRxCount() {
-        long now = System.currentTimeMillis();
-        synchronized (lock) {
-            if (!isExpired(pendingRxCachedAt, now)) {
-                return cachedPendingRxCount;
-            }
-            cachedPendingRxCount = prescriptionDAO.countByStatus("PENDING");
-            pendingRxCachedAt = now;
-            return cachedPendingRxCount;
         }
     }
 
@@ -241,17 +212,10 @@ public class DashboardKpiService {
         }
     }
 
-    private void invalidatePendingRx() {
-        synchronized (lock) {
-            pendingRxCachedAt = 0L;
-        }
-    }
-
     private void invalidateAll() {
         synchronized (lock) {
             dailySalesCachedAt = 0L;
             monthlyExpensesCachedAt = 0L;
-            pendingRxCachedAt = 0L;
             dailyBillsCachedAt = 0L;
         }
     }

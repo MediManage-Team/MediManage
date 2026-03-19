@@ -3,7 +3,7 @@ package org.example.MediManage.service.ai;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Core AI service interface implemented by LocalAIService and CloudAIService.
+ * Core AI service interface for Java-side clients that talk to the Python AI engine.
  */
 public interface AIService {
 

@@ -57,12 +57,12 @@ echo [Info] Artifact ID: %ARTIFACT_ID%
 echo [Info] Project Version: %PROJECT_VERSION%
 
 echo ==========================================
-echo 0b. Generating Demo Database...
+echo 0b. Validating Packaged Database...
 echo ==========================================
-node whatsapp-server/generate-db.js
-if %errorlevel% neq 0 (
-    echo Database generation failed!
-    exit /b %errorlevel%
+if not exist "base_medimanage.db" (
+    echo ERROR: base_medimanage.db is missing.
+    echo Regenerate or restore the packaged database before building the installer.
+    exit /b 1
 )
 
 echo ==========================================

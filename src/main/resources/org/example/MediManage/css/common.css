@@ -955,6 +955,47 @@
     -fx-border-color: transparent;
 }
 
+.customer-summary-card {
+    -fx-background-color: linear-gradient(to right, rgba(0, 212, 255, 0.12), rgba(95, 230, 179, 0.08));
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(125, 211, 252, 0.18);
+    -fx-border-radius: 14;
+    -fx-padding: 14;
+}
+
+.customer-summary-name {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.customer-summary-meta {
+    -fx-text-fill: #a7b0c8;
+    -fx-font-size: 11px;
+    -fx-line-spacing: 2;
+}
+
+.customer-summary-badge {
+    -fx-text-fill: #0f1724;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-background-color: #7dd3fc;
+    -fx-background-radius: 999;
+    -fx-padding: 5 12;
+}
+
+.customer-summary-balance {
+    -fx-text-fill: #5fe6b3;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.customer-summary-label {
+    -fx-text-fill: #8fa0c3;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
 .dark-section {
     -fx-background-color: #0f1724;
     -fx-padding: 12;
@@ -1138,6 +1179,18 @@
 
 .status-dispensed {
     -fx-text-fill: #2ecc71;
+}
+
+.alert-danger {
+    -fx-background-color: #171230;
+}
+
+.alert-danger .header-panel {
+    -fx-background-color: rgba(255, 107, 107, 0.12);
+}
+
+.alert-danger .label {
+    -fx-text-fill: #e6f0ff;
 }
 
 /* Console / log text */

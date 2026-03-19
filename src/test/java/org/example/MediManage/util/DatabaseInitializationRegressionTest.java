@@ -92,10 +92,12 @@ class DatabaseInitializationRegressionTest {
 
         assertTrue(tableExists("suppliers"));
         assertTrue(tableExists("message_templates"));
-        assertTrue(tableExists("prescriptions"));
         assertTrue(tableExists("analytics_report_dispatch_schedules"));
+        assertFalse(tableExists("prescriptions"));
+        assertFalse(tableExists("locations"));
         assertTrue(columnExists("medicines", "generic_name"));
         assertTrue(columnExists("bills", "payment_mode"));
+        assertFalse(columnExists("bills", "location_id"));
         assertTrue(columnExists("bill_items", "price_override"));
     }
 
