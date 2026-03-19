@@ -1,6 +1,5 @@
 package org.example.MediManage.config;
 
-import org.example.MediManage.MediManageApplication;
 import org.example.MediManage.security.LocalAdminTokenManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

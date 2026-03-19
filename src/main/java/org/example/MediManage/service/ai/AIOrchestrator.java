@@ -16,7 +16,7 @@ import java.util.prefs.Preferences;
  * Java only forwards requests to the Python AI engine, which owns all AI logic.
  */
 public class AIOrchestrator {
-    private final LocalAIService pythonService;
+    private final PythonAIClient pythonService;
 
     private static final Map<CloudApiKeyStore.Provider, List<String>> CLOUD_MODELS = Map.of(
             CloudApiKeyStore.Provider.GEMINI, List.of("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"),
@@ -46,10 +46,10 @@ public class AIOrchestrator {
     private final Semaphore rateLimiter = new Semaphore(MAX_CONCURRENT_REQUESTS);
 
     public AIOrchestrator() {
-        this(new LocalAIService(false));
+        this(new PythonAIClient(false));
     }
 
-    public AIOrchestrator(LocalAIService pythonService) {
+    public AIOrchestrator(PythonAIClient pythonService) {
         this.pythonService = pythonService;
     }
 

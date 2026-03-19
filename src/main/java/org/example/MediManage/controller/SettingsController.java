@@ -97,7 +97,6 @@ public class SettingsController {
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     private Preferences prefs;
-    private volatile String currentWhatsAppState = "UNKNOWN";
 
     private static final Map<CloudApiKeyStore.Provider, List<String>> CLOUD_MODELS = Map.of(
             CloudApiKeyStore.Provider.GEMINI, List.of("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"),
@@ -605,7 +604,6 @@ public class SettingsController {
 
     private void applyWhatsAppState(String rawStatus) {
         String status = rawStatus == null ? "UNKNOWN" : rawStatus.trim().toUpperCase(java.util.Locale.ROOT);
-        currentWhatsAppState = status;
         switch (status) {
             case "CONNECTED" -> {
                 lblWhatsAppStatus.setText("Connected");

@@ -22,8 +22,9 @@ class StructuredJsonFormatter(logging.Formatter):
             "correlation_id": getattr(record, "correlation_id", get_correlation_id()),
             "message": record.getMessage(),
         }
-        if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+        exc_info = record.exc_info
+        if exc_info and exc_info[0] is not None:
+            payload["exception"] = self.formatException(exc_info)
         return json.dumps(payload, ensure_ascii=True)
 
 

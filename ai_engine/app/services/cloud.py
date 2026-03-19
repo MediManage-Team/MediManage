@@ -73,6 +73,7 @@ class CloudAPIClient:
             data = res.json()
             return data["candidates"][0]["content"]["parts"][0]["text"]
         self._raise_for_status(provider="GEMINI", res=res)
+        raise RuntimeError("GEMINI: no response")
 
     def _send_openai_compatible(self, provider: str, model: str, api_key: str, prompt: str) -> str:
         if provider == "GROQ":
@@ -104,6 +105,7 @@ class CloudAPIClient:
             data = res.json()
             return data["choices"][0]["message"]["content"]
         self._raise_for_status(provider=provider, res=res)
+        raise RuntimeError(f"{provider}: no response")
 
     def _send_claude(self, model: str, api_key: str, prompt: str) -> str:
         url = "https://api.anthropic.com/v1/messages"
@@ -122,6 +124,7 @@ class CloudAPIClient:
             data = res.json()
             return data["content"][0]["text"]
         self._raise_for_status(provider="CLAUDE", res=res)
+        raise RuntimeError("CLAUDE: no response")
 
     def _raise_for_status(self, provider: str, res: requests.Response):
         """Format an informative error explicitly."""
@@ -147,9 +150,9 @@ class CloudAPIClient:
         if cleaned.startswith("```"):
             newline_idx = cleaned.find("\n")
             if newline_idx > 0:
-                cleaned = cleaned[newline_idx + 1:]
+                cleaned = cleaned[newline_idx + 1:len(cleaned)]
             if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
+                cleaned = cleaned[0:len(cleaned) - 3]
         return cleaned.strip()
 
 cloud_api_client = CloudAPIClient()

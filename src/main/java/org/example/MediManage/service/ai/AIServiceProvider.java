@@ -6,11 +6,11 @@ package org.example.MediManage.service.ai;
 public class AIServiceProvider {
     private static volatile AIServiceProvider instance;
 
-    private final LocalAIService pythonService;
+    private final PythonAIClient pythonService;
     private final AIOrchestrator orchestrator;
 
     private AIServiceProvider() {
-        this.pythonService = new LocalAIService(false);
+        this.pythonService = new PythonAIClient(false);
         this.orchestrator = new AIOrchestrator(pythonService);
     }
 
@@ -25,7 +25,7 @@ public class AIServiceProvider {
         return instance;
     }
 
-    public LocalAIService getPythonService() {
+    public PythonAIClient getPythonService() {
         return pythonService;
     }
 

@@ -80,7 +80,7 @@ class AIOrchestratorCloudConfigTest {
         assertFalse(pythonService.lastUseSearch);
     }
 
-    private static final class StubPythonAIService extends LocalAIService {
+    private static final class StubPythonAIService extends PythonAIClient {
         private String lastAction;
         private JSONObject lastData;
         private JSONObject lastCloudConfig;
@@ -110,7 +110,7 @@ class AIOrchestratorCloudConfigTest {
     private static final class TestableAIOrchestrator extends AIOrchestrator {
         private final JSONObject cloudConfig;
 
-        TestableAIOrchestrator(LocalAIService pythonService, JSONObject cloudConfig) {
+        TestableAIOrchestrator(PythonAIClient pythonService, JSONObject cloudConfig) {
             super(pythonService);
             this.cloudConfig = cloudConfig;
         }

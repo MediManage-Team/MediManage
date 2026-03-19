@@ -8,7 +8,7 @@ import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Medicine;
 import org.example.MediManage.model.PaymentSplit;
 import org.example.MediManage.service.ai.AIOrchestrator;
-import org.example.MediManage.service.ai.LocalAIService;
+import org.example.MediManage.service.ai.PythonAIClient;
 import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +27,7 @@ class BillingServiceTest {
                 new CustomerDAO(),
                 new BillDAO(),
                 new ReportService(),
-                new AIOrchestrator(new LocalAIService(false)));
+                new AIOrchestrator(new PythonAIClient(false)));
 
         List<BillItem> billItems = new ArrayList<>();
         Medicine medicine = new Medicine(11, "Paracetamol", "Paracetamol", "Acme", "2030-12-31", 20, 100.0);
@@ -47,7 +47,7 @@ class BillingServiceTest {
                 new CustomerDAO(),
                 new BillDAO(),
                 new ReportService(),
-                new AIOrchestrator(new LocalAIService(false)));
+                new AIOrchestrator(new PythonAIClient(false)));
 
         List<BillItem> billItems = new ArrayList<>();
         Medicine medicine = new Medicine(12, "Ibuprofen", "Ibuprofen", "Acme", "2030-12-31", 2, 50.0);
@@ -70,7 +70,7 @@ class BillingServiceTest {
                 new CustomerDAO(),
                 billDAO,
                 new FailingReportService(),
-                new AIOrchestrator(new LocalAIService(false)));
+                new AIOrchestrator(new PythonAIClient(false)));
 
         List<BillItem> items = List.of(new BillItem(1, "Amoxicillin", "2030-12-31", 1, 100.0, 18.0));
         List<PaymentSplit> paymentSplits = List.of(new PaymentSplit("Cash", 118.0));
