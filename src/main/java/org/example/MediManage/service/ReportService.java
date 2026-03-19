@@ -14,9 +14,15 @@ import net.sf.jasperreports.engine.*;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.example.MediManage.dao.ReceiptSettingsDAO;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Medicine;
+import org.example.MediManage.model.ReceiptSettings;
 
+import javax.imageio.ImageIO;
+import java.awt.Image;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -35,6 +42,8 @@ import java.util.Set;
 public class ReportService {
     private static final DateTimeFormatter REPORT_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int EXCEL_SHEET_NAME_MAX = 31;
+    private final ReceiptSettingsDAO receiptSettingsDAO = new ReceiptSettingsDAO();
+    private final BarcodeService barcodeService = new BarcodeService();
 
     public enum AnalyticsExportFormat {
         PDF("pdf"),
@@ -82,8 +91,22 @@ public class ReportService {
     }
 
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
-            String careProtocol)
+            String careProtocol, Integer billId)
             throws JRException {
+        if (hasLegacyInvoiceOverride()) {
+            generateInvoicePDF(items, totalAmount, customerName, filePath, careProtocol);
+            return;
+        }
+        generateInvoicePdfInternal(items, totalAmount, customerName, filePath, careProtocol, billId);
+    }
+
+    private void generateInvoicePdfInternal(
+            List<BillItem> items,
+            double totalAmount,
+            String customerName,
+            String filePath,
+            String careProtocol,
+            Integer billId) throws JRException {
         try {
             ensureParentDirectory(filePath);
         } catch (IOException e) {
@@ -100,10 +123,13 @@ public class ReportService {
         JasperReport jasperReport = JasperCompileManager.compileReport(reportStream);
 
         // Parameters
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("CustomerName", customerName);
-        parameters.put("TotalAmount", totalAmount);
-        parameters.put("CareProtocol", careProtocol);
+        Map<String, Object> parameters = buildDocumentParameters(
+                customerName,
+                totalAmount,
+                careProtocol,
+                loadReceiptSettings(),
+                buildDocumentLabel("Invoice", billId),
+                null);
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
@@ -117,11 +143,31 @@ public class ReportService {
 
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
             throws JRException {
-        generateInvoicePDF(items, totalAmount, customerName, filePath, ""); // Overload for backward compatibility
+        generateInvoicePDF(items, totalAmount, customerName, filePath, "", null); // Overload for backward compatibility
     }
 
-    public void generateReceiptPDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
+    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
+            String careProtocol)
             throws JRException {
+        generateInvoicePdfInternal(items, totalAmount, customerName, filePath, careProtocol, null);
+    }
+
+    public void generateReceiptPDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
+            Integer billId)
+            throws JRException {
+        if (hasLegacyReceiptOverride()) {
+            generateReceiptPDF(items, totalAmount, customerName, filePath);
+            return;
+        }
+        generateReceiptPdfInternal(items, totalAmount, customerName, filePath, billId);
+    }
+
+    private void generateReceiptPdfInternal(
+            List<BillItem> items,
+            double totalAmount,
+            String customerName,
+            String filePath,
+            Integer billId) throws JRException {
         try {
             ensureParentDirectory(filePath);
         } catch (IOException e) {
@@ -138,9 +184,17 @@ public class ReportService {
         JasperReport jasperReport = JasperCompileManager.compileReport(reportStream);
 
         // Parameters
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("CustomerName", customerName);
-        parameters.put("TotalAmount", totalAmount);
+        ReceiptSettings receiptSettings = loadReceiptSettings();
+        Image barcodeImage = receiptSettings.isShowBarcodeOnReceipt()
+                ? buildBarcodeImage("RCT-" + (billId == null ? "UNSAVED" : billId))
+                : null;
+        Map<String, Object> parameters = buildDocumentParameters(
+                customerName,
+                totalAmount,
+                "",
+                receiptSettings,
+                buildDocumentLabel("Receipt", billId),
+                barcodeImage);
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
@@ -150,6 +204,28 @@ public class ReportService {
 
         // Export to PDF
         JasperExportManager.exportReportToPdfFile(jasperPrint, filePath);
+    }
+
+    public void generateReceiptPDF(List<BillItem> items, double totalAmount, String customerName, String filePath)
+            throws JRException {
+        generateReceiptPdfInternal(items, totalAmount, customerName, filePath, null);
+    }
+
+    private boolean hasLegacyInvoiceOverride() {
+        return isOverridePresent("generateInvoicePDF", List.class, double.class, String.class, String.class, String.class);
+    }
+
+    private boolean hasLegacyReceiptOverride() {
+        return isOverridePresent("generateReceiptPDF", List.class, double.class, String.class, String.class);
+    }
+
+    private boolean isOverridePresent(String methodName, Class<?>... parameterTypes) {
+        try {
+            Method method = getClass().getMethod(methodName, parameterTypes);
+            return method.getDeclaringClass() != ReportService.class;
+        } catch (NoSuchMethodException ignored) {
+            return false;
+        }
     }
 
     public void exportInventoryToExcel(List<Medicine> medicines, String filePath) throws IOException {
@@ -263,6 +339,103 @@ public class ReportService {
         if (parent != null) {
             Files.createDirectories(parent);
         }
+    }
+
+    private Map<String, Object> buildDocumentParameters(
+            String customerName,
+            double totalAmount,
+            String careProtocol,
+            ReceiptSettings receiptSettings,
+            String documentLabel,
+            Image barcodeImage) {
+        ReceiptSettings safeSettings = receiptSettings == null ? new ReceiptSettings() : receiptSettings;
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("CustomerName", customerName);
+        parameters.put("TotalAmount", totalAmount);
+        parameters.put("CareProtocol", careProtocol == null ? "" : careProtocol);
+        parameters.put("PharmacyName", defaultIfBlank(safeSettings.getPharmacyName(), "MediManage Pharmacy"));
+        parameters.put("AddressBlock", buildAddressBlock(safeSettings));
+        parameters.put("ContactLine", buildContactLine(safeSettings));
+        parameters.put("FooterText", defaultIfBlank(safeSettings.getFooterText(), "Thank you for your purchase!"));
+        parameters.put("DocumentNumber", documentLabel == null ? "" : documentLabel);
+        parameters.put("LogoImage", loadLogoImage(safeSettings.getLogoPath()));
+        parameters.put("BarcodeImage", barcodeImage);
+        return parameters;
+    }
+
+    private ReceiptSettings loadReceiptSettings() {
+        try {
+            return receiptSettingsDAO.getSettings();
+        } catch (Exception ignored) {
+            return new ReceiptSettings();
+        }
+    }
+
+    private String buildDocumentLabel(String type, Integer billId) {
+        if (billId == null || billId <= 0) {
+            return type;
+        }
+        return type + " #" + billId;
+    }
+
+    private String buildAddressBlock(ReceiptSettings settings) {
+        List<String> lines = new ArrayList<>();
+        if (settings.getAddressLine1() != null && !settings.getAddressLine1().isBlank()) {
+            lines.add(settings.getAddressLine1().trim());
+        }
+        if (settings.getAddressLine2() != null && !settings.getAddressLine2().isBlank()) {
+            lines.add(settings.getAddressLine2().trim());
+        }
+        return String.join("\n", lines);
+    }
+
+    private String buildContactLine(ReceiptSettings settings) {
+        List<String> parts = new ArrayList<>();
+        if (settings.getPhone() != null && !settings.getPhone().isBlank()) {
+            parts.add("Phone: " + settings.getPhone().trim());
+        }
+        if (settings.getEmail() != null && !settings.getEmail().isBlank()) {
+            parts.add("Email: " + settings.getEmail().trim());
+        }
+        if (settings.getGstNumber() != null && !settings.getGstNumber().isBlank()) {
+            parts.add("GST: " + settings.getGstNumber().trim());
+        }
+        return String.join(" | ", parts);
+    }
+
+    private Image loadLogoImage(String logoPath) {
+        if (logoPath == null || logoPath.isBlank()) {
+            return null;
+        }
+        try {
+            File logoFile = new File(logoPath.trim());
+            if (!logoFile.exists() || !logoFile.isFile()) {
+                return null;
+            }
+            BufferedImage bufferedImage = ImageIO.read(logoFile);
+            return bufferedImage;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Image buildBarcodeImage(String barcodeValue) {
+        if (barcodeValue == null || barcodeValue.isBlank()) {
+            return null;
+        }
+        try {
+            return barcodeService.generateCode128(barcodeValue, 260, 64);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? defaultValue : trimmed;
     }
 
     private void exportAnalyticsToCsv(AnalyticsExportPayload payload, Path filePath) throws IOException {

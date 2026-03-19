@@ -3,6 +3,7 @@ import threading
 import hashlib
 import os
 import signal
+import hmac
 from flask import Blueprint, request, jsonify  # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ def _sha256_file(filepath, chunk_size=8192):
 MODELS_DIR = os.path.join(os.path.expanduser("~"), "MediManage", "models")
 ADMIN_TOKEN_ENV = "MEDIMANAGE_LOCAL_API_TOKEN"
 ADMIN_TOKEN_HEADER = "X-MediManage-Admin-Token"
+SERVICE_NAME = "medimanage-ai-engine"
 ADMIN_PROTECTED_ROUTES = {
     "/load_model",
     "/download_model",
@@ -72,15 +74,29 @@ ADMIN_PROTECTED_ROUTES = {
 ADMIN_TOKEN = (os.getenv(ADMIN_TOKEN_ENV, "") or "").strip()
 
 
+def _is_owner_verified() -> bool:
+    if not ADMIN_TOKEN:
+        return False
+    provided = request.headers.get(ADMIN_TOKEN_HEADER, "")
+    return bool(provided) and hmac.compare_digest(provided, ADMIN_TOKEN)
+
+
 # ======================== HEALTH ========================
 
 @api_bp.route('/health', methods=['GET'])
 def health():
     hw = hardware_detect.detect_hardware()
+    current_model_path = getattr(engine, "_current_model_path", "") or ""
     return jsonify({
+        "service": SERVICE_NAME,
         "status": "running",
+        "healthy": True,
+        "owner_verified": _is_owner_verified(),
         "provider": engine.provider,
-        "model_loaded": engine.provider is not None,
+        "model_loaded": bool(engine.provider),
+        "model_path": current_model_path,
+        "model_name": os.path.basename(current_model_path) if current_model_path else "",
+        "framework": engine.framework or "",
         "backend": hw["backend"],
         "device": hw["device_name"]
     })
@@ -130,13 +146,20 @@ def query_db():
 
 @api_bp.route('/load_model', methods=['POST'])
 def load_model():
-    data = request.json
+    data = request.json or {}
     model_path = data.get("model_path")
     hardware_config = data.get("hardware_config", "auto")
 
     try:
         engine.load_model(model_path, hardware_config)
-        return jsonify({"status": "success", "provider": engine.provider})
+        current_model_path = getattr(engine, "_current_model_path", "") or model_path or ""
+        return jsonify({
+            "status": "success",
+            "provider": engine.provider,
+            "framework": engine.framework or "",
+            "model_path": current_model_path,
+            "model_name": os.path.basename(current_model_path) if current_model_path else "",
+        })
     except Exception as e:
         logger.error(f"Error loading model: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -155,7 +178,7 @@ def chat():
         return jsonify({"error": "No prompt provided"}), 400
 
     # Auto-load model if not loaded yet
-    if engine.provider is None:
+    if not engine.provider:
         logger.info("No model loaded - auto-loading first available model...")
         _auto_load_model()
 
@@ -177,7 +200,7 @@ def chat_rag():
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
 
-    if engine.provider is None:
+    if not engine.provider:
         logger.info("No model loaded - auto-loading first available model for RAG chat...")
         _auto_load_model()
 
@@ -254,7 +277,7 @@ def orchestrate():
             base_prompt = data.get("prompt", "")
 
             if cloud_available:
-                if engine.provider is not None:
+                if engine.provider:
                     local_insight = engine.generate(
                         prompts.combined_business_summary_prompt(base_prompt) + f"\nContext: {ctx}"
                     )
@@ -265,10 +288,10 @@ def orchestrate():
                 result = cloud_api_client.chat(provider, model, api_key, cloud_prompt)
                 return jsonify({"response": result, "source": "cloud_combined", "provider": provider})
 
-            if engine.provider is None:
+            if not engine.provider:
                 _auto_load_model()
 
-            if engine.provider is not None:
+            if engine.provider:
                 result = engine.generate(_build_contextual_prompt(base_prompt, ctx), use_search=use_search)
                 return jsonify({"response": result, "source": "local_combined", "provider": engine.provider})
 
@@ -300,10 +323,10 @@ def orchestrate():
                  raise ValueError(f"Cloud AI strictly required for {action} but API key is missing.")
 
         # Try Local Fallback (if cloud failed, or if we requested local)
-        if engine.provider is None:
+        if not engine.provider:
             _auto_load_model()
         
-        if engine.provider is not None:
+        if engine.provider:
             result = engine.generate(prompt, use_search=use_search)
             return jsonify({"response": result, "source": "local", "provider": engine.provider})
         else:
@@ -510,7 +533,7 @@ def model_info():
             info["files"] = files
 
         # Check if currently loaded
-        info["is_loaded"] = (engine.provider is not None and
+        info["is_loaded"] = (bool(engine.provider) and
                              hasattr(engine, '_current_model_path') and
                              engine._current_model_path == model_path)
 
@@ -535,12 +558,15 @@ def delete_model():
 
     try:
         import shutil
+        was_loaded = bool(engine.provider) and getattr(engine, '_current_model_path', '') == model_path
+        if was_loaded:
+            engine.clear_loaded_model()
         if os.path.isdir(model_path):
             shutil.rmtree(model_path)
         else:
             os.remove(model_path)
         logger.info(f"Deleted model: {model_path}")
-        return jsonify({"status": "deleted", "path": model_path})
+        return jsonify({"status": "deleted", "path": model_path, "was_loaded": was_loaded})
     except Exception as e:
         logger.error(f"Delete failed: {e}")
         return jsonify({"error": str(e)}), 500

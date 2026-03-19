@@ -114,7 +114,11 @@ public class PythonEnvironmentManager {
     }
 
     public Path getRequirementsPath(String envName) {
-        return aiEngineDir.resolve("requirements").resolve("requirements_" + envName + ".txt");
+        Path rawRequirements = aiEngineDir.resolve("requirements").resolve("requirements_" + envName + ".txt");
+        if (Files.exists(rawRequirements)) {
+            return rawRequirements;
+        }
+        return aiEngineDir.resolve("dist").resolve("requirements").resolve("requirements_" + envName + ".txt");
     }
 
     public String getPythonExePath(String envName) {

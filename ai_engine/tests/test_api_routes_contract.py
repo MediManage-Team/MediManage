@@ -11,6 +11,8 @@ from flask import Flask
 class _FakeEngine:
     def __init__(self):
         self.provider = "stub-local"
+        self.framework = "gguf"
+        self._current_model_path = ""
         self.generate_calls = []
         self.search_calls = []
 
@@ -22,8 +24,13 @@ class _FakeEngine:
         self.search_calls.append(prompt)
         return f"DB::{prompt}"
 
-    def load_model(self, *_args, **_kwargs):
+    def load_model(self, model_path, *_args, **_kwargs):
         self.provider = "stub-local"
+        self._current_model_path = model_path
+
+    def clear_loaded_model(self):
+        self.provider = None
+        self._current_model_path = ""
 
 
 class _FakeCloudClient:
@@ -85,6 +92,7 @@ class ApiRoutesContractTests(unittest.TestCase):
         cls.routes = import_module("app.api.routes")
         cls.routes.engine = cls.fake_engine
         cls.routes.cloud_api_client = cls.fake_cloud
+        cls.routes.ADMIN_TOKEN = "test-token"
 
         app = Flask(__name__)
         app.register_blueprint(cls.routes.api_bp)
@@ -95,6 +103,8 @@ class ApiRoutesContractTests(unittest.TestCase):
         self.fake_engine.search_calls.clear()
         self.fake_cloud.calls.clear()
         self.fake_engine.provider = "stub-local"
+        self.fake_engine.framework = "gguf"
+        self.fake_engine._current_model_path = ""
 
     def test_local_only_raw_chat_uses_local_generation_not_database_lookup(self):
         response = self.client.post(
@@ -159,6 +169,31 @@ class ApiRoutesContractTests(unittest.TestCase):
         self.assertIn("Low stock: Paracetamol, Cetirizine", prompt)
         self.assertIn("### Query", prompt)
         self.assertIn("Which items need restocking?", prompt)
+
+    def test_health_reports_service_identity_and_owner_verification(self):
+        response = self.client.get(
+            "/health",
+            headers={"X-MediManage-Admin-Token": "test-token"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual("medimanage-ai-engine", body["service"])
+        self.assertTrue(body["healthy"])
+        self.assertTrue(body["owner_verified"])
+
+    def test_load_model_returns_success_contract(self):
+        response = self.client.post(
+            "/load_model",
+            json={"model_path": "C:/models/current.gguf", "hardware_config": "cpu"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual("success", body["status"])
+        self.assertEqual("stub-local", body["provider"])
+        self.assertEqual("C:/models/current.gguf", body["model_path"])
+        self.assertEqual("current.gguf", body["model_name"])
 
 
 if __name__ == "__main__":

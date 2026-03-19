@@ -5,7 +5,9 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
@@ -15,6 +17,7 @@ import org.example.MediManage.util.SidebarManager;
 import org.example.MediManage.util.ToastNotification;
 import org.example.MediManage.util.UserSession;
 import org.example.MediManage.util.ViewSwitcher;
+import org.example.MediManage.util.NavigationGuard;
 
 import java.io.IOException;
 import java.util.Objects;
@@ -31,6 +34,7 @@ public class MainShellController implements ViewSwitcher {
     private Label userInfoLabel;
 
     private StackPane toastOverlay;
+    private NavigationGuard currentNavigationGuard;
 
     @FXML
     public void initialize() {
@@ -83,6 +87,9 @@ public class MainShellController implements ViewSwitcher {
 
     @Override
     public void switchView(String viewName) {
+        if (currentNavigationGuard != null && !currentNavigationGuard.canNavigateAway()) {
+            return;
+        }
         loadView(viewName);
     }
 
@@ -90,11 +97,15 @@ public class MainShellController implements ViewSwitcher {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/org/example/MediManage/" + viewName + ".fxml"));
             Parent view = loader.load();
+            Parent scrollableView = wrapInScrollPaneIfNeeded(view);
+            Object controller = loader.getController();
+            NavigationGuard nextNavigationGuard = controller instanceof NavigationGuard guard ? guard : null;
 
             // Wrap content + toast overlay in a StackPane
-            StackPane contentWithOverlay = new StackPane(view, toastOverlay);
+            StackPane contentWithOverlay = new StackPane(scrollableView, toastOverlay);
             mainLayout.setCenter(contentWithOverlay);
-            AnimationUtils.fadeIn(view, 250);
+            currentNavigationGuard = nextNavigationGuard;
+            AnimationUtils.fadeIn(scrollableView, 250);
         } catch (IOException e) {
             e.printStackTrace();
             System.err.println("Could not load view: " + viewName);
@@ -110,6 +121,35 @@ public class MainShellController implements ViewSwitcher {
                 // showError("Application Error", e.getMessage()); // Optional: might be too
                 // noisy
             }
+        }
+    }
+
+    private Parent wrapInScrollPaneIfNeeded(Parent view) {
+        if (view instanceof ScrollPane scrollPane) {
+            configureScrollPane(scrollPane);
+            return scrollPane;
+        }
+
+        ScrollPane scrollPane = new ScrollPane(view);
+        configureScrollPane(scrollPane);
+
+        if (view instanceof Region region) {
+            region.setMaxWidth(Double.MAX_VALUE);
+        }
+        return scrollPane;
+    }
+
+    private void configureScrollPane(ScrollPane scrollPane) {
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
+        scrollPane.setPannable(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        if (!scrollPane.getStyleClass().contains("edge-to-edge")) {
+            scrollPane.getStyleClass().add("edge-to-edge");
+        }
+        if (!scrollPane.getStyleClass().contains("app-content-scroll")) {
+            scrollPane.getStyleClass().add("app-content-scroll");
         }
     }
 
@@ -145,6 +185,9 @@ public class MainShellController implements ViewSwitcher {
     }
 
     private void handleLogout() {
+        if (currentNavigationGuard != null && !currentNavigationGuard.canNavigateAway()) {
+            return;
+        }
         UserSession.getInstance().logout();
         try {
             Stage primaryStage = (Stage) mainLayout.getScene().getWindow();

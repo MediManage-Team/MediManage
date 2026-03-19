@@ -25,6 +25,8 @@ public class SidebarManager {
                 case ADMIN:
                     addButton(container, "\ud83d\udc64 Users", "users-view", switcher);
                     addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
+                    addButton(container, "\ud83d\udea8 Alerts", "alerts-view", switcher);
+                    addButton(container, "\ud83d\udccd Locations", "locations-view", switcher);
                     addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
                     addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
                     addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
@@ -36,6 +38,8 @@ public class SidebarManager {
                     break;
                 case MANAGER:
                     addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
+                    addButton(container, "\ud83d\udea8 Alerts", "alerts-view", switcher);
+                    addButton(container, "\ud83d\udccd Locations", "locations-view", switcher);
                     addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
                     addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
                     addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);

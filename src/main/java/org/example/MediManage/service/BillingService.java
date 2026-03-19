@@ -204,7 +204,7 @@ public class BillingService {
         System.out.println("PLAIN CARE PROTOCOL START: [" + (plainCareProtocol.length() > 50 ? plainCareProtocol.substring(0, 50) : plainCareProtocol) + "]");
 
         try {
-            reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, plainCareProtocol);
+            reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, plainCareProtocol, billId);
             return new CheckoutResult(billId, pdfPath, total, customerName, true, "");
         } catch (Exception pdfError) {
             return new CheckoutResult(

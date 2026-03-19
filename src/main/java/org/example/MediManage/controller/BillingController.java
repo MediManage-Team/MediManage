@@ -584,7 +584,7 @@ public class BillingController {
         } else {
             showAlert(Alert.AlertType.WARNING, "Barcode Not Found",
                     "No medicine found with barcode: " + code
-                            + "\n\nAssign barcodes via Inventory \u2192 right-click \u2192 Set Barcode.");
+                            + "\n\nAssign barcodes via Inventory \u2192 right-click any row \u2192 Edit Barcode.");
             txtBarcode.selectAll();
         }
     }

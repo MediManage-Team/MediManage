@@ -22,6 +22,11 @@ public class SqliteMedicineStore implements MedicineStore {
     }
 
     @Override
+    public Medicine getMedicineById(int medicineId) {
+        return medicineDAO.getMedicineById(medicineId);
+    }
+
+    @Override
     public List<Medicine> getMedicinesPage(int offset, int limit) {
         return medicineDAO.getMedicinesPage(offset, limit);
     }
@@ -42,15 +47,24 @@ public class SqliteMedicineStore implements MedicineStore {
     }
 
     @Override
-    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+    public int addMedicine(String name, String genericName, String company, String expiry, double price,
             int initialStock, double purchasePrice, int reorderThreshold) {
-        medicineDAO.addMedicine(name, genericName, company, expiry, price, initialStock, purchasePrice,
+        return medicineDAO.addMedicine(name, genericName, company, expiry, price, initialStock, purchasePrice,
                 reorderThreshold);
     }
 
     @Override
     public void updateMedicine(Medicine medicine, int reorderThreshold) {
         medicineDAO.updateMedicine(medicine, reorderThreshold);
+    }
+
+    @Override
+    public void updateBarcode(int medicineId, String barcode) {
+        try {
+            medicineDAO.updateBarcode(medicineId, barcode);
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Failed to update barcode", e);
+        }
     }
 
     @Override

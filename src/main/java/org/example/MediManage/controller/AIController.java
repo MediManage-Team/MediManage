@@ -21,8 +21,13 @@ import java.util.concurrent.CompletableFuture;
 import javafx.scene.web.WebView;
 import java.util.concurrent.CancellationException;
 import java.io.File;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.prefs.Preferences;
+import java.util.logging.Logger;
 
 public class AIController {
+    private static final Logger LOGGER = Logger.getLogger(AIController.class.getName());
 
     @FXML
     private VBox chatBox;
@@ -48,7 +53,9 @@ public class AIController {
     private final AIOrchestrator aiOrchestrator;
     private final AssistantReportService assistantReportService;
     private CompletableFuture<?> currentRequest;
-    private boolean modelAutoLoadTriggered = false;
+    private volatile boolean updatingModelSelector = false;
+    private volatile boolean modelLoadInProgress = false;
+    private volatile long lastModelLoadAttemptAt = 0L;
     private HBox typingIndicator;
     private Timeline typingAnimation;
     private Timeline statusRefreshTimer;
@@ -93,52 +100,53 @@ public class AIController {
     private void updateModelStatus() {
         CompletableFuture.runAsync(() -> {
             try {
-                if (aiOrchestrator.isLocalAvailable()) {
-                    org.json.JSONObject health = aiOrchestrator.getLocalHealth();
-                    boolean loaded = health.optBoolean("model_loaded", false);
-                    String provider = health.optString("provider", "none");
-                    
-                    org.json.JSONArray models = aiOrchestrator.listLocalModels();
-                    
-                    Platform.runLater(() -> {
-                        if (modelSelector != null) {
-                            String currentSelection = modelSelector.getSelectionModel().getSelectedItem();
-                            modelSelector.getItems().clear();
-                            
-                            for (int i = 0; i < models.length(); i++) {
-                                org.json.JSONObject model = models.getJSONObject(i);
-                                String modelName = model.getString("name");
-                                modelSelector.getItems().add(modelName);
-                                // Very loose matching for loaded model selection
-                                if (loaded && provider.toLowerCase().contains(modelName.toLowerCase().replace(".gguf", ""))) {
-                                    currentSelection = modelName;
-                                }
-                            }
-                            
-                            // Add a browse option at the very bottom
-                            modelSelector.getItems().add("📂 Browse Custom Model...");
-                            
-                            if (loaded) {
-                                if (currentSelection != null) {
-                                    modelSelector.getSelectionModel().select(currentSelection);
-                                } else {
-                                    modelSelector.setPromptText("🟢 " + provider);
-                                }
-                                modelSelector.setStyle("-fx-text-fill: #43e97b; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
-                            } else {
-                                modelSelector.setPromptText("🟡 Engine online - model pending");
-                                modelSelector.setStyle("-fx-text-fill: #ffd700; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
-                            }
+                boolean engineAvailable = aiOrchestrator.isLocalAvailable();
+                org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+                boolean loaded = health.optBoolean("model_loaded", false);
+                String provider = health.optString("provider", "").trim();
+                String loadedModelName = health.optString("model_name", "").trim();
+                org.json.JSONArray models = dedupeModels(aiOrchestrator.listLocalModels());
+
+                Platform.runLater(() -> {
+                    if (modelSelector == null) {
+                        return;
+                    }
+
+                    updatingModelSelector = true;
+                    try {
+                        String currentSelection = modelSelector.getSelectionModel().getSelectedItem();
+                        modelSelector.getItems().clear();
+
+                        for (int i = 0; i < models.length(); i++) {
+                            org.json.JSONObject model = models.getJSONObject(i);
+                            modelSelector.getItems().add(model.getString("name"));
                         }
-                    });
-                } else {
-                    Platform.runLater(() -> {
-                        if (modelSelector != null) {
-                            modelSelector.setPromptText("🔴 Local engine unavailable");
-                            modelSelector.setStyle("-fx-text-fill: #f5576c; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
+
+                        modelSelector.getItems().add("📂 Browse Custom Model...");
+
+                        if (loaded && !loadedModelName.isBlank() && modelSelector.getItems().contains(loadedModelName)) {
+                            modelSelector.getSelectionModel().select(loadedModelName);
+                        } else if (currentSelection != null && modelSelector.getItems().contains(currentSelection)) {
+                            modelSelector.getSelectionModel().select(currentSelection);
+                        } else {
+                            modelSelector.getSelectionModel().clearSelection();
                         }
-                    });
-                }
+                    } finally {
+                        updatingModelSelector = false;
+                    }
+
+                    if (!engineAvailable) {
+                        modelSelector.setPromptText("🔴 Local engine unavailable");
+                        modelSelector.setStyle("-fx-text-fill: #f5576c; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
+                    } else if (loaded) {
+                        String label = loadedModelName.isBlank() ? ("🟢 " + provider) : ("🟢 " + loadedModelName);
+                        modelSelector.setPromptText(label);
+                        modelSelector.setStyle("-fx-text-fill: #43e97b; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
+                    } else {
+                        modelSelector.setPromptText("🟡 Engine online - load a model");
+                        modelSelector.setStyle("-fx-text-fill: #ffd700; -fx-background-color: transparent; -fx-border-color: #555; -fx-border-radius: 12; -fx-font-size: 11px;");
+                    }
+                });
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     if (modelSelector != null) {
@@ -164,6 +172,9 @@ public class AIController {
 
     @FXML
     private void handleModelSelection() {
+        if (updatingModelSelector) {
+            return;
+        }
         String selectedModel = modelSelector.getSelectionModel().getSelectedItem();
         if (selectedModel == null) return;
         
@@ -197,8 +208,14 @@ public class AIController {
                 
                 CompletableFuture.runAsync(() -> {
                     try {
-                        aiOrchestrator.loadLocalModel(finalPath, "auto");
-                        Platform.runLater(this::updateModelStatus);
+                        org.example.MediManage.service.ai.LocalAIService.ModelLoadResult result =
+                                aiOrchestrator.loadLocalModelBlocking(finalPath, "auto");
+                        if (result.success()) {
+                            persistSelectedModel(result.modelPath());
+                            Platform.runLater(this::updateModelStatus);
+                        } else {
+                            Platform.runLater(() -> addSystemMessage("❌ Failed to load custom model: " + result.message()));
+                        }
                     } catch (Exception e) {
                         Platform.runLater(() -> addSystemMessage("❌ Failed to load custom model: " + e.getMessage()));
                     }
@@ -222,8 +239,14 @@ public class AIController {
                         }
                     }
                     if (fullPath != null) {
-                        aiOrchestrator.loadLocalModel(fullPath, "auto");
-                        Platform.runLater(this::updateModelStatus);
+                        org.example.MediManage.service.ai.LocalAIService.ModelLoadResult result =
+                                aiOrchestrator.loadLocalModelBlocking(fullPath, "auto");
+                        if (result.success()) {
+                            persistSelectedModel(result.modelPath());
+                            Platform.runLater(this::updateModelStatus);
+                        } else {
+                            Platform.runLater(() -> addSystemMessage("❌ Failed to switch model: " + result.message()));
+                        }
                     } else {
                         Platform.runLater(() -> addSystemMessage("❌ Could not find path for model: " + selectedModel));
                     }
@@ -245,16 +268,24 @@ public class AIController {
                 }
 
                 synchronized (this) {
-                    if (modelAutoLoadTriggered) {
+                    long now = System.currentTimeMillis();
+                    if (modelLoadInProgress || now - lastModelLoadAttemptAt < 5000) {
                         return;
                     }
-                    modelAutoLoadTriggered = true;
+                    modelLoadInProgress = true;
+                    lastModelLoadAttemptAt = now;
                 }
 
                 org.json.JSONObject health = aiOrchestrator.getLocalHealth();
                 if (!health.optBoolean("model_loaded", false)) {
                     Platform.runLater(() -> addSystemMessage("⏳ Loading local AI model in background..."));
-                    aiOrchestrator.loadLocalModel();
+                    Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+                    String modelPath = prefs.get("local_model_path", "");
+                    if (modelPath == null || modelPath.isBlank()) {
+                        aiOrchestrator.loadLocalModelBlocking();
+                    } else {
+                        aiOrchestrator.loadLocalModelBlocking(modelPath, resolveHardwareConfig());
+                    }
 
                     for (int i = 0; i < 60; i++) {
                         Thread.sleep(2000);
@@ -276,10 +307,11 @@ public class AIController {
                     Platform.runLater(this::updateModelStatus);
                 }
             } catch (Exception e) {
+                LOGGER.warning("Auto-load check failed: " + e.getMessage());
+            } finally {
                 synchronized (this) {
-                    modelAutoLoadTriggered = false;
+                    modelLoadInProgress = false;
                 }
-                System.err.println("Auto-load check failed: " + e.getMessage());
             }
         });
     }
@@ -310,6 +342,18 @@ public class AIController {
         if (useLocal && !aiOrchestrator.isLocalAvailable()) {
             removeTypingIndicator();
             addSystemMessage("⚠️ Local AI is not ready yet. Wait for the engine to start or switch to Cloud AI.");
+            sendButton.setDisable(false);
+            if (stopButton != null) {
+                stopButton.setVisible(false);
+                stopButton.setManaged(false);
+            }
+            return;
+        }
+
+        if (useLocal && !isLocalModelReady()) {
+            removeTypingIndicator();
+            ensureModelLoaded();
+            addSystemMessage("⏳ Local model is still loading. Try again in a moment or switch to Cloud Only.");
             sendButton.setDisable(false);
             if (stopButton != null) {
                 stopButton.setVisible(false);
@@ -379,6 +423,12 @@ public class AIController {
                     if (engineToggleGroup == null || engineToggleGroup.getSelectedToggle() == localRadio) {
                         if (!aiOrchestrator.isLocalAvailable()) {
                             addSystemMessage("💡 Local AI is offline. Showing the live database snapshot only.");
+                            sendButton.setDisable(false);
+                            return;
+                        }
+                        if (!isLocalModelReady()) {
+                            ensureModelLoaded();
+                            addSystemMessage("💡 Local model is not ready yet. Showing the live database snapshot only.");
                             sendButton.setDisable(false);
                             return;
                         }
@@ -872,7 +922,54 @@ public class AIController {
             return "☁️ Cloud AI";
         }
         org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+        if (!health.optBoolean("model_loaded", false)) {
+            return "💻 Local AI";
+        }
         String provider = health.optString("provider", "Local AI");
-        return "💻 " + provider;
+        String modelName = health.optString("model_name", "");
+        return "💻 " + (modelName == null || modelName.isBlank() ? provider : modelName + " • " + provider);
+    }
+
+    private boolean isLocalModelReady() {
+        org.json.JSONObject health = aiOrchestrator.getLocalHealth();
+        return health.optBoolean("model_loaded", false);
+    }
+
+    private void persistSelectedModel(String modelPath) {
+        if (modelPath == null || modelPath.isBlank()) {
+            return;
+        }
+        Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+        prefs.put("local_model_path", modelPath);
+    }
+
+    private String resolveHardwareConfig() {
+        Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+        String hardware = prefs.get("ai_hardware", "Auto");
+        if (hardware.contains("CUDA")) {
+            return "cuda";
+        }
+        if (hardware.contains("CPU")) {
+            return "cpu";
+        }
+        return "auto";
+    }
+
+    private org.json.JSONArray dedupeModels(org.json.JSONArray models) {
+        Map<String, org.json.JSONObject> uniqueModels = new LinkedHashMap<>();
+        for (int i = 0; i < models.length(); i++) {
+            org.json.JSONObject model = models.optJSONObject(i);
+            if (model == null) {
+                continue;
+            }
+            String path = model.optString("path", "").toLowerCase(java.util.Locale.ROOT);
+            if (!path.isBlank()) {
+                uniqueModels.putIfAbsent(path, model);
+            }
+        }
+
+        org.json.JSONArray result = new org.json.JSONArray();
+        uniqueModels.values().forEach(result::put);
+        return result;
     }
 }

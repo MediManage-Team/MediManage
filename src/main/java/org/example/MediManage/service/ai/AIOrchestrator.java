@@ -58,7 +58,7 @@ public class AIOrchestrator {
     // ======================== CONSTRUCTORS ========================
 
     public AIOrchestrator() {
-        this(new LocalAIService(), new CloudAIService());
+        this(new LocalAIService(false), new CloudAIService());
     }
 
     public AIOrchestrator(LocalAIService pythonService) {
@@ -251,8 +251,16 @@ public class AIOrchestrator {
         pythonService.loadModel();
     }
 
+    public LocalAIService.ModelLoadResult loadLocalModelBlocking() {
+        return pythonService.loadConfiguredModelBlocking();
+    }
+
     public void loadLocalModel(String modelPath, String hardwareConfig) {
         pythonService.loadModel(modelPath, hardwareConfig);
+    }
+
+    public LocalAIService.ModelLoadResult loadLocalModelBlocking(String modelPath, String hardwareConfig) {
+        return pythonService.loadModelBlocking(modelPath, hardwareConfig);
     }
 
     public JSONObject getLocalHealth() {

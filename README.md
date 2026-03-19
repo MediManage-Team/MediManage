@@ -2,7 +2,7 @@
 
 A professional desktop application for managing pharmacy operations — inventory, billing, expenses, customers, prescriptions, and supplier management. Built with **JavaFX 21** and **SQLite**, designed for Indian pharmacies.
 
-> **Version 6.0.0** · Java 21 LTS · Windows
+> **Version 6.5.0** · Java 21 LTS · Windows
 
 ---
 

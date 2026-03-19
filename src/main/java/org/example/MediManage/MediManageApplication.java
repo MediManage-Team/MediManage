@@ -1,26 +1,42 @@
 package org.example.MediManage;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
-import javafx.scene.image.Image;
-import javafx.stage.Stage;
-import javafx.stage.StageStyle;
-import javafx.stage.Modality;
 import javafx.scene.control.Alert;
-import javafx.application.Platform;
-import javafx.scene.text.Font;
+import javafx.scene.image.Image;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
+import org.example.MediManage.config.WhatsAppBridgeConfig;
 import org.example.MediManage.security.LocalAdminTokenManager;
+import org.example.MediManage.service.AdminBootstrapService;
+import org.example.MediManage.service.ai.PythonEnvironmentManager;
+import org.example.MediManage.service.sidecar.SidecarHttpProbe;
+import org.example.MediManage.service.sidecar.SidecarOwnershipMetadata;
+import org.example.MediManage.service.sidecar.SidecarProbeResult;
+import org.example.MediManage.service.sidecar.SidecarStartupAdvisor;
 import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.controller.*;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class MediManageApplication extends Application {
+        private static final Logger LOGGER = Logger.getLogger(MediManageApplication.class.getName());
+        private static final String AI_SERVICE_NAME = "medimanage-ai-engine";
+        private static final int AI_PORT = 5000;
 
         private static MediManageApplication instance;
         private volatile Process pythonProcess;
@@ -48,14 +64,18 @@ public class MediManageApplication extends Application {
                         return;
                 }
 
+                if (!ensureInitialAdmin(stage)) {
+                        return;
+                }
+
                 // Show Login immediately — server starts in background
                 showLoginScreen(stage);
 
                 // Start Python Server in background (non-blocking)
                 startPythonServer();
 
-                // Start WhatsApp Bridge in background (non-blocking, like Python server)
-                startWhatsAppBridge();
+                // WhatsApp Bridge is started on demand from Settings to avoid slowing
+                // down normal app startup for users who do not need it immediately.
         }
 
         private boolean initializeDatabase() {
@@ -73,15 +93,40 @@ public class MediManageApplication extends Application {
                 }
         }
 
+        private boolean ensureInitialAdmin(Stage owner) {
+                try {
+                        AdminBootstrapService bootstrapService = new AdminBootstrapService();
+                        if (bootstrapService.requiresBootstrap()) {
+                                bootstrapService.createDefaultAdminIfMissing();
+                        }
+                        return true;
+                } catch (Exception e) {
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setTitle("Admin Bootstrap Error");
+                        alert.setHeaderText("Could not create the initial admin account");
+                        alert.setContentText(e.getMessage());
+                        alert.showAndWait();
+                        Platform.exit();
+                        return false;
+                }
+        }
+
         private void startPythonServer() {
                 AppExecutors.runBackground(() -> {
                         try {
-                                // Check if port 5000 is already in use (Server running)
-                                try (java.net.Socket ignored = new java.net.Socket("127.0.0.1", 5000)) {
-                                        System.out.println("ℹ️ AI Engine already running on port 5000.");
+                                SidecarStartupAdvisor.Decision decision = evaluateAiEngineStartup();
+                                if (decision.clearStaleMetadata()) {
+                                        SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
+                                }
+                                if (decision.action() == SidecarStartupAdvisor.Action.REUSE_EXISTING) {
+                                        LOGGER.info(decision.message());
                                         return;
-                                } catch (Exception e) {
-                                        // Port 5000 is free, start server
+                                }
+                                if (decision.action() == SidecarStartupAdvisor.Action.REJECT_CONFLICT) {
+                                        LOGGER.warning(decision.message());
+                                        org.example.MediManage.util.ToastNotification
+                                                        .warning("AI Engine port 5000 is occupied by another process.");
+                                        return;
                                 }
 
                                 // Get environment manager
@@ -97,7 +142,7 @@ public class MediManageApplication extends Application {
                                 if ("Auto".equals(aiHardware)) {
                                         String detected = envManager.autoDetectBestEnv();
                                         if (!detected.equals(envPref)) {
-                                                System.out.println("🎯 Auto-switching environment: "
+                                                LOGGER.info("🎯 Auto-switching environment: "
                                                                 + envPref + " → " + detected);
                                                 envPref = detected;
                                                 prefs.put("active_python_env", envPref);
@@ -111,7 +156,7 @@ public class MediManageApplication extends Application {
 
                                 if (needsSetup) {
                                         // Show progress popup only when setup is actually required
-                                        System.out.println("📦 Environment '" + envPref
+                                        LOGGER.info("📦 Environment '" + envPref
                                                         + "' needs setup. Showing progress popup...");
                                         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(
                                                         1);
@@ -137,35 +182,56 @@ public class MediManageApplication extends Application {
                                                 }
                                         });
                                 } else {
-                                        System.out.println("✅ Environment '" + envPref + "' already ready.");
+                                        LOGGER.info("✅ Environment '" + envPref + "' already ready.");
                                 }
 
-                                // Determine the appropriate Python executable and AI Engine script path.
+                                // Prefer raw source during normal development. The PyArmor-protected
+                                // bundle is reserved for packaged installs where the raw source is absent.
                                 String pythonExe = "python";
-                                String serverScript = "ai_engine/server/server.py";
-                                java.io.File protectedDistRoot = null;
+                                java.io.File rawServerScript = new java.io.File(System.getProperty("user.dir"),
+                                                "ai_engine/server/server.py");
+                                java.io.File bundledExe = new java.io.File(System.getProperty("user.dir"),
+                                                "ai_engine/python/python.exe");
+                                java.io.File protectedScript = new java.io.File(System.getProperty("user.dir"),
+                                                "ai_engine/dist/server/server.py");
+                                boolean useProtectedBundle = !rawServerScript.exists()
+                                                && bundledExe.exists()
+                                                && protectedScript.exists();
 
-                                java.io.File bundledExe = new java.io.File(System.getProperty("user.dir"), "ai_engine/python/python.exe");
-                                java.io.File protectedScript = new java.io.File(System.getProperty("user.dir"), "ai_engine/dist/server/server.py");
+                                String serverScript = useProtectedBundle
+                                                ? protectedScript.getAbsolutePath()
+                                                : rawServerScript.getAbsolutePath();
+                                java.io.File protectedDistRoot = useProtectedBundle
+                                                ? protectedScript.getParentFile().getParentFile()
+                                                : null;
 
-                                if (bundledExe.exists() && protectedScript.exists()) {
-                                        System.out.println("📦 Detected offline bundled Python and protected AI Engine. Bypassing Conda setup.");
+                                boolean cloudOnlyEnv = PythonEnvironmentManager.ENV_BASE.equalsIgnoreCase(envPref);
+                                if (useProtectedBundle && cloudOnlyEnv) {
+                                        LOGGER.info(
+                                                        "📦 Detected packaged install with bundled base Python for cloud-only mode.");
                                         pythonExe = bundledExe.getAbsolutePath();
-                                        serverScript = protectedScript.getAbsolutePath();
-                                        protectedDistRoot = protectedScript.getParentFile().getParentFile();
                                 } else {
                                         try {
-                                                pythonExe = envManager.ensureEnvironment();
-                                                System.out.println("🐍 Using Conda env Python: " + pythonExe);
+                                                pythonExe = envManager.ensureEnvironment(envPref);
+                                                LOGGER.info("🐍 Using managed Python environment '" + envPref + "': " + pythonExe);
                                         } catch (InterruptedException cancelEx) {
-                                                System.out.println("🛑 Python environment setup was cancelled.");
+                                                LOGGER.info("🛑 Python environment setup was cancelled.");
                                                 closeStartupPopup();
                                                 return;
                                         } catch (Exception envEx) {
-                                                System.err.println(
-                                                                "⚠️ Could not setup bundled/Conda Python env: " + envEx.getMessage());
-                                                if (startupPopup != null)
+                                                LOGGER.warning(
+                                                                "⚠️ Could not setup managed Python env '" + envPref + "': " + envEx.getMessage());
+                                                if (useProtectedBundle && bundledExe.exists()) {
+                                                        pythonExe = bundledExe.getAbsolutePath();
+                                                        LOGGER.warning(
+                                                                        "⚠️ Falling back to bundled base Python. Local model features may remain unavailable.");
+                                                        if (startupPopup != null) {
+                                                                startupPopup.appendLog(
+                                                                                "⚠️ Managed environment failed. Falling back to bundled base Python.");
+                                                        }
+                                                } else if (startupPopup != null) {
                                                         startupPopup.appendLog("⚠️ Falling back to system Python...");
+                                                }
                                         }
                                 }
 
@@ -175,7 +241,7 @@ public class MediManageApplication extends Application {
                                 }
 
                                 final String pythonExeFinal = pythonExe;
-                                System.out.println("🚀 Starting AI Engine (" + serverScript + ")...");
+                                LOGGER.info("🚀 Starting AI Engine (" + serverScript + ")...");
                                 ProcessBuilder pb = createPythonProcessBuilder(pythonExe, serverScript, protectedDistRoot);
                                 pb.redirectErrorStream(true);
                                 configureProtectedPythonPath(pb, protectedDistRoot);
@@ -186,7 +252,7 @@ public class MediManageApplication extends Application {
                                 String hfToken = org.example.MediManage.security.SecureSecretStore.get("hf_token");
                                 if (!hfToken.isEmpty()) {
                                         pb.environment().put("HF_TOKEN", hfToken);
-                                        System.out.println(
+                                        LOGGER.info(
                                                         "🔑 HF_TOKEN provided — authenticated HuggingFace downloads enabled.");
                                 }
 
@@ -197,15 +263,17 @@ public class MediManageApplication extends Application {
                                                                                 + "/medimanage.db"));
 
                                 pythonProcess = pb.start();
+                                SidecarOwnershipMetadata.write(AI_SERVICE_NAME, AI_PORT, pythonProcess.pid());
 
                                 // Add Shutdown Hook
                                 Runtime.getRuntime().addShutdownHook(AppExecutors.newThread("jvm-shutdown-hook", () -> {
                                         if (pythonProcess != null && pythonProcess.isAlive()) {
-                                                System.out.println("🛑 JVM Shutdown Hook: Killing AI Engine...");
+                                                LOGGER.info("🛑 JVM Shutdown Hook: Killing AI Engine...");
                                                 pythonProcess.destroyForcibly();
+                                                SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
                                         }
                                         if (mcpProcess != null && mcpProcess.isAlive()) {
-                                                System.out.println("🛑 JVM Shutdown Hook: Killing MCP Server...");
+                                                LOGGER.info("🛑 JVM Shutdown Hook: Killing MCP Server...");
                                                 mcpProcess.destroyForcibly();
                                         }
                                 }, false));
@@ -216,7 +284,7 @@ public class MediManageApplication extends Application {
                                 String line;
                                 boolean popupClosed = false;
                                 while ((line = reader.readLine()) != null) {
-                                        System.out.println("[AI Engine]: " + line);
+                                        LOGGER.info("[AI Engine]: " + line);
                                         if (startupPopup != null && !startupPopup.isClosed()) {
                                                 startupPopup.appendLog("[AI Engine]: " + line);
                                         }
@@ -245,9 +313,10 @@ public class MediManageApplication extends Application {
                                 }
 
                                 int exitCode = pythonProcess.waitFor();
+                                SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
                                 if (!popupClosed) {
                                         String failureMessage = "AI Engine exited before becoming ready (code " + exitCode + ").";
-                                        System.err.println("❌ " + failureMessage);
+                                        LOGGER.warning("❌ " + failureMessage);
                                         if (startupPopup != null && !startupPopup.isClosed()) {
                                                 startupPopup.appendLog("❌ " + failureMessage);
                                                 startupPopup.appendLog("ℹ️ Check the AI engine logs above for the exact Python error.");
@@ -256,8 +325,8 @@ public class MediManageApplication extends Application {
                                         org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                                 }
                         } catch (Exception e) {
-                                System.err.println("❌ Failed to start AI Engine: " + e.getMessage());
-                                e.printStackTrace();
+                                SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
+                                LOGGER.log(Level.SEVERE, "❌ Failed to start AI Engine: " + e.getMessage(), e);
                                 if (startupPopup != null && !startupPopup.isClosed()) {
                                         startupPopup.appendLog("❌ Error: " + e.getMessage());
                                         startupPopup.setStatus("❌ Failed to start AI Engine");
@@ -275,69 +344,68 @@ public class MediManageApplication extends Application {
                 }
         }
 
+        private SidecarStartupAdvisor.Decision evaluateAiEngineStartup() {
+                SidecarProbeResult probe = SidecarHttpProbe.probe(
+                                URI.create("http://127.0.0.1:5000/health"),
+                                AI_SERVICE_NAME,
+                                LocalAdminTokenManager::applyHeader);
+                return SidecarStartupAdvisor.decide("AI Engine",
+                                probe,
+                                SidecarOwnershipMetadata.read(AI_SERVICE_NAME));
+        }
+
+        private SidecarStartupAdvisor.Decision evaluateBridgeStartup() {
+                SidecarProbeResult probe = SidecarHttpProbe.probe(
+                                URI.create(WhatsAppBridgeConfig.statusUrl()),
+                                WhatsAppBridgeConfig.SERVICE_NAME,
+                                WhatsAppBridgeConfig::applyAdminHeader);
+                return SidecarStartupAdvisor.decide("WhatsApp Bridge",
+                                probe,
+                                SidecarOwnershipMetadata.read(WhatsAppBridgeConfig.SERVICE_NAME));
+        }
+
         /**
          * Start WhatsApp Bridge (Node.js server) on port 3000.
          * Mirrors the Python server lifecycle: auto-start, log forwarding.
          */
-        private void startWhatsAppBridge() {
+        public void startWhatsAppBridge() {
                 AppExecutors.runBackground(() -> {
                         try {
-                                // Check if port is already in use — kill stale bridge to reload latest code
-                                if (org.example.MediManage.config.WhatsAppBridgeConfig.isRunning()) {
-                                        int port = org.example.MediManage.config.WhatsAppBridgeConfig.getPort();
-                                        System.out.println("🔄 WhatsApp Bridge already on port " + port +
-                                                ". Killing to load latest code...");
-
-                                        // Try HTTP shutdown first (graceful)
-                                        try {
-                                                java.net.http.HttpClient hc = java.net.http.HttpClient.newHttpClient();
-                                                java.net.http.HttpRequest shutReq = java.net.http.HttpRequest.newBuilder()
-                                                        .uri(java.net.URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.shutdownUrl()))
-                                                        .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build();
-                                                hc.send(shutReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-                                                Thread.sleep(2000);
-                                        } catch (Exception ignored) {}
-
-                                        // If still running, force-kill via OS command (Windows: netstat + taskkill)
-                                        if (org.example.MediManage.config.WhatsAppBridgeConfig.isRunning()) {
-                                                System.out.println("⚡ HTTP shutdown failed. Force-killing process on port " + port + "...");
-                                                try {
-                                                        // Find PID using port, then kill it
-                                                        ProcessBuilder findPb = new ProcessBuilder("cmd", "/c",
-                                                                "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :" + port + " ^| findstr LISTENING') do taskkill /PID %a /F");
-                                                        findPb.redirectErrorStream(true);
-                                                        Process killProc = findPb.start();
-                                                        new String(killProc.getInputStream().readAllBytes()); // consume output
-                                                        killProc.waitFor();
-                                                        Thread.sleep(2000);
-                                                } catch (Exception e) {
-                                                        System.err.println("⚠️ Could not kill process on port " + port + ": " + e.getMessage());
-                                                }
-                                        }
+                                SidecarStartupAdvisor.Decision decision = evaluateBridgeStartup();
+                                if (decision.clearStaleMetadata()) {
+                                        SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
+                                }
+                                if (decision.action() == SidecarStartupAdvisor.Action.REUSE_EXISTING) {
+                                        LOGGER.info(decision.message());
+                                        return;
+                                }
+                                if (decision.action() == SidecarStartupAdvisor.Action.REJECT_CONFLICT) {
+                                        LOGGER.warning(decision.message());
+                                        org.example.MediManage.util.ToastNotification.warning(
+                                                        "WhatsApp Bridge port " + WhatsAppBridgeConfig.getPort()
+                                                                        + " is occupied by another process.");
+                                        return;
                                 }
 
                                 // Resolve Node.js executable (bundled or system)
-                                String nodeExe = org.example.MediManage.config.WhatsAppBridgeConfig.resolveNodeExe();
+                                String nodeExe = WhatsAppBridgeConfig.resolveNodeExe();
 
                                 // Check if Node.js is available on this system
-                                if (!org.example.MediManage.config.WhatsAppBridgeConfig.isNodeAvailable()) {
-                                        System.out.println("⚠️ Node.js is not installed. WhatsApp Bridge requires Node.js. Skipping.");
+                                if (!WhatsAppBridgeConfig.isNodeAvailable()) {
+                                        LOGGER.warning("⚠️ Node.js is not installed. WhatsApp Bridge requires Node.js. Skipping.");
                                         return;
                                 }
 
-                                java.io.File serverDir = org.example.MediManage.config.WhatsAppBridgeConfig.resolveServerDir();
+                                java.io.File serverDir = WhatsAppBridgeConfig.resolveServerDir();
                                 if (serverDir == null) {
-                                        System.out.println("⚠️ whatsapp-server/ directory not found. WhatsApp Bridge not started.");
+                                        LOGGER.warning("⚠️ whatsapp-server/ directory not found. WhatsApp Bridge not started.");
                                         return;
                                 }
-
-                                // Resolve entry script (protected start_protected.js or raw index.js)
-                                String entryScript = org.example.MediManage.config.WhatsAppBridgeConfig.resolveEntryScript(serverDir);
 
                                 // Check if node_modules exists, run npm install if missing
                                 java.io.File nodeModules = new java.io.File(serverDir, "node_modules");
                                 if (!nodeModules.isDirectory()) {
-                                        System.out.println("📦 Installing WhatsApp Bridge dependencies (npm install)...");
+                                        LOGGER.info("📦 Installing WhatsApp Bridge dependencies (npm install)...");
                                         ProcessBuilder installPb = new ProcessBuilder("npm", "install");
                                         installPb.directory(serverDir);
                                         installPb.redirectErrorStream(true);
@@ -347,27 +415,30 @@ public class MediManageApplication extends Application {
                                                         new java.io.InputStreamReader(installProc.getInputStream()))) {
                                                 String l;
                                                 while ((l = r.readLine()) != null) {
-                                                        System.out.println("[npm install]: " + l);
+                                                        LOGGER.info("[npm install]: " + l);
                                                 }
                                         }
                                         installProc.waitFor();
                                 }
 
-                                System.out.println("🟢 Starting WhatsApp Bridge (" + nodeExe + " " + entryScript + ", port 3000)...");
-                                ProcessBuilder pb = new ProcessBuilder(nodeExe, entryScript);
-                                pb.directory(serverDir);
-                                pb.redirectErrorStream(true);
+                                LOGGER.info("🟢 Starting WhatsApp Bridge (" + nodeExe + ", port "
+                                                + WhatsAppBridgeConfig.getPort() + ")...");
+                                ProcessBuilder pb = WhatsAppBridgeConfig.createStartProcessBuilder();
                                 instance.whatsappBridgeProcess = pb.start();
+                                SidecarOwnershipMetadata.write(WhatsAppBridgeConfig.SERVICE_NAME,
+                                                WhatsAppBridgeConfig.getPort(), instance.whatsappBridgeProcess.pid());
 
                                 // Consume output in background thread
                                 java.io.BufferedReader reader = new java.io.BufferedReader(
                                                 new java.io.InputStreamReader(instance.whatsappBridgeProcess.getInputStream()));
                                 String line;
                                 while ((line = reader.readLine()) != null) {
-                                        System.out.println("[WhatsApp Bridge]: " + line);
+                                        LOGGER.info("[WhatsApp Bridge]: " + line);
                                 }
+                                SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
                         } catch (Exception e) {
-                                System.err.println("⚠️ WhatsApp Bridge failed to start: " + e.getMessage());
+                                SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
+                                LOGGER.log(Level.WARNING, "⚠️ WhatsApp Bridge failed to start: " + e.getMessage(), e);
                         }
                 });
         }
@@ -379,7 +450,7 @@ public class MediManageApplication extends Application {
          */
         public void restartServer() {
                 AppExecutors.runBackground(() -> {
-                        System.out.println("🔄 Restarting AI Engine...");
+                        LOGGER.info("🔄 Restarting AI Engine...");
                         if (pythonProcess != null && pythonProcess.isAlive()) {
                                 pythonProcess.destroyForcibly();
                                 try {
@@ -387,7 +458,7 @@ public class MediManageApplication extends Application {
                                 } catch (InterruptedException ignored) {
                                         Thread.currentThread().interrupt();
                                 }
-                                System.out.println("🛑 Old AI Engine stopped.");
+                                LOGGER.info("🛑 Old AI Engine stopped.");
                         }
                         if (mcpProcess != null && mcpProcess.isAlive()) {
                                 mcpProcess.destroyForcibly();
@@ -396,7 +467,7 @@ public class MediManageApplication extends Application {
                                 } catch (InterruptedException ignored) {
                                         Thread.currentThread().interrupt();
                                 }
-                                System.out.println("🛑 Old MCP Server stopped.");
+                                LOGGER.info("🛑 Old MCP Server stopped.");
                         }
                         startPythonServer();
                 });
@@ -411,21 +482,26 @@ public class MediManageApplication extends Application {
                         try {
                                 // Check if port 5001 already in use
                                 try (java.net.Socket ignored = new java.net.Socket("127.0.0.1", 5001)) {
-                                        System.out.println("ℹ️ MCP Server already running on port 5001.");
+                                        LOGGER.info("ℹ️ MCP Server already running on port 5001.");
                                         return;
                                 } catch (Exception e) {
                                         // Port 5001 is free
                                 }
 
-                                System.out.println("🔌 Starting MCP Server (port 5001)...");
+                                LOGGER.info("🔌 Starting MCP Server (port 5001)...");
                                 
-                                String mcpScript = "ai_engine/server/mcp_server.py";
-                                java.io.File protectedDistRoot = null;
-                                java.io.File protectedMcpScript = new java.io.File(System.getProperty("user.dir"), "ai_engine/dist/server/mcp_server.py");
-                                if (protectedMcpScript.exists()) {
-                                        mcpScript = protectedMcpScript.getAbsolutePath();
-                                        protectedDistRoot = protectedMcpScript.getParentFile().getParentFile();
-                                }
+                                java.io.File rawMcpScript = new java.io.File(System.getProperty("user.dir"),
+                                                "ai_engine/server/mcp_server.py");
+                                java.io.File protectedMcpScript = new java.io.File(System.getProperty("user.dir"),
+                                                "ai_engine/dist/server/mcp_server.py");
+                                boolean useProtectedBundle = !rawMcpScript.exists() && protectedMcpScript.exists();
+
+                                String mcpScript = useProtectedBundle
+                                                ? protectedMcpScript.getAbsolutePath()
+                                                : rawMcpScript.getAbsolutePath();
+                                java.io.File protectedDistRoot = useProtectedBundle
+                                                ? protectedMcpScript.getParentFile().getParentFile()
+                                                : null;
                                 ProcessBuilder mcpPb = createPythonProcessBuilder(pythonExe, mcpScript, protectedDistRoot);
                                 mcpPb.redirectErrorStream(true);
                                 configureProtectedPythonPath(mcpPb, protectedDistRoot);
@@ -445,10 +521,10 @@ public class MediManageApplication extends Application {
                                                 new java.io.InputStreamReader(mcpProcess.getInputStream()));
                                 String mcpLine;
                                 while ((mcpLine = mcpReader.readLine()) != null) {
-                                        System.out.println("[MCP Server]: " + mcpLine);
+                                        LOGGER.info("[MCP Server]: " + mcpLine);
                                 }
                         } catch (Exception e) {
-                                System.err.println("⚠️ MCP Server failed to start: " + e.getMessage());
+                                LOGGER.log(Level.WARNING, "⚠️ MCP Server failed to start: " + e.getMessage(), e);
                         }
                 });
         }
@@ -519,7 +595,7 @@ public class MediManageApplication extends Application {
 
                         loginStage.showAndWait();
                 } catch (Exception e) {
-                        e.printStackTrace();
+                        LOGGER.log(Level.SEVERE, "Failed to show login screen.", e);
                 }
         }
 
@@ -533,40 +609,42 @@ public class MediManageApplication extends Application {
                         envManager.cancel();
                 }
                 if (pythonProcess != null) {
-                        System.out.println("🛑 Stopping AI Engine...");
+                        LOGGER.info("🛑 Stopping AI Engine...");
                         pythonProcess.destroyForcibly();
+                        SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
                 } else {
                         // Try to kill via HTTP if process handle is missing
                         try {
-                                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI
-                                                .create("http://127.0.0.1:5000/shutdown")
-                                                .toURL()
-                                                .openConnection();
-                                conn.setRequestMethod("POST");
-                                conn.setRequestProperty(LocalAdminTokenManager.HEADER_NAME,
-                                                LocalAdminTokenManager.getOrCreateToken());
-                                conn.getInputStream();
-                                System.out.println("🛑 Sent shutdown signal to existing AI Engine.");
+                                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                                                .uri(URI.create("http://127.0.0.1:5000/shutdown"))
+                                                .POST(HttpRequest.BodyPublishers.noBody());
+                                LocalAdminTokenManager.applyHeader(requestBuilder);
+                                HttpClient.newHttpClient().send(requestBuilder.build(),
+                                                HttpResponse.BodyHandlers.discarding());
+                                LOGGER.info("🛑 Sent shutdown signal to existing AI Engine.");
+                                SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
                         } catch (Exception ignored) {}
                 }
 
                 if (mcpProcess != null) {
-                        System.out.println("🛑 Stopping MCP Server...");
+                        LOGGER.info("🛑 Stopping MCP Server...");
                         mcpProcess.destroyForcibly();
                 }
 
                 if (whatsappBridgeProcess != null) {
-                        System.out.println("🛑 Stopping WhatsApp Bridge...");
+                        LOGGER.info("🛑 Stopping WhatsApp Bridge...");
                         whatsappBridgeProcess.destroyForcibly();
+                        SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
                 } else {
-                        // Force shutdown of bridge via local port if process handle lost
+                        // Force shutdown of bridge via configured local port if process handle lost
                         try {
-                                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI
-                                                .create("http://127.0.0.1:3001/shutdown")
-                                                .toURL()
-                                                .openConnection();
-                                conn.setRequestMethod("POST");
-                                conn.getInputStream();
+                                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                                                .uri(URI.create(WhatsAppBridgeConfig.shutdownUrl()))
+                                                .POST(HttpRequest.BodyPublishers.noBody());
+                                WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                                HttpClient.newHttpClient().send(requestBuilder.build(),
+                                                HttpResponse.BodyHandlers.discarding());
+                                SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
                         } catch (Exception ignored) {}
                 }
 

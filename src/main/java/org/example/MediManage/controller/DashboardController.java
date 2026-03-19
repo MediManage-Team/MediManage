@@ -549,7 +549,7 @@ public class DashboardController {
                             .trim();
                     }
                     reportService.generateInvoicePDF(items, bill.totalProperty().get(),
-                            bill.customerNameProperty().get(), file.getAbsolutePath(), storedProtocol);
+                            bill.customerNameProperty().get(), file.getAbsolutePath(), storedProtocol, bill.getBillId());
                     showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved.");
                 } catch (Exception ex) {
                     showAlert(Alert.AlertType.ERROR, "Error", "Failed to save PDF: " + ex.getMessage());
@@ -569,7 +569,7 @@ public class DashboardController {
             if (file != null) {
                 try {
                     reportService.generateReceiptPDF(items, bill.totalProperty().get(),
-                            bill.customerNameProperty().get(), file.getAbsolutePath());
+                            bill.customerNameProperty().get(), file.getAbsolutePath(), bill.getBillId());
                     showAlert(Alert.AlertType.INFORMATION, "Success", "Receipt saved.");
                 } catch (Exception ex) {
                     showAlert(Alert.AlertType.ERROR, "Error", "Failed to save Receipt: " + ex.getMessage());
@@ -598,7 +598,7 @@ public class DashboardController {
                                 .replaceAll("`", "")
                                 .trim();
                         }
-                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol);
+                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol, bill.getBillId());
                         
                         org.example.MediManage.service.WhatsAppService.sendInvoiceWhatsApp(
                                 phone.trim(), bill.customerNameProperty().get(), bill.totalProperty().get(),
@@ -637,7 +637,7 @@ public class DashboardController {
                                 .replaceAll("`", "")
                                 .trim();
                         }
-                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol);
+                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol, bill.getBillId());
                         
                         org.example.MediManage.service.EmailService.sendInvoiceEmail(
                                 email.trim(), bill.customerNameProperty().get(), storedProtocol,

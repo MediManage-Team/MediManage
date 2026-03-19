@@ -53,7 +53,7 @@ class AIInferenceEngine:
     def __init__(self):
         self.model = None
         self.tokenizer = None
-        self.provider = ""
+        self.provider = None
         self.framework = ""
         self._current_model_path = ""
         self.session = None
@@ -65,6 +65,15 @@ class AIInferenceEngine:
         self._last_tokens_per_sec = 0.0
         self._total_tokens_generated = 0
         self._total_generation_time = 0.0
+
+    def clear_loaded_model(self):
+        self.model = None
+        self.tokenizer = None
+        self.provider = None
+        self.framework = ""
+        self._current_model_path = ""
+        self.session = None
+        self.gen_params = None
 
     @staticmethod
     def _find_genai_model_path(model_path, hardware_config="auto"):
@@ -137,6 +146,15 @@ class AIInferenceEngine:
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
+        previous_state = (
+            self.model,
+            self.tokenizer,
+            self.provider,
+            self.framework,
+            self._current_model_path,
+            self.session,
+            self.gen_params,
+        )
         self._current_model_path = model_path
 
         # --- Auto-detect hardware if needed ---
@@ -174,7 +192,15 @@ class AIInferenceEngine:
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            self._current_model_path = ""
+            (
+                self.model,
+                self.tokenizer,
+                self.provider,
+                self.framework,
+                self._current_model_path,
+                self.session,
+                self.gen_params,
+            ) = previous_state
             raise e
 
     def _load_gguf(self, model_path, hardware_config):

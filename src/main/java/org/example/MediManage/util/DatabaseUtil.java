@@ -1,18 +1,23 @@
 package org.example.MediManage.util;
 
 import org.example.MediManage.config.DatabaseConfig;
-
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DatabaseUtil {
+    private static final Logger LOGGER = Logger.getLogger(DatabaseUtil.class.getName());
     private static final Pattern ALTER_ADD_COLUMN_PATTERN = Pattern.compile(
             "(?is)^ALTER\\s+TABLE\\s+([`\"\\[]?[A-Za-z_][A-Za-z0-9_]*[`\"\\]]?)\\s+ADD\\s+COLUMN\\s+([`\"\\[]?[A-Za-z_][A-Za-z0-9_]*[`\"\\]]?).*");
 
@@ -27,16 +32,13 @@ public class DatabaseUtil {
                 stmt.execute("PRAGMA foreign_keys = ON;");
             }
 
-            System.out.println("✅ Connected to Database successfully");
+            LOGGER.info("Connected to database successfully.");
 
-            // Initialize Schema if tables don't exist
             runSchema(conn);
+            reconcileInventoryBatches(conn);
+            purgeLegacyDemoAdminIfPresent(conn);
 
-            // Seed default message templates
             seedMessageTemplatesIfNeeded(conn);
-
-            // Auto-seed sample data if DB is fresh (idempotent)
-            runSeedDataIfNeeded(conn);
         }
     }
 
@@ -46,76 +48,60 @@ public class DatabaseUtil {
                 stmt.execute("PRAGMA foreign_keys = ON;");
             }
 
-            System.out.println("✅ Connected to Database successfully");
+            LOGGER.info("Connected to database successfully.");
             runSchema(conn);
+            reconcileInventoryBatches(conn);
+            purgeLegacyDemoAdminIfPresent(conn);
+            seedMessageTemplatesIfNeeded(conn);
         }
     }
 
     private static void runSchema(Connection conn) throws SQLException {
-        // Fast-path: if core tables already exist, skip the full schema run
-        if (schemaAlreadyInitialized(conn)) {
-            System.out.println("✅ Database schema already initialized — skipping.");
-            return;
-        }
-
-        System.out.println("⚙️ Initializing Database Schema...");
         String schemaResource = resolveSchemaResource(conn);
+        List<String> statements = loadSqlStatements(schemaResource);
+        List<String> deferredStatements = new ArrayList<>();
+        boolean previousAutoCommit = conn.getAutoCommit();
 
-        try (InputStream is = DatabaseUtil.class.getResourceAsStream(schemaResource)) {
-            if (is == null) {
-                System.err.println("❌ Critical: " + schemaResource + " not found!");
-                return;
-            }
-            // Use Scanner to read the file and split by semicolon
-            try (java.util.Scanner scanner = new java.util.Scanner(is, StandardCharsets.UTF_8.name())) {
-                scanner.useDelimiter(";");
-                try (Statement stmt = conn.createStatement()) {
-                    while (scanner.hasNext()) {
-                        String sql = scanner.next().trim();
-                        if (!sql.isEmpty()) {
-                            if (shouldSkipAlterAddColumn(conn, sql)) {
-                                continue;
-                            }
-
-                            try {
-                                stmt.execute(sql);
-                                System.out.println("✅ Executed schema statement: "
-                                        + sql.substring(0, Math.min(50, sql.length())) + "...");
-                            } catch (SQLException e) {
-                                // Log but don't fail so existing DBs can still boot.
-                                System.err
-                                        .println("Database Initialization Warning: " + e.getMessage() + " [Statement: "
-                                                + sql.substring(0, Math.min(50, sql.length())) + "...]");
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (java.io.IOException e) {
-            throw new SQLException("Failed to read schema file", e);
-        }
-
-        System.out.println("✅ Schema initialized successfully.");
-    }
-
-    /**
-     * Quick check: if the core tables (medicines, bills, stock, users) all exist,
-     * the schema has already been initialized and we can skip the full run.
-     */
-    private static boolean schemaAlreadyInitialized(Connection conn) {
-        String[] coreTables = {"users", "medicines", "stock", "bills", "bill_items", "customers", "expenses"};
+        LOGGER.info("Applying database schema migrations.");
+        conn.setAutoCommit(false);
         try (Statement stmt = conn.createStatement()) {
-            for (String table : coreTables) {
-                try (ResultSet rs = stmt.executeQuery(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name='" + table + "'")) {
-                    if (!rs.next()) {
-                        return false; // At least one core table is missing
+            for (String sql : statements) {
+                String normalized = stripLeadingSqlComments(sql).trim();
+                if (normalized.isEmpty()) {
+                    continue;
+                }
+                if (shouldSkipAlterAddColumn(conn, normalized)) {
+                    continue;
+                }
+                try {
+                    stmt.execute(sql);
+                } catch (SQLException e) {
+                    if (shouldDeferStatement(normalized, e)) {
+                        deferredStatements.add(sql);
+                        continue;
                     }
+                    throw new SQLException("Schema initialization failed while executing: " + previewSql(normalized), e);
                 }
             }
-            return true; // All core tables exist
+
+            for (String sql : deferredStatements) {
+                String normalized = stripLeadingSqlComments(sql).trim();
+                if (normalized.isEmpty()) {
+                    continue;
+                }
+                try {
+                    stmt.execute(sql);
+                } catch (SQLException e) {
+                    throw new SQLException("Schema initialization failed while executing: " + previewSql(normalized), e);
+                }
+            }
+            conn.commit();
+            LOGGER.info("Schema initialized successfully.");
         } catch (SQLException e) {
-            return false; // Can't check — run full schema
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(previousAutoCommit);
         }
     }
 
@@ -126,46 +112,167 @@ public class DatabaseUtil {
                 return; // Templates already seeded
             }
         } catch (SQLException e) {
-            System.err.println("Could not check message_templates: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Could not check message_templates: {0}", e.getMessage());
             return;
         }
 
-        System.out.println("🌱 Seeding default message templates...");
+        LOGGER.info("Seeding default message templates.");
         org.example.MediManage.dao.MessageTemplateDAO dao = new org.example.MediManage.dao.MessageTemplateDAO();
         try {
             dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE, null, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_WHATSAPP_INVOICE)));
             dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT), dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT)));
             dao.save(new org.example.MediManage.model.MessageTemplate(0, org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY, null, dao.getDefaultBody(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY)));
-            System.out.println("✅ Default templates seeded.");
+            LOGGER.info("Default message templates seeded.");
         } catch (Exception e) {
-            System.err.println("Failed to seed templates: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Failed to seed templates: {0}", e.getMessage());
         }
     }
 
-    /**
-     * Automatically seeds sample data if the database is fresh.
-     * Uses suppliers table as the idempotent guard — if it has data, seeding is
-     * skipped.
-     */
-    private static void runSeedDataIfNeeded(Connection conn) {
-        try (Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM suppliers")) {
-            if (rs.next() && rs.getInt(1) > 0) {
-                System.out.println("ℹ️ Seed data already exists — skipping.");
-                return;
-            }
-        } catch (SQLException e) {
-            // Table might not exist yet, that's okay
-            System.out.println("ℹ️ Skipping seed check: " + e.getMessage());
-            return;
+    public static void seedDemoData() throws SQLException {
+        try (Connection conn = getConnection()) {
+            LOGGER.info("Seeding demo data explicitly.");
+            runSqlResource(conn, "/db/seed_data.sql");
+            runSqlResource(conn, "/db/seed_dashboard.sql");
         }
+    }
 
-        System.out.println("🌱 Seeding sample data...");
-        String[] seedFiles = { "/db/seed_data.sql", "/db/seed_dashboard.sql" };
-        for (String seedFile : seedFiles) {
-            runSqlResource(conn, seedFile);
+    public static boolean requiresAdminBootstrap() throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(*) FROM users WHERE UPPER(role) = 'ADMIN'");
+             ResultSet rs = stmt.executeQuery()) {
+            return !rs.next() || rs.getInt(1) == 0;
         }
-        System.out.println("✅ Sample data seeded successfully.");
+    }
+
+    public static boolean hasLegacyDemoAdminCredential() throws SQLException {
+        String sql = """
+                SELECT COUNT(*)
+                FROM users
+                WHERE UPPER(role) = 'ADMIN'
+                  AND (
+                    (username = '1' AND password = '1')
+                    OR (LOWER(username) = 'admin' AND LOWER(password) = 'admin')
+                  )
+                """;
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            return rs.next() && rs.getInt(1) > 0;
+        }
+    }
+
+    private static void purgeLegacyDemoAdminIfPresent(Connection conn) throws SQLException {
+        String sql = """
+                DELETE FROM users
+                WHERE UPPER(role) = 'ADMIN'
+                  AND (
+                    (username = '1' AND password = '1')
+                    OR (LOWER(username) = 'admin' AND LOWER(password) = 'admin')
+                  )
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int deleted = stmt.executeUpdate();
+            if (deleted > 0) {
+                LOGGER.warning("Removed legacy demo admin credential(s) from the database.");
+            }
+        }
+    }
+
+    private static void reconcileInventoryBatches(Connection conn) {
+        String query = """
+                SELECT m.medicine_id,
+                       COALESCE(s.quantity, 0) AS stock_qty,
+                       COALESCE(m.expiry_date, '') AS expiry_date,
+                       COALESCE(m.purchase_price, 0.0) AS purchase_price,
+                       COALESCE(m.price, 0.0) AS selling_price,
+                       COALESCE(m.supplier_id, 0) AS supplier_id,
+                       COALESCE((
+                           SELECT SUM(available_quantity)
+                           FROM inventory_batches ib
+                           WHERE ib.medicine_id = m.medicine_id
+                       ), 0) AS batch_qty
+                FROM medicines m
+                LEFT JOIN stock s ON s.medicine_id = m.medicine_id
+                WHERE m.active = 1
+                """;
+        String insert = """
+                INSERT INTO inventory_batches (
+                    medicine_id,
+                    batch_number,
+                    batch_barcode,
+                    expiry_date,
+                    purchase_date,
+                    unit_cost,
+                    selling_price,
+                    initial_quantity,
+                    available_quantity,
+                    supplier_id
+                )
+                VALUES (?, ?, ?, ?, DATE('now'), ?, ?, ?, ?, ?)
+                """;
+
+        try (PreparedStatement queryPs = conn.prepareStatement(query);
+             ResultSet rs = queryPs.executeQuery();
+             PreparedStatement insertPs = conn.prepareStatement(insert)) {
+            while (rs.next()) {
+                int medicineId = rs.getInt("medicine_id");
+                int stockQty = rs.getInt("stock_qty");
+                int batchQty = rs.getInt("batch_qty");
+                int gap = stockQty - batchQty;
+                if (gap <= 0) {
+                    continue;
+                }
+
+                insertPs.setInt(1, medicineId);
+                String legacyBatchNumber = "LEGACY-" + medicineId + "-" + System.currentTimeMillis();
+                insertPs.setString(2, legacyBatchNumber);
+                insertPs.setString(3, "BT-" + medicineId + "-" + legacyBatchNumber.replaceAll("[^A-Za-z0-9]+", ""));
+                insertPs.setString(4, rs.getString("expiry_date"));
+                insertPs.setDouble(5, rs.getDouble("purchase_price"));
+                insertPs.setDouble(6, rs.getDouble("selling_price"));
+                insertPs.setInt(7, gap);
+                insertPs.setInt(8, gap);
+                int supplierId = rs.getInt("supplier_id");
+                if (supplierId > 0) {
+                    insertPs.setInt(9, supplierId);
+                } else {
+                    insertPs.setNull(9, java.sql.Types.INTEGER);
+                }
+                insertPs.addBatch();
+            }
+            insertPs.executeBatch();
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Failed to reconcile inventory batches: {0}", e.getMessage());
+        }
+    }
+
+    private static List<String> loadSqlStatements(String resourcePath) throws SQLException {
+        List<String> statements = new ArrayList<>();
+        try (InputStream is = DatabaseUtil.class.getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                throw new SQLException("Critical schema resource missing: " + resourcePath);
+            }
+            try (java.util.Scanner scanner = new java.util.Scanner(is, StandardCharsets.UTF_8.name())) {
+                scanner.useDelimiter(";");
+                while (scanner.hasNext()) {
+                    String sql = scanner.next().trim();
+                    if (!sql.isEmpty()) {
+                        statements.add(sql);
+                    }
+                }
+            }
+        } catch (java.io.IOException e) {
+            throw new SQLException("Failed to read SQL resource " + resourcePath, e);
+        }
+        return statements;
+    }
+
+    private static String previewSql(String sql) {
+        String collapsed = sql.replaceAll("\\s+", " ").trim();
+        if (collapsed.length() <= 120) {
+            return collapsed;
+        }
+        return collapsed.substring(0, 117) + "...";
     }
 
     /**
@@ -174,7 +281,7 @@ public class DatabaseUtil {
     private static void runSqlResource(Connection conn, String resourcePath) {
         try (InputStream is = DatabaseUtil.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
-                System.err.println("⚠️ Seed file not found: " + resourcePath);
+                LOGGER.log(Level.WARNING, "SQL resource not found: {0}", resourcePath);
                 return;
             }
             try (java.util.Scanner scanner = new java.util.Scanner(is, StandardCharsets.UTF_8.name())) {
@@ -186,15 +293,15 @@ public class DatabaseUtil {
                             try {
                                 stmt.execute(sql);
                             } catch (SQLException e) {
-                                // Log but continue — some INSERT OR IGNORE may warn
-                                System.err.println("Seed warning: " + e.getMessage());
+                                LOGGER.log(Level.WARNING, "SQL resource warning for {0}: {1}",
+                                        new Object[] { resourcePath, e.getMessage() });
                             }
                         }
                     }
                 }
             }
         } catch (java.io.IOException | SQLException e) {
-            System.err.println("⚠️ Failed to read seed file: " + resourcePath + " — " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Failed to execute SQL resource " + resourcePath, e);
         }
     }
 
@@ -216,8 +323,8 @@ public class DatabaseUtil {
         }
 
         if (columnExists(conn, tableName, columnName)) {
-            System.out.println(
-                    "ℹ️ Skipped migration: column '" + columnName + "' already exists on '" + tableName + "'.");
+            LOGGER.log(Level.FINE, "Skipped migration because column {0} already exists on {1}.",
+                    new Object[] { columnName, tableName });
             return true;
         }
         return false;
@@ -242,6 +349,25 @@ public class DatabaseUtil {
             }
         }
         return false;
+    }
+
+    private static boolean shouldDeferStatement(String normalizedSql, SQLException error) {
+        if (normalizedSql == null) {
+            return false;
+        }
+
+        String trimmed = normalizedSql.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!trimmed.startsWith("CREATE INDEX")) {
+            return false;
+        }
+
+        String message = error.getMessage();
+        if (message == null) {
+            return false;
+        }
+
+        String lowerMessage = message.toLowerCase(java.util.Locale.ROOT);
+        return lowerMessage.contains("no such column") || lowerMessage.contains("no such table");
     }
 
     private static String stripLeadingSqlComments(String sql) {
@@ -308,7 +434,7 @@ public class DatabaseUtil {
                 
                 stmt.execute("PRAGMA foreign_keys = ON;");
                 conn.commit();
-                System.out.println("✅ Successfully cleared all demo data.");
+                LOGGER.info("Successfully cleared demo data.");
             } catch (SQLException e) {
                 conn.rollback();
                 throw new SQLException("Failed to clear demo data. Transaction rolled back.", e);

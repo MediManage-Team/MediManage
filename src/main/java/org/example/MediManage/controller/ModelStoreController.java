@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.prefs.Preferences;
 
 public class ModelStoreController {
 
@@ -46,6 +47,7 @@ public class ModelStoreController {
     private final List<ModelCard> curatedModels = new ArrayList<>();
     private static final String MODELS_DIR = System.getProperty("user.home") + "/MediManage/models";
     private boolean isDownloading = false;
+    private volatile int installedModelsRefreshToken = 0;
 
     @FXML
     public void initialize() {
@@ -403,11 +405,19 @@ public class ModelStoreController {
     private void loadInstalledModels() {
         if (installedModelsContainer == null)
             return;
+        final int refreshToken = ++installedModelsRefreshToken;
         installedModelsContainer.getChildren().clear();
 
         AppExecutors.runBackground(() -> {
-            JSONArray models = aiOrchestrator.listLocalModels();
+            JSONArray models = dedupeModels(aiOrchestrator.listLocalModels());
+            Preferences prefs = Preferences.userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+            String activeModelPath = prefs.get("local_model_path", "");
+            JSONObject health = aiOrchestrator.getLocalHealth();
+            String loadedModelPath = health.optString("model_path", "");
             Platform.runLater(() -> {
+                if (refreshToken != installedModelsRefreshToken) {
+                    return;
+                }
                 if (models.length() == 0) {
                     Label empty = new Label("No models installed yet. Download one from the 'Download Models' tab.");
                     empty.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 14px; -fx-padding: 40;");
@@ -417,13 +427,15 @@ public class ModelStoreController {
 
                 for (int i = 0; i < models.length(); i++) {
                     JSONObject model = models.getJSONObject(i);
-                    installedModelsContainer.getChildren().add(createInstalledModelCard(model));
+                    boolean isSelected = model.optString("path", "").equals(activeModelPath);
+                    boolean isLoaded = model.optString("path", "").equals(loadedModelPath);
+                    installedModelsContainer.getChildren().add(createInstalledModelCard(model, isSelected, isLoaded));
                 }
             });
         });
     }
 
-    private HBox createInstalledModelCard(JSONObject model) {
+    private HBox createInstalledModelCard(JSONObject model, boolean isSelected, boolean isLoaded) {
         HBox card = new HBox(15);
         card.setStyle(
                 "-fx-background-color: #0f1724; -fx-padding: 15; -fx-background-radius: 8; " +
@@ -452,6 +464,12 @@ public class ModelStoreController {
         Label sizeLabel = new Label(sizeStr);
         sizeLabel.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 11px;");
 
+        if (isSelected) {
+            Label activeBadge = new Label(isLoaded ? "LOADED" : "SELECTED");
+            activeBadge.setStyle("-fx-background-color: #0f2920; -fx-text-fill: #5fe6b3; -fx-padding: 2 8; -fx-background-radius: 4; -fx-font-size: 10px; -fx-font-weight: bold;");
+            metaRow.getChildren().add(activeBadge);
+        }
+
         Label pathLabel = new Label(model.optString("path", ""));
         pathLabel.setStyle("-fx-text-fill: #4e4b6c; -fx-font-size: 10px;");
         pathLabel.setMaxWidth(400);
@@ -463,16 +481,16 @@ public class ModelStoreController {
         VBox actions = new VBox(5);
         actions.setAlignment(Pos.CENTER);
 
-        Button loadBtn = new Button("▶ Load");
+        Button loadBtn = new Button("Use Model");
         loadBtn.setStyle(
                 "-fx-background-color: #00d4ff; -fx-text-fill: #061427; -fx-cursor: hand; -fx-font-size: 11px;");
-        loadBtn.setPrefWidth(80);
+        loadBtn.setPrefWidth(95);
         loadBtn.setOnAction(e -> handleLoadModel(model));
 
         Button deleteBtn = new Button("✕ Delete");
         deleteBtn.setStyle(
                 "-fx-background-color: #ff6b6b30; -fx-text-fill: #ff6b6b; -fx-cursor: hand; -fx-font-size: 11px;");
-        deleteBtn.setPrefWidth(80);
+        deleteBtn.setPrefWidth(95);
         deleteBtn.setOnAction(e -> handleDeleteModel(model));
 
         actions.getChildren().addAll(loadBtn, deleteBtn);
@@ -516,15 +534,25 @@ public class ModelStoreController {
 
         String name = model.optString("name");
         statusLabel.setText("Loading model: " + name + "...");
-        aiOrchestrator.loadLocalModel(path, "auto");
-        
-        // Persist the choice so Settings and reboots remember it
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences
-                .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
-        prefs.put("local_model_path", path);
+        AppExecutors.runBackground(() -> {
+            org.example.MediManage.service.ai.LocalAIService.ModelLoadResult result =
+                    aiOrchestrator.loadLocalModelBlocking(path, "auto");
+            Platform.runLater(() -> {
+                if (result.success()) {
+                    java.util.prefs.Preferences prefs = java.util.prefs.Preferences
+                            .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
+                    prefs.put("local_model_path", result.modelPath());
+                    try { prefs.flush(); } catch (Exception ignored) {}
 
-        statusLabel.setText("✅ Model set as active: " + name);
-        org.example.MediManage.util.ToastNotification.info("Model set as active: " + name);
+                    statusLabel.setText("✅ Model set as active: " + name);
+                    org.example.MediManage.util.ToastNotification.info("Model set as active: " + name);
+                    loadInstalledModels();
+                } else {
+                    statusLabel.setText("❌ Failed to load model: " + result.message());
+                    org.example.MediManage.util.ToastNotification.error("Model load failed: " + result.message());
+                }
+            });
+        });
     }
 
     private void handleDeleteModel(JSONObject model) {
@@ -563,6 +591,24 @@ public class ModelStoreController {
     private void handleStopDownload() {
         aiOrchestrator.stopModelDownload();
         statusLabel.setText("Cancelling download...");
+    }
+
+    private JSONArray dedupeModels(JSONArray models) {
+        java.util.LinkedHashMap<String, JSONObject> deduped = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < models.length(); i++) {
+            JSONObject model = models.optJSONObject(i);
+            if (model == null) {
+                continue;
+            }
+            String path = model.optString("path", "").toLowerCase(java.util.Locale.ROOT);
+            if (!path.isBlank()) {
+                deduped.putIfAbsent(path, model);
+            }
+        }
+
+        JSONArray result = new JSONArray();
+        deduped.values().forEach(result::put);
+        return result;
     }
 
     private void showAlert(String title, String content) {

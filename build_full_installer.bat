@@ -25,7 +25,39 @@ set "PATH=%JAVA_HOME%\bin;%PATH%"
 echo Using JAVA_HOME=%JAVA_HOME%
 
 echo ==========================================
-echo 0. Generating Demo Database...
+echo 0. Extracting Project Metadata...
+echo ==========================================
+:: Extract version and artifactId from pom.xml using PowerShell XML parsing.
+set "PROJECT_VERSION="
+set "ARTIFACT_ID="
+
+echo [Info] Fetching project details from pom.xml...
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$pom=[xml](Get-Content 'pom.xml'); $ns=New-Object System.Xml.XmlNamespaceManager($pom.NameTable); $ns.AddNamespace('m','http://maven.apache.org/POM/4.0.0'); $node=$pom.SelectSingleNode('/m:project/m:artifactId',$ns); if($node){$node.InnerText}"`) do (
+    set "ARTIFACT_ID=%%i"
+    goto :artifact_id_found
+)
+:artifact_id_found
+
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$pom=[xml](Get-Content 'pom.xml'); $ns=New-Object System.Xml.XmlNamespaceManager($pom.NameTable); $ns.AddNamespace('m','http://maven.apache.org/POM/4.0.0'); $node=$pom.SelectSingleNode('/m:project/m:version',$ns); if($node){$node.InnerText}"`) do (
+    set "PROJECT_VERSION=%%i"
+    goto :version_found
+)
+:version_found
+
+if "%PROJECT_VERSION%"=="" (
+    echo ERROR: Could not extract project version from pom.xml.
+    exit /b 1
+)
+if "%ARTIFACT_ID%"=="" (
+    echo ERROR: Could not extract artifact ID from pom.xml.
+    exit /b 1
+)
+
+echo [Info] Artifact ID: %ARTIFACT_ID%
+echo [Info] Project Version: %PROJECT_VERSION%
+
+echo ==========================================
+echo 0b. Generating Demo Database...
 echo ==========================================
 node whatsapp-server/generate-db.js
 if %errorlevel% neq 0 (
@@ -36,7 +68,7 @@ if %errorlevel% neq 0 (
 echo ==========================================
 echo 1. Cleaning and Building with Maven...
 echo ==========================================
-call mvn clean package dependency:copy-dependencies
+call .\mvnw.cmd clean package dependency:copy-dependencies
 if %errorlevel% neq 0 (
     echo Maven build failed!
     exit /b %errorlevel%
@@ -45,15 +77,21 @@ if %errorlevel% neq 0 (
 echo ==========================================
 echo 2. Preparing Distribution Directory...
 echo ==========================================
-if exist "dist\MediManage-1.0.0" rmdir /s /q "dist\MediManage-1.0.0"
-mkdir "dist\MediManage-1.0.0"
-mkdir "dist\MediManage-1.0.0\lib"
+set "DIST_PATH=dist\MediManage-%PROJECT_VERSION%"
+if exist "%DIST_PATH%" rmdir /s /q "%DIST_PATH%"
+mkdir "%DIST_PATH%"
+mkdir "%DIST_PATH%\lib"
 
 echo Copying Application JAR...
-copy "target\Project_File-1.0.0.jar" "dist\MediManage-1.0.0\MediManage.jar" >nul
+if not exist "target\%ARTIFACT_ID%-%PROJECT_VERSION%.jar" (
+    echo ERROR: Expected application jar target\%ARTIFACT_ID%-%PROJECT_VERSION%.jar was not found.
+    dir /b target
+    exit /b 1
+)
+copy "target\%ARTIFACT_ID%-%PROJECT_VERSION%.jar" "%DIST_PATH%\MediManage.jar" >nul
 
 echo Copying Dependencies...
-copy "target\dependency\*.jar" "dist\MediManage-1.0.0\lib\" >nul
+copy "target\dependency\*.jar" "%DIST_PATH%\lib\" >nul
 
 
 echo ==========================================
@@ -63,12 +101,12 @@ if exist "dist\image" rmdir /s /q "dist\image"
 
 "%JAVA_HOME%\bin\jpackage.exe" ^
   --name "MediManage" ^
-  --input "dist\MediManage-1.0.0" ^
+  --input "%DIST_PATH%" ^
   --main-jar "MediManage.jar" ^
   --main-class "org.example.MediManage.Launcher" ^
   --type app-image ^
   --dest "dist\image" ^
-  --app-version "1.0.0" ^
+  --app-version "%PROJECT_VERSION%" ^
   --icon "src\main\resources\app_icon.ico" ^
   --java-options "--add-modules jdk.crypto.ec,jdk.naming.dns,java.naming" ^
   --vendor "MediManage Team" ^
@@ -124,6 +162,7 @@ mkdir "%WA_DEST%" 2>nul
 :: Copy WhatsApp Server binaries (ONLY the compiled .jsc and node.exe, plus node_modules)
 copy "whatsapp-server\node.exe" "%WA_DEST%\" >nul
 copy "whatsapp-server\index.jsc" "%WA_DEST%\" >nul
+copy "whatsapp-server\security.js" "%WA_DEST%\" >nul
 copy "whatsapp-server\start_protected.js" "%WA_DEST%\" >nul
 copy "whatsapp-server\.env" "%WA_DEST%\" >nul 2>nul
 
@@ -144,9 +183,11 @@ echo Launcher scripts copied.
 echo ==========================================
 echo 4. Compiling Installer with Inno Setup...
 echo ==========================================
-if exist "dist\MediManage_Setup_1.0.0.exe" del "dist\MediManage_Setup_1.0.0.exe"
+set "SETUP_EXE=Output\MediManage_Setup_%PROJECT_VERSION%.exe"
+if exist "%SETUP_EXE%" del "%SETUP_EXE%"
 
-"C:\Users\ksvik\AppData\Local\Programs\Inno Setup 6\ISCC.exe" setup.iss
+set "APP_VERSION=%PROJECT_VERSION%"
+"C:\Users\ksvik\AppData\Local\Programs\Inno Setup 6\ISCC.exe" /DAppVersion=%PROJECT_VERSION% setup.iss
 if %errorlevel% neq 0 (
     echo Inno Setup compilation failed!
     exit /b %errorlevel%
@@ -154,5 +195,5 @@ if %errorlevel% neq 0 (
 
 echo ==========================================
 echo BUILD SUCCESSFUL!
-echo Installer is located at: Output\MediManage_Setup_1.0.0.exe
+echo Installer is located at: Output\MediManage_Setup_%PROJECT_VERSION%.exe
 echo ==========================================

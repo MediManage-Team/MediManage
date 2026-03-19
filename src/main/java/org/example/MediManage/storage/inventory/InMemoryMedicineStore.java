@@ -44,6 +44,17 @@ public class InMemoryMedicineStore implements MedicineStore {
     }
 
     @Override
+    public Medicine getMedicineById(int medicineId) {
+        lock.readLock().lock();
+        try {
+            Medicine medicine = medicines.get(medicineId);
+            return medicine == null ? null : copyMedicine(medicine);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    @Override
     public List<Medicine> getMedicinesPage(int offset, int limit) {
         int safeOffset = Math.max(0, offset);
         int safeLimit = limit <= 0 ? 50 : limit;
@@ -102,7 +113,7 @@ public class InMemoryMedicineStore implements MedicineStore {
     }
 
     @Override
-    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+    public int addMedicine(String name, String genericName, String company, String expiry, double price,
             int initialStock, double purchasePrice, int reorderThreshold) {
         lock.writeLock().lock();
         try {
@@ -115,8 +126,11 @@ public class InMemoryMedicineStore implements MedicineStore {
                     expiry,
                     initialStock,
                     price,
-                    purchasePrice);
+                    purchasePrice,
+                    reorderThreshold,
+                    "");
             medicines.put(nextId, medicine);
+            return nextId;
         } finally {
             lock.writeLock().unlock();
         }
@@ -133,7 +147,22 @@ public class InMemoryMedicineStore implements MedicineStore {
             if (!medicines.containsKey(medicine.getId())) {
                 return;
             }
+            medicine.setReorderThreshold(reorderThreshold);
             medicines.put(medicine.getId(), copyMedicine(medicine));
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public void updateBarcode(int medicineId, String barcode) {
+        lock.writeLock().lock();
+        try {
+            Medicine existing = medicines.get(medicineId);
+            if (existing == null) {
+                return;
+            }
+            existing.setBarcode(barcode);
         } finally {
             lock.writeLock().unlock();
         }
@@ -193,6 +222,9 @@ public class InMemoryMedicineStore implements MedicineStore {
                 source.getCompany(),
                 source.getExpiry(),
                 source.getStock(),
-                source.getPrice());
+                source.getPrice(),
+                source.getPurchasePrice(),
+                source.getReorderThreshold(),
+                source.getBarcode());
     }
 }

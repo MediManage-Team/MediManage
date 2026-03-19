@@ -2,29 +2,34 @@
 -- MediManage — Seed Data for uniCenta POS Features (Phases 1-3)
 -- ======================================================================
 
--- ── PHASE 1: INITIAL ADMIN USER ──
-INSERT OR IGNORE INTO users (user_id, username, password, role)
-VALUES (1, '1', '1', 'ADMIN');
+-- Demo data is opt-in only.
+-- No default admin credential is seeded here.
 
 -- ── PHASE 1: RECEIPT SETTINGS ──
-INSERT
-    OR IGNORE INTO receipt_settings (setting_key, setting_value)
-VALUES ('pharmacy_name', 'MediManage Pharmacy'),
-    (
-        'pharmacy_address',
-        '123 Health Street, Medical Colony, Bengaluru - 560001'
-    ),
-    ('pharmacy_phone', '+91 80 2345 6789'),
-    ('pharmacy_email', 'contact@medimanage.in'),
-    ('pharmacy_gst', '29AABCM1234F1Z5'),
-    ('pharmacy_dl', 'KA/BNG/20B/2024/12345'),
-    (
-        'footer_message',
-        'Thank you for choosing MediManage! Get well soon.'
-    ),
-    ('show_gst', 'true'),
-    ('show_logo', 'true'),
-    ('paper_width_mm', '80');
+INSERT OR REPLACE INTO receipt_settings (
+        setting_id,
+        pharmacy_name,
+        address_line1,
+        address_line2,
+        phone,
+        email,
+        gst_number,
+        logo_path,
+        footer_text,
+        show_barcode_on_receipt
+    )
+VALUES (
+        1,
+        'MediManage Pharmacy',
+        '123 Health Street',
+        'Medical Colony, Bengaluru - 560001',
+        '+91 80 2345 6789',
+        'contact@medimanage.in',
+        '29AABCM1234F1Z5',
+        NULL,
+        'Thank you for choosing MediManage! Get well soon.',
+        1
+    );
 -- ── PHASE 1: ASSIGN BARCODES TO FIRST 50 MEDICINES ──
 UPDATE medicines
 SET barcode = '880100' || printf('%06d', medicine_id)

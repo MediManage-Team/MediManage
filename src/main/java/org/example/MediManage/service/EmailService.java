@@ -49,9 +49,6 @@ public class EmailService {
                     }
                 });
 
-                Message message = new MimeMessage(session);
-                message.setFrom(new InternetAddress(username, "MediManage Pharmacy"));
-                message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toAddress));
                 // Fetch templates
                 String pharmacyName = "MediManage Pharmacy";
                 try {
@@ -60,6 +57,10 @@ public class EmailService {
                         pharmacyName = rs.getPharmacyName();
                     }
                 } catch (Exception ignored) {}
+
+                Message message = new MimeMessage(session);
+                message.setFrom(new InternetAddress(username, pharmacyName));
+                message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toAddress));
 
                 String careNote = "";
                 if (careProtocol != null && !careProtocol.isBlank()) {
@@ -133,8 +134,16 @@ public class EmailService {
                     }
                 });
 
+                String pharmacyName = "MediManage Pharmacy";
+                try {
+                    ReceiptSettings rs = receiptDAO.getSettings();
+                    if (rs.getPharmacyName() != null && !rs.getPharmacyName().isBlank()) {
+                        pharmacyName = rs.getPharmacyName();
+                    }
+                } catch (Exception ignored) {}
+
                 Message message = new MimeMessage(session);
-                message.setFrom(new InternetAddress(username, "MediManage Pharmacy"));
+                message.setFrom(new InternetAddress(username, pharmacyName));
                 message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toAddress));
                 message.setSubject(subject);
                 message.setText(bodyText);

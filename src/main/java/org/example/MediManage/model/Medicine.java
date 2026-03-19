@@ -5,20 +5,26 @@ import javafx.beans.property.*;
 public class Medicine {
     private final IntegerProperty id;
     private final StringProperty name;
+    private final StringProperty genericName;
     private final StringProperty company;
     private final StringProperty expiry;
     private final IntegerProperty stock;
     private final DoubleProperty price;
     private final DoubleProperty purchasePrice;
-
-    private final StringProperty genericName;
+    private final IntegerProperty reorderThreshold;
+    private final StringProperty barcode;
 
     public Medicine(int id, String name, String genericName, String company, String expiry, int stock, double price) {
-        this(id, name, genericName, company, expiry, stock, price, 0.0);
+        this(id, name, genericName, company, expiry, stock, price, 0.0, 10, "");
     }
 
     public Medicine(int id, String name, String genericName, String company, String expiry, int stock, double price,
             double purchasePrice) {
+        this(id, name, genericName, company, expiry, stock, price, purchasePrice, 10, "");
+    }
+
+    public Medicine(int id, String name, String genericName, String company, String expiry, int stock, double price,
+            double purchasePrice, int reorderThreshold, String barcode) {
         this.id = new SimpleIntegerProperty(id);
         this.name = new SimpleStringProperty(name);
         this.genericName = new SimpleStringProperty(genericName != null ? genericName : "");
@@ -27,10 +33,12 @@ public class Medicine {
         this.stock = new SimpleIntegerProperty(stock);
         this.price = new SimpleDoubleProperty(price);
         this.purchasePrice = new SimpleDoubleProperty(purchasePrice);
+        this.reorderThreshold = new SimpleIntegerProperty(reorderThreshold);
+        this.barcode = new SimpleStringProperty(barcode != null ? barcode : "");
     }
 
     public Medicine(int id, String name, String company, String expiry, int stock, double price) {
-        this(id, name, "", company, expiry, stock, price, 0.0);
+        this(id, name, "", company, expiry, stock, price, 0.0, 10, "");
     }
 
     public StringProperty genericNameProperty() {
@@ -136,6 +144,30 @@ public class Medicine {
 
     public void setPurchasePrice(double purchasePrice) {
         this.purchasePrice.set(purchasePrice);
+    }
+
+    public IntegerProperty reorderThresholdProperty() {
+        return reorderThreshold;
+    }
+
+    public int getReorderThreshold() {
+        return reorderThreshold.get();
+    }
+
+    public void setReorderThreshold(int reorderThreshold) {
+        this.reorderThreshold.set(reorderThreshold);
+    }
+
+    public StringProperty barcodeProperty() {
+        return barcode;
+    }
+
+    public String getBarcode() {
+        return barcode.get();
+    }
+
+    public void setBarcode(String barcode) {
+        this.barcode.set(barcode != null ? barcode : "");
     }
 
     /**

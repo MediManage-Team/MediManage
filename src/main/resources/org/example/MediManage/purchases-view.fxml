@@ -9,24 +9,25 @@
         <Insets top="16" right="16" bottom="16" left="16"/>
     </padding>
 
-    <Label text="📦 Purchase Management (Stock Inward)" styleClass="page-title"/>
+    <Label text="📦 Purchase Management (Production Stock Inward)" styleClass="page-title"/>
 
     <VBox VBox.vgrow="ALWAYS">
-        <TabPane fx:id="tabPane" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
-            
-            <!-- Tab 1: Create New Purchase -->
+        <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+
             <Tab text="New Purchase Order">
-                <SplitPane dividerPositions="0.65" VBox.vgrow="ALWAYS">
-                    <!-- Left: Cart -->
+                <SplitPane dividerPositions="0.64" VBox.vgrow="ALWAYS">
                     <VBox spacing="10" styleClass="dark-panel">
                         <Label text="Current Order Items" styleClass="label-strong"/>
                         <TableView fx:id="poTable" VBox.vgrow="ALWAYS">
                             <columns>
-                                <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="200"/>
+                                <TableColumn fx:id="colMedicine" text="Medicine" prefWidth="180"/>
                                 <TableColumn fx:id="colCompany" text="Company" prefWidth="120"/>
-                                <TableColumn fx:id="colQty" text="Qty" prefWidth="80"/>
-                                <TableColumn fx:id="colCost" text="Unit Cost" prefWidth="100"/>
-                                <TableColumn fx:id="colTotal" text="Total" prefWidth="100"/>
+                                <TableColumn fx:id="colBatch" text="Batch" prefWidth="95"/>
+                                <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="95"/>
+                                <TableColumn fx:id="colQty" text="Qty" prefWidth="70"/>
+                                <TableColumn fx:id="colCost" text="Cost" prefWidth="95"/>
+                                <TableColumn fx:id="colSell" text="Sell" prefWidth="95"/>
+                                <TableColumn fx:id="colTotal" text="Total" prefWidth="105"/>
                             </columns>
                             <columnResizePolicy>
                                 <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
@@ -37,53 +38,107 @@
                             <Label text="Order Total:" styleClass="total-label"/>
                             <Label fx:id="lblTotalAmount" text="₹ 0.00" styleClass="total-value"/>
                         </HBox>
-                        
+
                         <Button text="🗑 Remove Selected Item" onAction="#handleRemoveItem" styleClass="button-outlined"/>
                     </VBox>
 
-                    <!-- Right: Controls -->
-                    <VBox spacing="15" styleClass="billing-controls">
-                        <!-- Supplier Section -->
-                        <VBox spacing="5" styleClass="billing-section">
-                            <Label text="1. Select Supplier" styleClass="label-strong"/>
-                            <ComboBox fx:id="comboSupplier" promptText="Select Supplier" maxWidth="Infinity"/>
-                            <TextField fx:id="txtNotes" promptText="Order Notes / Invoice #"/>
-                        </VBox>
+                    <ScrollPane fitToWidth="true" hbarPolicy="NEVER">
+                        <content>
+                            <VBox spacing="15" styleClass="billing-controls">
+                                <VBox spacing="6" styleClass="billing-section">
+                                    <Label text="1. Supplier / Invoice Context" styleClass="label-strong"/>
+                                    <ComboBox fx:id="comboSupplier" promptText="Select Supplier" maxWidth="Infinity"/>
+                                    <TextField fx:id="txtNotes" promptText="Invoice # / GRN / Purchase Notes"/>
+                                </VBox>
 
-                        <!-- Item Entry Section -->
-                        <VBox spacing="10" styleClass="billing-section" VBox.vgrow="ALWAYS">
-                            <Label text="2. Add Items to Order" styleClass="label-strong"/>
+                                <VBox spacing="10" styleClass="billing-section">
+                                    <Label text="2. Medicine Selection" styleClass="label-strong"/>
+                                    <CheckBox fx:id="chkNewMedicine" text="Add a brand-new medicine from Purchases" onAction="#handleMedicineModeChanged"/>
 
-                            <VBox spacing="2">
-                                <Label text="Search Medicine"/>
-                                <StackPane alignment="TOP_LEFT">
-                                    <TextField fx:id="txtSearchMedicine" promptText="Type medicine name..."/>
-                                    <ListView fx:id="listMedicineSuggestions" visible="false" maxHeight="150"/>
-                                </StackPane>
+                                    <VBox fx:id="existingMedicineBox" spacing="6">
+                                        <Label text="Search Existing Medicine"/>
+                                        <StackPane alignment="TOP_LEFT">
+                                            <TextField fx:id="txtSearchMedicine" promptText="Type medicine name / generic / company..."/>
+                                            <ListView fx:id="listMedicineSuggestions" visible="false" managed="false" maxHeight="180"/>
+                                        </StackPane>
+                                        <Label fx:id="lblMedicineContext" text="Select an existing medicine to prefill pricing and expiry." wrapText="true" styleClass="text-muted"/>
+                                    </VBox>
+
+                                    <VBox fx:id="newMedicineBox" spacing="8" visible="false" managed="false">
+                                        <GridPane hgap="10" vgap="8">
+                                            <columnConstraints>
+                                                <ColumnConstraints percentWidth="50"/>
+                                                <ColumnConstraints percentWidth="50"/>
+                                            </columnConstraints>
+                                            <children>
+                                                <VBox spacing="2" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                                                    <Label text="Medicine Name"/>
+                                                    <TextField fx:id="txtNewMedicineName" promptText="e.g. Amoxycillin 500"/>
+                                                </VBox>
+                                                <VBox spacing="2" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                                                    <Label text="Generic Name"/>
+                                                    <TextField fx:id="txtNewGenericName" promptText="e.g. Amoxicillin"/>
+                                                </VBox>
+                                                <VBox spacing="2" GridPane.columnIndex="0" GridPane.rowIndex="1">
+                                                    <Label text="Company / Manufacturer"/>
+                                                    <TextField fx:id="txtNewCompany" promptText="e.g. Cipla"/>
+                                                </VBox>
+                                                <VBox spacing="2" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                                                    <Label text="Reorder Level"/>
+                                                    <TextField fx:id="txtNewReorderThreshold" promptText="10"/>
+                                                </VBox>
+                                            </children>
+                                        </GridPane>
+                                    </VBox>
+                                </VBox>
+
+                                <VBox spacing="10" styleClass="billing-section">
+                                    <Label text="3. Batch / Pricing Details" styleClass="label-strong"/>
+                                    <GridPane hgap="10" vgap="8">
+                                        <columnConstraints>
+                                            <ColumnConstraints percentWidth="50"/>
+                                            <ColumnConstraints percentWidth="50"/>
+                                        </columnConstraints>
+                                        <children>
+                                            <VBox spacing="2" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                                                <Label text="Batch / Lot Number"/>
+                                                <TextField fx:id="txtBatchNumber" promptText="e.g. B240318A"/>
+                                            </VBox>
+                                            <VBox spacing="2" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                                                <Label text="Buying Date"/>
+                                                <DatePicker fx:id="datePurchaseDate"/>
+                                            </VBox>
+
+                                            <VBox spacing="2" GridPane.columnIndex="0" GridPane.rowIndex="1">
+                                                <Label text="Expiry Date"/>
+                                                <DatePicker fx:id="dateExpiryDate"/>
+                                            </VBox>
+                                            <VBox spacing="2" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                                                <Label text="Received Qty"/>
+                                                <TextField fx:id="txtQty" promptText="e.g. 50"/>
+                                            </VBox>
+
+                                            <VBox spacing="2" GridPane.columnIndex="0" GridPane.rowIndex="2">
+                                                <Label text="Unit Cost (₹)"/>
+                                                <TextField fx:id="txtCost" promptText="e.g. 10.50"/>
+                                            </VBox>
+                                            <VBox spacing="2" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                                                <Label text="Selling Price (₹)"/>
+                                                <TextField fx:id="txtSellingPrice" promptText="e.g. 14.99"/>
+                                            </VBox>
+                                        </children>
+                                    </GridPane>
+                                </VBox>
+
+                                <Button text="ADD LINE ITEM" onAction="#handleAddItem" styleClass="button-primary" maxWidth="Infinity" prefHeight="42"/>
+                                <Region VBox.vgrow="ALWAYS"/>
+                                <Button fx:id="btnReceiveOrder" text="RECEIVE ORDER &amp; UPDATE STOCK" onAction="#handleReceiveOrder" disable="true" maxWidth="Infinity" prefHeight="60" styleClass="button-success button-xl"/>
                             </VBox>
-
-                            <HBox spacing="10">
-                                <VBox spacing="2" HBox.hgrow="ALWAYS">
-                                    <Label text="Received Qty"/>
-                                    <TextField fx:id="txtQty" promptText="e.g. 50"/>
-                                </VBox>
-                                <VBox spacing="2" HBox.hgrow="ALWAYS">
-                                    <Label text="Unit Cost (₹)"/>
-                                    <TextField fx:id="txtCost" promptText="e.g. 10.50"/>
-                                </VBox>
-                            </HBox>
-                            
-                            <Button text="ADD TO ORDER" onAction="#handleAddItem" styleClass="button-primary" maxWidth="Infinity" prefHeight="40"/>
-                            <Region VBox.vgrow="ALWAYS"/>
-                        </VBox>
-
-                        <!-- Receive Button -->
-                        <Button fx:id="btnReceiveOrder" text="RECEIVE ORDER &amp; UPDATE STOCK" onAction="#handleReceiveOrder" maxWidth="Infinity" prefHeight="60" styleClass="button-success button-xl"/>
-                    </VBox>
+                        </content>
+                    </ScrollPane>
                 </SplitPane>
             </Tab>
 
-            <!-- Tab 2: Purchase History -->
             <Tab text="Purchase History">
                 <VBox spacing="10" styleClass="dark-panel">
                     <HBox spacing="10" alignment="CENTER_LEFT">
@@ -101,7 +156,7 @@
                             <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
                         </columnResizePolicy>
                     </TableView>
-                    <Label text="Double-click a row to view items." styleClass="text-muted"/>
+                    <Label text="Double-click a row to inspect batch, expiry, and pricing details." styleClass="text-muted"/>
                 </VBox>
             </Tab>
 

@@ -2,6 +2,8 @@ package org.example.MediManage.dao;
 
 import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.model.Location;
+import org.example.MediManage.model.LocationStockRow;
+import org.example.MediManage.model.LocationTransferRow;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -79,6 +81,45 @@ public class LocationDAO {
             ps.setInt(3, quantity);
             ps.setInt(4, quantity);
             ps.executeUpdate();
+        }
+    }
+
+    public List<LocationStockRow> getStockRowsForLocation(int locationId) throws SQLException {
+        List<LocationStockRow> rows = new ArrayList<>();
+        String sql = "SELECT ls.location_stock_id, ls.medicine_id, ls.quantity, ls.min_stock, ls.updated_at, " +
+                "m.name AS medicine_name, COALESCE(m.generic_name, '') AS generic_name, COALESCE(m.company, '') AS company " +
+                "FROM location_stock ls " +
+                "JOIN medicines m ON m.medicine_id = ls.medicine_id " +
+                "WHERE ls.location_id = ? AND m.active = 1 " +
+                "ORDER BY m.name ASC";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, locationId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new LocationStockRow(
+                            rs.getInt("location_stock_id"),
+                            rs.getInt("medicine_id"),
+                            rs.getString("medicine_name"),
+                            rs.getString("generic_name"),
+                            rs.getString("company"),
+                            rs.getInt("quantity"),
+                            rs.getInt("min_stock"),
+                            rs.getString("updated_at")));
+                }
+            }
+        }
+        return rows;
+    }
+
+    public int sumAllocatedStock(int medicineId) throws SQLException {
+        String sql = "SELECT COALESCE(SUM(quantity), 0) FROM location_stock WHERE medicine_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, medicineId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
         }
     }
 
@@ -164,6 +205,41 @@ public class LocationDAO {
             conn.setAutoCommit(true);
             conn.close();
         }
+    }
+
+    public List<LocationTransferRow> getRecentTransfers(int limit) throws SQLException {
+        List<LocationTransferRow> rows = new ArrayList<>();
+        String sql = "SELECT st.transfer_id, st.medicine_id, st.quantity, st.status, st.requested_at, st.completed_at, " +
+                "COALESCE(m.name, '') AS medicine_name, " +
+                "COALESCE(fl.name, '') AS from_location_name, " +
+                "COALESCE(tl.name, '') AS to_location_name, " +
+                "COALESCE(u.username, '') AS requested_by_username " +
+                "FROM stock_transfers st " +
+                "JOIN medicines m ON m.medicine_id = st.medicine_id " +
+                "JOIN locations fl ON fl.location_id = st.from_location_id " +
+                "JOIN locations tl ON tl.location_id = st.to_location_id " +
+                "LEFT JOIN users u ON u.user_id = st.requested_by " +
+                "ORDER BY st.requested_at DESC LIMIT ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, Math.max(1, limit));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new LocationTransferRow(
+                            rs.getInt("transfer_id"),
+                            rs.getInt("medicine_id"),
+                            rs.getString("medicine_name"),
+                            rs.getString("from_location_name"),
+                            rs.getString("to_location_name"),
+                            rs.getInt("quantity"),
+                            rs.getString("status"),
+                            rs.getString("requested_at"),
+                            rs.getString("completed_at"),
+                            rs.getString("requested_by_username")));
+                }
+            }
+        }
+        return rows;
     }
 
     private Location mapLocation(ResultSet rs) throws SQLException {

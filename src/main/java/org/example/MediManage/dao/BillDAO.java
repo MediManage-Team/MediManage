@@ -15,6 +15,7 @@ import java.util.Map;
 public class BillDAO {
     private static final int DEFAULT_HISTORY_LIMIT = 50;
     private static final int MAX_HISTORY_LIMIT = 500;
+    private final InventoryBatchDAO inventoryBatchDAO = new InventoryBatchDAO();
 
     public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
             List<PaymentSplit> paymentSplits, String paymentMode, int loyaltyPointsToRedeem, int loyaltyPointsToAward)
@@ -55,29 +56,34 @@ public class BillDAO {
             }
 
             String itemSql = "INSERT INTO bill_items (" +
-                    "bill_id, medicine_id, quantity, price, total" +
-                    ") VALUES (?, ?, ?, ?, ?)";
-            String stockSql = "UPDATE stock SET quantity = quantity - ? " +
-                    "WHERE medicine_id = ? AND quantity >= ?";
+                    "bill_id, medicine_id, quantity, price, total, cost_of_goods" +
+                    ") VALUES (?, ?, ?, ?, ?, ?)";
 
-            try (PreparedStatement psItem = conn.prepareStatement(itemSql);
-                    PreparedStatement psStock = conn.prepareStatement(stockSql)) {
+            try (PreparedStatement psItem = conn.prepareStatement(itemSql, Statement.RETURN_GENERATED_KEYS)) {
 
                 for (BillItem item : items) {
-                    psStock.setInt(1, item.getQty());
-                    psStock.setInt(2, item.getMedicineId());
-                    psStock.setInt(3, item.getQty());
-                    int updatedRows = psStock.executeUpdate();
-                    if (updatedRows != 1) {
-                        throw new SQLException("Insufficient stock for medicine_id=" + item.getMedicineId());
-                    }
+                    List<InventoryBatchDAO.BatchAllocation> allocations = inventoryBatchDAO
+                            .allocateFefo(conn, item.getMedicineId(), item.getQty());
+                    double costOfGoods = allocations.stream()
+                            .mapToDouble(allocation -> allocation.quantity() * allocation.unitCost())
+                            .sum();
 
                     psItem.setInt(1, billId);
                     psItem.setInt(2, item.getMedicineId());
                     psItem.setInt(3, item.getQty());
                     psItem.setDouble(4, item.getPrice());
                     psItem.setDouble(5, item.getTotal());
+                    psItem.setDouble(6, round2(costOfGoods));
                     psItem.executeUpdate();
+
+                    int billItemId;
+                    try (ResultSet itemKeys = psItem.getGeneratedKeys()) {
+                        if (!itemKeys.next()) {
+                            throw new SQLException("Failed to retrieve bill item ID for medicine_id=" + item.getMedicineId());
+                        }
+                        billItemId = itemKeys.getInt(1);
+                    }
+                    saveBatchAllocations(conn, billId, billItemId, item.getMedicineId(), allocations);
                 }
             }
 
@@ -139,6 +145,50 @@ public class BillDAO {
             }
         }
         return billId;
+    }
+
+    private void saveBatchAllocations(
+            Connection conn,
+            int billId,
+            int billItemId,
+            int medicineId,
+            List<InventoryBatchDAO.BatchAllocation> allocations) throws SQLException {
+        if (allocations == null || allocations.isEmpty()) {
+            return;
+        }
+        String sql = """
+                INSERT INTO bill_item_batch_allocations (
+                    bill_id,
+                    bill_item_id,
+                    medicine_id,
+                    batch_id,
+                    batch_number,
+                    expiry_date,
+                    quantity,
+                    unit_cost,
+                    selling_price
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (InventoryBatchDAO.BatchAllocation allocation : allocations) {
+                ps.setInt(1, billId);
+                ps.setInt(2, billItemId);
+                ps.setInt(3, medicineId);
+                if (allocation.batchId() != null && allocation.batchId() > 0) {
+                    ps.setInt(4, allocation.batchId());
+                } else {
+                    ps.setNull(4, Types.INTEGER);
+                }
+                ps.setString(5, allocation.batchNumber());
+                ps.setString(6, allocation.expiryDate());
+                ps.setInt(7, allocation.quantity());
+                ps.setDouble(8, allocation.unitCost());
+                ps.setDouble(9, allocation.sellingPrice());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
     }
 
     private void savePaymentSplits(Connection conn, int billId, List<PaymentSplit> paymentSplits) throws SQLException {
@@ -400,24 +450,43 @@ public class BillDAO {
     // For Business Intelligence: Line Chart (Gross Profit by Day)
     public Map<String, Double> getProfitBetweenDates(LocalDate start, LocalDate end) {
         Map<String, Double> profit = new LinkedHashMap<>();
-        // Profit = (Total Sale Price) - (Purchase Price * Qty)
-        // Since sqlite requires grouping, we aggregate daily profit
-        String sql = "SELECT DATE(b.bill_date) as day, SUM(bi.total - (m.purchase_price * bi.quantity)) as daily_profit " +
+        String sqlWithCogs = "SELECT DATE(b.bill_date) as day, " +
+                "SUM(bi.total - COALESCE(bi.cost_of_goods, (m.purchase_price * bi.quantity))) as daily_profit " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON bi.bill_id = b.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ? " +
+                "GROUP BY day ORDER BY day ASC";
+        String sqlLegacy = "SELECT DATE(b.bill_date) as day, " +
+                "SUM(bi.total - (m.purchase_price * bi.quantity)) as daily_profit " +
                 "FROM bills b " +
                 "JOIN bill_items bi ON bi.bill_id = b.bill_id " +
                 "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
                 "WHERE b.bill_date >= ? AND b.bill_date < ? " +
                 "GROUP BY day ORDER BY day ASC";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-
-            ps.setString(1, start + " 00:00:00");
-            ps.setString(2, end.plusDays(1) + " 00:00:00");
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    profit.put(rs.getString("day"), rs.getDouble("daily_profit"));
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            String sql = sqlWithCogs;
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, start + " 00:00:00");
+                ps.setString(2, end.plusDays(1) + " 00:00:00");
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        profit.put(rs.getString("day"), rs.getDouble("daily_profit"));
+                    }
+                }
+            } catch (SQLException e) {
+                if (!isMissingCostOfGoodsColumn(e)) {
+                    throw e;
+                }
+                try (PreparedStatement legacyPs = conn.prepareStatement(sqlLegacy)) {
+                    legacyPs.setString(1, start + " 00:00:00");
+                    legacyPs.setString(2, end.plusDays(1) + " 00:00:00");
+                    try (ResultSet rs = legacyPs.executeQuery()) {
+                        while (rs.next()) {
+                            profit.put(rs.getString("day"), rs.getDouble("daily_profit"));
+                        }
+                    }
                 }
             }
         } catch (SQLException e) {
@@ -467,6 +536,13 @@ public class BillDAO {
 
         String billSql = "SELECT COUNT(DISTINCT b.bill_id) AS bill_count, " +
                 "COALESCE(SUM(bi.total), 0) AS net_sales, " +
+                "COALESCE(SUM(COALESCE(bi.cost_of_goods, bi.quantity * COALESCE(m.purchase_price, 0))), 0) AS cogs " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON b.bill_id = bi.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ?";
+        String billSqlLegacy = "SELECT COUNT(DISTINCT b.bill_id) AS bill_count, " +
+                "COALESCE(SUM(bi.total), 0) AS net_sales, " +
                 "COALESCE(SUM(bi.quantity * COALESCE(m.purchase_price, 0)), 0) AS cogs " +
                 "FROM bills b " +
                 "JOIN bill_items bi ON b.bill_id = bi.bill_id " +
@@ -490,6 +566,21 @@ public class BillDAO {
                         billCount = rs.getLong("bill_count");
                         netSales = rs.getDouble("net_sales");
                         cogs = rs.getDouble("cogs");
+                    }
+                }
+            } catch (SQLException e) {
+                if (!isMissingCostOfGoodsColumn(e)) {
+                    throw e;
+                }
+                try (PreparedStatement billPs = conn.prepareStatement(billSqlLegacy)) {
+                    billPs.setString(1, rangeStart);
+                    billPs.setString(2, rangeEndExclusive);
+                    try (ResultSet rs = billPs.executeQuery()) {
+                        if (rs.next()) {
+                            billCount = rs.getLong("bill_count");
+                            netSales = rs.getDouble("net_sales");
+                            cogs = rs.getDouble("cogs");
+                        }
                     }
                 }
             }
@@ -530,27 +621,55 @@ public class BillDAO {
         String endStr = end.atStartOfDay().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         
         String sql = "SELECT COALESCE(SUM(bi.total), 0) AS revenue, " +
-                     "COALESCE(SUM(bi.quantity * COALESCE(m.purchase_price, 0)), 0) AS cogs " +
+                     "COALESCE(SUM(COALESCE(bi.cost_of_goods, bi.quantity * COALESCE(m.purchase_price, 0))), 0) AS cogs " +
                      "FROM bills b " +
                      "JOIN bill_items bi ON b.bill_id = bi.bill_id " +
                      "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
                      "WHERE b.bill_date >= ? AND b.bill_date < ?";
+        String sqlLegacy = "SELECT COALESCE(SUM(bi.total), 0) AS revenue, " +
+                "COALESCE(SUM(bi.quantity * COALESCE(m.purchase_price, 0)), 0) AS cogs " +
+                "FROM bills b " +
+                "JOIN bill_items bi ON b.bill_id = bi.bill_id " +
+                "JOIN medicines m ON bi.medicine_id = m.medicine_id " +
+                "WHERE b.bill_date >= ? AND b.bill_date < ?";
                      
-        try (Connection conn = DatabaseUtil.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, startStr);
-            stmt.setString(2, endStr);
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    double revenue = rs.getDouble("revenue");
-                    double cogs = rs.getDouble("cogs");
-                    return round2(revenue - cogs);
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, startStr);
+                stmt.setString(2, endStr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        double revenue = rs.getDouble("revenue");
+                        double cogs = rs.getDouble("cogs");
+                        return round2(revenue - cogs);
+                    }
+                }
+            } catch (SQLException e) {
+                if (!isMissingCostOfGoodsColumn(e)) {
+                    throw e;
+                }
+                try (PreparedStatement stmt = conn.prepareStatement(sqlLegacy)) {
+                    stmt.setString(1, startStr);
+                    stmt.setString(2, endStr);
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            double revenue = rs.getDouble("revenue");
+                            double cogs = rs.getDouble("cogs");
+                            return round2(revenue - cogs);
+                        }
+                    }
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return 0.0;
+    }
+
+    private boolean isMissingCostOfGoodsColumn(SQLException e) {
+        return e != null
+                && e.getMessage() != null
+                && e.getMessage().toLowerCase().contains("cost_of_goods");
     }
 
     // ======================== AI CARE PROTOCOL ========================

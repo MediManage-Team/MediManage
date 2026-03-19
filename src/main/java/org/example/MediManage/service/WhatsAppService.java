@@ -66,11 +66,12 @@ public class WhatsAppService {
 
                 String jsonPayload = new Gson().toJson(json);
 
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(WhatsAppBridgeConfig.sendUrl()))
                         .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                        .build();
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonPayload));
+                WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                HttpRequest request = requestBuilder.build();
 
                 HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
                 ensureBridgeSuccess(response);
@@ -97,11 +98,12 @@ public class WhatsAppService {
 
                 String jsonPayload = new Gson().toJson(json);
 
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(WhatsAppBridgeConfig.sendUrl()))
                         .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                        .build();
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonPayload));
+                WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                HttpRequest request = requestBuilder.build();
 
                 HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
                 ensureBridgeSuccess(response);

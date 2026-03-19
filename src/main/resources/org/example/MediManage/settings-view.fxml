@@ -28,15 +28,64 @@
             </VBox>
         </TitledPane>
 
+        <TitledPane text="Database Health &amp; Recovery" collapsible="false">
+            <VBox spacing="12">
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Operational Health" style="-fx-font-weight: bold;"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Refresh Health" onAction="#handleRefreshDatabaseHealth" styleClass="button-outlined"/>
+                    <Button text="Create Backup" onAction="#handleCreateBackup" styleClass="button-success"/>
+                    <Button text="Restore Backup" onAction="#handleRestoreBackup" styleClass="button-danger"/>
+                </HBox>
+
+                <GridPane hgap="12" vgap="8">
+                    <Label text="Resolved Path" GridPane.rowIndex="0" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbResolvedPath" text="-" GridPane.rowIndex="0" GridPane.columnIndex="1" wrapText="true"/>
+
+                    <Label text="File Size" GridPane.rowIndex="1" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbFileSize" text="-" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                    <Label text="Journal Mode" GridPane.rowIndex="2" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbJournalMode" text="-" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                    <Label text="Integrity Check" GridPane.rowIndex="3" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbIntegrity" text="-" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                    <Label text="Users / Medicines / Bills" GridPane.rowIndex="4" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbCounts" text="-" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                    <Label text="Active Batches / Audit Events" GridPane.rowIndex="5" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbOpsCounts" text="-" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                    <Label text="Last Backup" GridPane.rowIndex="6" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <Label fx:id="lblDbLastBackup" text="-" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="160" prefWidth="170"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                </GridPane>
+
+                <Label text="Recent Backups" style="-fx-font-weight: bold;"/>
+                <ListView fx:id="listBackupHistory" prefHeight="140" maxHeight="160"/>
+                <Label text="Restoring a backup will replace the active SQLite file and immediately re-run schema checks. A safety backup of the current DB is created first." styleClass="text-muted" wrapText="true"/>
+            </VBox>
+        </TitledPane>
+
         <!-- Local AI Configuration -->
         <TitledPane text="Local AI Configuration" collapsible="false">
             <VBox spacing="10">
-                <Button text="Download New Models (Model Store)" onAction="#handleOpenModelStore" styleClass="button-purple"/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Button text="Open Model Store" onAction="#handleOpenModelStore" styleClass="button-purple"/>
+                    <Button text="Refresh Installed Models" onAction="#handleRefreshLocalModels" styleClass="button-outlined"/>
+                </HBox>
                 <Label text="Current Model:" style="-fx-font-weight: bold;"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <ComboBox fx:id="localModelCombo" promptText="Select local model..." HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
                     <Button text="Browse" onAction="#handleBrowseModel" style="-fx-min-width: 80px;"/>
+                    <Button text="Load Selected" onAction="#handleLoadSelectedModel" styleClass="button-primary" style="-fx-min-width: 110px;"/>
                 </HBox>
+                <Label fx:id="localModelStatusLabel" text="Checking local AI engine..." styleClass="text-muted" wrapText="true"/>
 
                 <Label text="Hardware Acceleration" style="-fx-font-weight: bold;"/>
                 <ComboBox fx:id="hardwareCombo" promptText="Select Hardware" maxWidth="Infinity"/>
@@ -149,33 +198,87 @@
                     </VBox>
 
                     <!-- WhatsApp Bridge Settings -->
-                    <VBox spacing="8" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;" alignment="TOP_CENTER">
+                    <VBox spacing="10" HBox.hgrow="ALWAYS" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 5; -fx-padding: 10;" alignment="TOP_LEFT">
                         <Label text="Local WhatsApp Bridge" style="-fx-font-weight: bold;"/>
                         <Label text="Uses whatsapp-web.js to send free invoices." styleClass="text-muted" wrapText="true"/>
-                        
-                        <HBox alignment="CENTER" spacing="10" style="-fx-padding: 10 0 10 0;">
-                            <Label text="Status:" style="-fx-font-weight: bold;"/>
+
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Label text="Status" style="-fx-font-weight: bold;"/>
                             <Label fx:id="lblWhatsAppStatus" text="Checking..." style="-fx-text-fill: #e8c66a; -fx-font-weight: bold;"/>
                         </HBox>
 
-                        <StackPane style="-fx-background-color: white; -fx-padding: 5; -fx-border-color: #ccc; -fx-border-radius: 5;" maxWidth="-Infinity">
-                            <ImageView fx:id="imgQRCode" fitWidth="180" fitHeight="180" preserveRatio="true"/>
+                        <Label fx:id="lblWhatsAppHint"
+                               text="Start WhatsApp when you are ready. A QR code appears only if pairing is needed."
+                               styleClass="text-muted"
+                               wrapText="true"/>
+
+                        <StackPane prefWidth="170" minWidth="170" maxWidth="170"
+                                   prefHeight="170" minHeight="170" maxHeight="170"
+                                   alignment="CENTER"
+                                   style="-fx-background-color: rgba(255,255,255,0.04); -fx-padding: 10; -fx-border-color: #3a4369; -fx-border-radius: 10; -fx-background-radius: 10;">
+                            <Label fx:id="lblWhatsAppQrPlaceholder"
+                                   text="QR code appears here when pairing is needed."
+                                   wrapText="true"
+                                   textAlignment="CENTER"
+                                   styleClass="text-muted"/>
+                            <ImageView fx:id="imgQRCode" fitWidth="150" fitHeight="150" preserveRatio="true"/>
                         </StackPane>
-                        
-                        <Label text="If disconnected, scan the QR code using WhatsApp -> Linked Devices." styleClass="text-muted" wrapText="true" textAlignment="CENTER"/>
-                        
-                        <HBox spacing="8">
-                            <Button fx:id="btnRefreshWhatsApp" text="🔄 Refresh" onAction="#handleRefreshWhatsApp" styleClass="button-outlined" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                            <Button fx:id="btnStartBridge" text="▶ Start Bridge" onAction="#handleStartWhatsAppBridge" styleClass="button-success" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                        </HBox>
-                        <HBox spacing="8">
-                            <Button text="⏏ Disconnect" onAction="#handleDisconnectWhatsApp" styleClass="button-outlined" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                            <Button text="⏹ Stop Bridge" onAction="#handleStopWhatsAppBridge" styleClass="button-danger" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <Button fx:id="btnStartBridge" text="Start WhatsApp" onAction="#handleStartWhatsAppBridge" styleClass="button-success"/>
+                            <Button fx:id="btnRefreshWhatsApp" text="Refresh Status" onAction="#handleRefreshWhatsApp" styleClass="button-outlined"/>
+                            <Button fx:id="btnDisconnectWhatsApp" text="Disconnect" onAction="#handleDisconnectWhatsApp" styleClass="button-outlined" visible="false" managed="false"/>
                         </HBox>
                     </VBox>
                 </HBox>
                 <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
                     <Button text="Save Communication Settings" onAction="#handleSaveCommunication" styleClass="button-success"/>
+                </HBox>
+
+                <javafx.scene.control.Separator/>
+                <Label text="Receipt Branding" style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #00d4ff;"/>
+                <Label text="These values are used for generated invoice and receipt PDFs, email/WhatsApp branding, and footer text." styleClass="text-muted" wrapText="true"/>
+
+                <GridPane hgap="12" vgap="10">
+                    <Label text="Pharmacy Name" GridPane.rowIndex="0" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="txtReceiptPharmacyName" promptText="MediManage Pharmacy" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                    <Label text="Address Line 1" GridPane.rowIndex="1" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="txtReceiptAddressLine1" promptText="Street / building / locality" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                    <Label text="Address Line 2" GridPane.rowIndex="2" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="txtReceiptAddressLine2" promptText="City / state / postal code" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                    <Label text="Phone" GridPane.rowIndex="3" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="txtReceiptPhone" promptText="+91..." GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                    <Label text="Email" GridPane.rowIndex="4" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="txtReceiptEmail" promptText="pharmacy@example.com" GridPane.rowIndex="4" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                    <Label text="GST Number" GridPane.rowIndex="5" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <TextField fx:id="txtReceiptGstNumber" promptText="Optional GSTIN" GridPane.rowIndex="5" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                    <Label text="Logo" GridPane.rowIndex="6" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                    <HBox spacing="8" GridPane.rowIndex="6" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS">
+                        <TextField fx:id="txtReceiptLogoPath" promptText="Optional logo image path" HBox.hgrow="ALWAYS"/>
+                        <Button text="Browse" onAction="#handleBrowseReceiptLogo" styleClass="button-outlined"/>
+                    </HBox>
+
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="120" prefWidth="140"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                </GridPane>
+
+                <VBox spacing="6">
+                    <Label text="Footer Text" style="-fx-font-weight: bold;"/>
+                    <TextArea fx:id="txtReceiptFooter" prefRowCount="3" promptText="Thank you for your purchase!" wrapText="true"/>
+                </VBox>
+
+                <CheckBox fx:id="chkReceiptShowBarcode" text="Show bill barcode on generated receipts" selected="true"/>
+
+                <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
+                    <Button text="Save Receipt Branding" onAction="#handleSaveReceiptSettings" styleClass="button-success"/>
                 </HBox>
 
                 <!-- Customer Communication Templates (inside Communication section) -->
@@ -203,6 +306,18 @@
                     <Button text="Reset to Defaults" onAction="#handleResetTemplates" styleClass="button-outlined"/>
                     <Button text="Save Templates" onAction="#handleSaveTemplates" styleClass="button-success"/>
                 </HBox>
+            </VBox>
+        </TitledPane>
+
+        <TitledPane text="Operations Audit" collapsible="false">
+            <VBox spacing="10">
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Recent Sensitive Events" style="-fx-font-weight: bold;"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Refresh Audit" onAction="#handleRefreshAuditTrail" styleClass="button-outlined"/>
+                </HBox>
+                <ListView fx:id="listAuditEvents" prefHeight="180" maxHeight="220"/>
+                <Label text="Includes medicine changes, stock write-offs, purchase receipts, location transfer actions, approvals, and backup/restore activity." styleClass="text-muted" wrapText="true"/>
             </VBox>
         </TitledPane>
     </VBox>

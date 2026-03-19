@@ -1,5 +1,9 @@
 package org.example.MediManage.config;
 
+import org.example.MediManage.security.LocalAdminTokenManager;
+
+import java.io.File;
+import java.net.http.HttpRequest;
 import java.util.prefs.Preferences;
 
 /**
@@ -13,6 +17,8 @@ public class WhatsAppBridgeConfig {
 
     /** Default bridge port */
     public static final int DEFAULT_PORT = 3000;
+    public static final String HOST = "127.0.0.1";
+    public static final String SERVICE_NAME = "medimanage-whatsapp-bridge";
 
     /** Get configured bridge port */
     public static int getPort() {
@@ -21,7 +27,7 @@ public class WhatsAppBridgeConfig {
 
     /** Get base URL like http://localhost:3000 */
     public static String getBaseUrl() {
-        return "http://localhost:" + getPort();
+        return "http://" + HOST + ":" + getPort();
     }
 
     /** Full endpoint URLs */
@@ -34,31 +40,31 @@ public class WhatsAppBridgeConfig {
     /**
      * Resolves the whatsapp-server directory, trying multiple locations.
      */
-    public static java.io.File resolveServerDir() {
-        java.io.File dir = new java.io.File("whatsapp-server");
+    public static File resolveServerDir() {
+        String customPath = prefs.get("whatsapp_server_path", "");
+        if (!customPath.isBlank()) {
+            File customDir = new File(customPath);
+            if (customDir.isDirectory()) return customDir;
+        }
+
+        File dir = new File("whatsapp-server");
         if (dir.isDirectory()) return dir;
 
         String userDir = System.getProperty("user.dir");
-        dir = new java.io.File(userDir, "whatsapp-server");
+        dir = new File(userDir, "whatsapp-server");
         if (dir.isDirectory()) return dir;
 
-        dir = new java.io.File(userDir, "../whatsapp-server");
+        dir = new File(userDir, "../whatsapp-server");
         if (dir.isDirectory()) return dir;
 
         String appData = System.getenv("APPDATA");
         if (appData != null) {
-            dir = new java.io.File(appData, "MediManage/whatsapp-server");
+            dir = new File(appData, "MediManage/whatsapp-server");
             if (dir.isDirectory()) return dir;
         }
 
-        dir = new java.io.File(System.getProperty("user.home"), "MediManage/whatsapp-server");
+        dir = new File(System.getProperty("user.home"), "MediManage/whatsapp-server");
         if (dir.isDirectory()) return dir;
-
-        String customPath = prefs.get("whatsapp_server_path", "");
-        if (!customPath.isBlank()) {
-            dir = new java.io.File(customPath);
-            if (dir.isDirectory()) return dir;
-        }
 
         return null;
     }
@@ -68,9 +74,9 @@ public class WhatsAppBridgeConfig {
      */
     public static String resolveNodeExe() {
         // Check bundled node.exe inside the whatsapp-server directory first
-        java.io.File serverDir = resolveServerDir();
+        File serverDir = resolveServerDir();
         if (serverDir != null) {
-            java.io.File bundledNode = new java.io.File(serverDir, "node.exe");
+            File bundledNode = new File(serverDir, "node.exe");
             if (bundledNode.exists()) {
                 return bundledNode.getAbsolutePath();
             }
@@ -81,12 +87,35 @@ public class WhatsAppBridgeConfig {
     /**
      * Resolves the entry script: protected start_protected.js or raw index.js.
      */
-    public static String resolveEntryScript(java.io.File serverDir) {
-        java.io.File protectedEntry = new java.io.File(serverDir, "start_protected.js");
+    public static String resolveEntryScript(File serverDir) {
+        File rawEntry = new File(serverDir, "index.js");
+        if (rawEntry.exists()) {
+            return "index.js";
+        }
+        File protectedEntry = new File(serverDir, "start_protected.js");
         if (protectedEntry.exists()) {
             return "start_protected.js";
         }
         return "index.js";
+    }
+
+    public static ProcessBuilder createStartProcessBuilder() {
+        File serverDir = resolveServerDir();
+        if (serverDir == null || !serverDir.isDirectory()) {
+            throw new IllegalStateException("whatsapp-server directory not found.");
+        }
+
+        ProcessBuilder builder = new ProcessBuilder(resolveNodeExe(), resolveEntryScript(serverDir));
+        builder.directory(serverDir);
+        builder.redirectErrorStream(true);
+        builder.environment().put("PORT", String.valueOf(getPort()));
+        builder.environment().put("HOST", HOST);
+        builder.environment().put(LocalAdminTokenManager.ENV_NAME, LocalAdminTokenManager.getOrCreateToken());
+        return builder;
+    }
+
+    public static void applyAdminHeader(HttpRequest.Builder builder) {
+        LocalAdminTokenManager.applyHeader(builder);
     }
 
     /**
@@ -109,7 +138,7 @@ public class WhatsAppBridgeConfig {
      * Check if the bridge server is already running on the configured port.
      */
     public static boolean isRunning() {
-        try (java.net.Socket ignored = new java.net.Socket("127.0.0.1", getPort())) {
+        try (java.net.Socket ignored = new java.net.Socket(HOST, getPort())) {
             return true;
         } catch (Exception e) {
             return false;

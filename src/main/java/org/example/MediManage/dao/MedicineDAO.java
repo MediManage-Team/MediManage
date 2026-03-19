@@ -25,7 +25,8 @@ public class MedicineDAO {
         List<Medicine> list = new ArrayList<>();
         // Try with purchase_price first; fall back if column hasn't been migrated yet
         String sqlFull = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, " +
-                "COALESCE(m.purchase_price, 0.0) AS purchase_price, s.quantity " +
+                "COALESCE(m.purchase_price, 0.0) AS purchase_price, COALESCE(m.reorder_threshold, 10) AS reorder_threshold, " +
+                "COALESCE(m.barcode, '') AS barcode, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
                 "WHERE m.active = 1 " +
@@ -38,6 +39,8 @@ public class MedicineDAO {
                 "ORDER BY m.name ASC";
 
         boolean hasPurchasePrice = true;
+        boolean hasReorderThreshold = true;
+        boolean hasBarcode = true;
         try (Connection conn = DatabaseUtil.getConnection();
                 Statement stmt = conn.createStatement()) {
             ResultSet rs;
@@ -46,18 +49,12 @@ public class MedicineDAO {
             } catch (SQLException columnMissing) {
                 // purchase_price column not yet migrated — use fallback
                 hasPurchasePrice = false;
+                hasReorderThreshold = false;
+                hasBarcode = false;
                 rs = stmt.executeQuery(sqlFallback);
             }
             while (rs.next()) {
-                list.add(new Medicine(
-                        rs.getInt("medicine_id"),
-                        rs.getString("name"),
-                        rs.getString("generic_name"),
-                        rs.getString("company"),
-                        rs.getString("expiry_date"),
-                        rs.getInt("quantity"),
-                        rs.getDouble("price"),
-                        hasPurchasePrice ? rs.getDouble("purchase_price") : 0.0));
+                list.add(mapMedicine(rs, hasPurchasePrice, hasReorderThreshold, hasBarcode));
             }
             rs.close();
         } catch (SQLException e) {
@@ -70,30 +67,46 @@ public class MedicineDAO {
         if (medicineId <= 0) {
             return null;
         }
-        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+        String sqlFull = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, " +
+                "COALESCE(m.purchase_price, 0.0) AS purchase_price, COALESCE(m.reorder_threshold, 10) AS reorder_threshold, " +
+                "COALESCE(m.barcode, '') AS barcode, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 AND m.medicine_id = ? " +
+                "LIMIT 1";
+        String sqlFallback = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
                 "WHERE m.active = 1 AND m.medicine_id = ? " +
                 "LIMIT 1";
 
         try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                PreparedStatement pstmt = conn.prepareStatement(sqlFull)) {
             pstmt.setInt(1, medicineId);
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
-                return new Medicine(
-                        rs.getInt("medicine_id"),
-                        rs.getString("name"),
-                        rs.getString("generic_name"),
-                        rs.getString("company"),
-                        rs.getString("expiry_date"),
-                        rs.getInt("quantity"),
-                        rs.getDouble("price"));
+                return mapMedicine(rs, true, true, true);
             }
         } catch (SQLException e) {
-            System.err.println("MedicineDAO.getMedicineById: " + e.getMessage());
+            if (!messageContainsAny(e, "purchase_price", "reorder_threshold", "barcode")) {
+                System.err.println("MedicineDAO.getMedicineById: " + e.getMessage());
+                return null;
+            }
+        }
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sqlFallback)) {
+            pstmt.setInt(1, medicineId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return mapMedicine(rs, false, false, false);
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getMedicineById fallback: " + e.getMessage());
             return null;
         }
     }
@@ -106,32 +119,47 @@ public class MedicineDAO {
         int safeOffset = Math.max(0, offset);
         int safeLimit = normalizeLimit(limit);
 
-        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+        String sqlFull = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, " +
+                "COALESCE(m.purchase_price, 0.0) AS purchase_price, COALESCE(m.reorder_threshold, 10) AS reorder_threshold, " +
+                "COALESCE(m.barcode, '') AS barcode, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 " +
+                "ORDER BY m.name ASC LIMIT ? OFFSET ?";
+        String sqlFallback = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
                 "WHERE m.active = 1 " +
                 "ORDER BY m.name ASC LIMIT ? OFFSET ?";
 
         try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                PreparedStatement pstmt = conn.prepareStatement(sqlFull)) {
 
             pstmt.setInt(1, safeLimit);
             pstmt.setInt(2, safeOffset);
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
-                    list.add(new Medicine(
-                            rs.getInt("medicine_id"),
-                            rs.getString("name"),
-                            rs.getString("generic_name"),
-                            rs.getString("company"),
-                            rs.getString("expiry_date"),
-                            rs.getInt("quantity"),
-                            rs.getDouble("price")));
+                    list.add(mapMedicine(rs, true, true, true));
                 }
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            if (!messageContainsAny(e, "purchase_price", "reorder_threshold", "barcode")) {
+                e.printStackTrace();
+                return list;
+            }
+            try (Connection conn = DatabaseUtil.getConnection();
+                    PreparedStatement fallback = conn.prepareStatement(sqlFallback)) {
+                fallback.setInt(1, safeLimit);
+                fallback.setInt(2, safeOffset);
+                try (ResultSet rs = fallback.executeQuery()) {
+                    while (rs.next()) {
+                        list.add(mapMedicine(rs, false, false, false));
+                    }
+                }
+            } catch (SQLException fallbackException) {
+                fallbackException.printStackTrace();
+            }
         }
         return list;
     }
@@ -150,7 +178,7 @@ public class MedicineDAO {
         return 0;
     }
 
-    public void addMedicine(String name, String genericName, String company, String expiry, double price,
+    public int addMedicine(String name, String genericName, String company, String expiry, double price,
             int initialStock, double purchasePrice, int reorderThreshold) {
         checkManagerPermission();
         String insertMed = "INSERT INTO medicines(name, generic_name, company, expiry_date, price, purchase_price, reorder_threshold) VALUES(?, ?, ?, ?, ?, ?, ?)";
@@ -182,12 +210,14 @@ public class MedicineDAO {
                     }
                 }
                 conn.commit();
+                return medId;
             } catch (SQLException e) {
                 conn.rollback();
                 throw e;
             }
         } catch (SQLException e) {
             e.printStackTrace();
+            return -1;
         }
     }
 
@@ -195,7 +225,7 @@ public class MedicineDAO {
     // ReorderThreshold)
     public void updateMedicine(Medicine medicine, int reorderThreshold) {
         checkManagerPermission();
-        String sql = "UPDATE medicines SET name=?, generic_name=?, company=?, price=?, expiry_date=?, purchase_price=?, reorder_threshold=? WHERE medicine_id=?";
+        String sql = "UPDATE medicines SET name=?, generic_name=?, company=?, price=?, expiry_date=?, purchase_price=?, reorder_threshold=?, barcode=? WHERE medicine_id=?";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -207,7 +237,8 @@ public class MedicineDAO {
             pstmt.setString(5, medicine.getExpiry());
             pstmt.setDouble(6, medicine.getPurchasePrice());
             pstmt.setInt(7, reorderThreshold);
-            pstmt.setInt(8, medicine.getId());
+            pstmt.setString(8, medicine.getBarcode());
+            pstmt.setInt(9, medicine.getId());
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -276,7 +307,9 @@ public class MedicineDAO {
     public Medicine findByBarcode(String barcode) {
         if (barcode == null || barcode.isBlank())
             return null;
-        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, " +
+                "COALESCE(m.purchase_price, 0.0) AS purchase_price, COALESCE(m.reorder_threshold, 10) AS reorder_threshold, " +
+                "COALESCE(m.barcode, '') AS barcode, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
                 "WHERE m.active = 1 AND m.barcode = ? " +
@@ -286,14 +319,7 @@ public class MedicineDAO {
             pstmt.setString(1, barcode.trim());
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    return new Medicine(
-                            rs.getInt("medicine_id"),
-                            rs.getString("name"),
-                            rs.getString("generic_name"),
-                            rs.getString("company"),
-                            rs.getString("expiry_date"),
-                            rs.getInt("quantity"),
-                            rs.getDouble("price"));
+                    return mapMedicine(rs, true, true, true);
                 }
             }
         } catch (SQLException e) {
@@ -334,14 +360,7 @@ public class MedicineDAO {
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
-                    list.add(new Medicine(
-                            rs.getInt("medicine_id"),
-                            rs.getString("name"),
-                            rs.getString("generic_name"),
-                            rs.getString("company"),
-                            rs.getString("expiry_date"),
-                            rs.getInt("quantity"),
-                            rs.getDouble("price")));
+                    list.add(mapMedicine(rs, false, false, false));
                 }
             }
         } catch (SQLException e) {
@@ -364,38 +383,61 @@ public class MedicineDAO {
             return getMedicinesPage(safeOffset, safeLimit);
         }
 
-        String sql = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
+        String sqlFull = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, " +
+                "COALESCE(m.purchase_price, 0.0) AS purchase_price, COALESCE(m.reorder_threshold, 10) AS reorder_threshold, " +
+                "COALESCE(m.barcode, '') AS barcode, s.quantity " +
+                "FROM medicines m " +
+                "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
+                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ? OR COALESCE(m.barcode, '') LIKE ?) " +
+                "ORDER BY m.name ASC LIMIT ? OFFSET ?";
+
+        String sqlFallback = "SELECT m.medicine_id, m.name, m.generic_name, m.company, m.expiry_date, m.price, s.quantity " +
                 "FROM medicines m " +
                 "LEFT JOIN stock s ON m.medicine_id = s.medicine_id " +
                 "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?) " +
                 "ORDER BY m.name ASC LIMIT ? OFFSET ?";
 
         try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            String searchPattern = "%" + safeKeyword + "%";
-            pstmt.setString(1, searchPattern);
-            pstmt.setString(2, searchPattern);
-            pstmt.setString(3, searchPattern);
-            pstmt.setInt(4, safeLimit);
-            pstmt.setInt(5, safeOffset);
+                PreparedStatement pstmt = conn.prepareStatement(sqlFull)) {
+                String searchPattern = "%" + safeKeyword + "%";
+                bindSearchStatement(pstmt, searchPattern, safeLimit, safeOffset);
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
-                    list.add(new Medicine(
-                            rs.getInt("medicine_id"),
-                            rs.getString("name"),
-                            rs.getString("generic_name"),
-                            rs.getString("company"),
-                            rs.getString("expiry_date"),
-                            rs.getInt("quantity"),
-                            rs.getDouble("price")));
+                    list.add(mapMedicine(rs, true, true, true));
                 }
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            if (!messageContainsAny(e, "purchase_price", "reorder_threshold", "barcode")) {
+                e.printStackTrace();
+                return list;
+            }
+            try (Connection conn = DatabaseUtil.getConnection();
+                 PreparedStatement fallback = conn.prepareStatement(sqlFallback)) {
+                String searchPattern = "%" + safeKeyword + "%";
+                bindSearchStatement(fallback, searchPattern, safeLimit, safeOffset);
+                try (ResultSet rs = fallback.executeQuery()) {
+                    while (rs.next()) {
+                        list.add(mapMedicine(rs, false, false, false));
+                    }
+                }
+            } catch (SQLException fallbackException) {
+                fallbackException.printStackTrace();
+            }
         }
         return list;
+    }
+
+    private void bindSearchStatement(PreparedStatement pstmt, String searchPattern, int limit, int offset) throws SQLException {
+        pstmt.setString(1, searchPattern);
+        pstmt.setString(2, searchPattern);
+        pstmt.setString(3, searchPattern);
+        int parameterIndex = 4;
+        if (pstmt.getParameterMetaData().getParameterCount() == 6) {
+            pstmt.setString(parameterIndex++, searchPattern);
+        }
+        pstmt.setInt(parameterIndex++, limit);
+        pstmt.setInt(parameterIndex, offset);
     }
 
     /**
@@ -408,7 +450,7 @@ public class MedicineDAO {
         }
 
         String sql = "SELECT COUNT(*) FROM medicines m " +
-                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ?)";
+                "WHERE m.active = 1 AND (m.name LIKE ? OR m.generic_name LIKE ? OR m.company LIKE ? OR COALESCE(m.barcode, '') LIKE ?)";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -417,6 +459,7 @@ public class MedicineDAO {
             pstmt.setString(1, searchPattern);
             pstmt.setString(2, searchPattern);
             pstmt.setString(3, searchPattern);
+            pstmt.setString(4, searchPattern);
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -427,6 +470,34 @@ public class MedicineDAO {
             e.printStackTrace();
         }
         return 0;
+    }
+
+    private Medicine mapMedicine(ResultSet rs, boolean hasPurchasePrice, boolean hasReorderThreshold, boolean hasBarcode)
+            throws SQLException {
+        return new Medicine(
+                rs.getInt("medicine_id"),
+                rs.getString("name"),
+                rs.getString("generic_name"),
+                rs.getString("company"),
+                rs.getString("expiry_date"),
+                rs.getInt("quantity"),
+                rs.getDouble("price"),
+                hasPurchasePrice ? rs.getDouble("purchase_price") : 0.0,
+                hasReorderThreshold ? rs.getInt("reorder_threshold") : 10,
+                hasBarcode ? rs.getString("barcode") : "");
+    }
+
+    private boolean messageContainsAny(SQLException exception, String... fragments) {
+        if (exception == null || exception.getMessage() == null) {
+            return false;
+        }
+        String message = exception.getMessage().toLowerCase(java.util.Locale.ROOT);
+        for (String fragment : fragments) {
+            if (message.contains(fragment.toLowerCase(java.util.Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Medicine> getExpiringMedicines(int days) {
@@ -1046,6 +1117,60 @@ public class MedicineDAO {
         return rows;
     }
 
+    public List<MarginRiskRow> getMarginRiskRows(double maxMarginPercent, int limit) {
+        List<MarginRiskRow> rows = new ArrayList<>();
+        double safeThreshold = maxMarginPercent <= 0 ? 10.0 : maxMarginPercent;
+        int safeLimit = normalizeLimit(limit);
+        String sql = """
+                SELECT m.medicine_id,
+                       m.name,
+                       COALESCE(m.company, '') AS company,
+                       COALESCE(s.quantity, 0) AS current_stock,
+                       COALESCE(m.purchase_price, 0) AS purchase_price,
+                       COALESCE(m.price, 0) AS selling_price
+                FROM medicines m
+                LEFT JOIN stock s ON s.medicine_id = m.medicine_id
+                WHERE m.active = 1
+                  AND COALESCE(s.quantity, 0) > 0
+                  AND COALESCE(m.price, 0) > 0
+                ORDER BY (COALESCE(m.price, 0) - COALESCE(m.purchase_price, 0)) ASC,
+                         COALESCE(s.quantity, 0) DESC,
+                         m.name ASC
+                LIMIT ?
+                """;
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, Math.max(safeLimit * 4, safeLimit));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next() && rows.size() < safeLimit) {
+                    double purchasePrice = round2(rs.getDouble("purchase_price"));
+                    double sellingPrice = round2(rs.getDouble("selling_price"));
+                    double unitMargin = round2(sellingPrice - purchasePrice);
+                    boolean belowCost = unitMargin < 0;
+                    double marginPercent = sellingPrice <= 0.0
+                            ? 0.0
+                            : round2((unitMargin / sellingPrice) * 100.0);
+                    if (!belowCost && marginPercent > safeThreshold) {
+                        continue;
+                    }
+                    rows.add(new MarginRiskRow(
+                            rs.getInt("medicine_id"),
+                            rs.getString("name"),
+                            rs.getString("company"),
+                            rs.getInt("current_stock"),
+                            purchasePrice,
+                            sellingPrice,
+                            unitMargin,
+                            marginPercent,
+                            belowCost));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("MedicineDAO.getMarginRiskRows: " + e.getMessage());
+        }
+        return rows;
+    }
+
     public record ReorderNeededRow(
             int medicineId,
             String medicineName,
@@ -1114,5 +1239,17 @@ public class MedicineDAO {
             double damagedValue,
             double totalValue,
             String rootCauseTags) {
+    }
+
+    public record MarginRiskRow(
+            int medicineId,
+            String medicineName,
+            String company,
+            int currentStock,
+            double purchasePrice,
+            double sellingPrice,
+            double unitMargin,
+            double marginPercent,
+            boolean belowCost) {
     }
 }

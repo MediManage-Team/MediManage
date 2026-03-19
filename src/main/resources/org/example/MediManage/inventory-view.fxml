@@ -13,7 +13,7 @@
     <HBox spacing="10" alignment="CENTER_LEFT">
         <Label text="Inventory Management" styleClass="page-title"/>
         <Region HBox.hgrow="ALWAYS"/>
-        <TextField fx:id="searchField" promptText="Search Name / Company" prefWidth="250"/>
+        <TextField fx:id="searchField" promptText="Search Name / Generic / Company / Barcode" prefWidth="300"/>
         <Button text="Export" onAction="#handleExportExcel" styleClass="button-outlined">
             <graphic>
                 <FontIcon iconLiteral="fas-file-excel"/>
@@ -35,10 +35,12 @@
                 <columns>
                     <TableColumn fx:id="colId" text="ID" prefWidth="50"/>
                     <TableColumn fx:id="colName" text="Medicine Name" prefWidth="150"/>
+                    <TableColumn fx:id="colGeneric" text="Generic" prefWidth="130"/>
                     <TableColumn fx:id="colCompany" text="Company" prefWidth="120"/>
                     <TableColumn fx:id="colExpiry" text="Expiry" prefWidth="100"/>
                     <TableColumn fx:id="colStock" text="Stock" prefWidth="80"/>
                     <TableColumn fx:id="colPrice" text="Price (₹)" prefWidth="80"/>
+                    <TableColumn fx:id="colBarcode" text="Barcode" prefWidth="120"/>
                 </columns>
                 <columnResizePolicy>
                     <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
@@ -52,6 +54,10 @@
                 <VBox spacing="5">
                     <Label text="Medicine Name"/>
                     <TextField fx:id="txtName" promptText="Name"/>
+                </VBox>
+                <VBox spacing="5">
+                    <Label text="Generic Name"/>
+                    <TextField fx:id="txtGenericName" promptText="Salt / molecule / composition"/>
                 </VBox>
                 <VBox spacing="5">
                     <Label text="Company"/>
@@ -81,6 +87,21 @@
                         <TextField fx:id="txtReorderThreshold" promptText="10"/>
                     </VBox>
                 </HBox>
+                <VBox spacing="5">
+                    <Label text="Barcode"/>
+                    <HBox spacing="8">
+                        <TextField fx:id="txtBarcode" promptText="Scan or type barcode" HBox.hgrow="ALWAYS"/>
+                        <Button text="Generate" onAction="#handleGenerateBarcode" styleClass="button-outlined"/>
+                        <Button fx:id="btnPrintBarcode" text="Print Label" onAction="#handlePrintBarcodeLabel" styleClass="button-outlined" disable="true"/>
+                    </HBox>
+                    <Label text="Right-click any inventory row to edit or auto-generate a barcode instantly." wrapText="true" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                </VBox>
+
+                <VBox spacing="8" styleClass="billing-section">
+                    <Label text="Batch Ledger (FEFO)" styleClass="label-strong"/>
+                    <Label fx:id="lblBatchSummary" text="Select a medicine to inspect FEFO batches." style="-fx-text-fill: #7a8399; -fx-font-size: 11px;" wrapText="true"/>
+                    <ListView fx:id="listBatches" prefHeight="110" maxHeight="130"/>
+                </VBox>
 
                 <Region VBox.vgrow="ALWAYS"/>
 
@@ -89,6 +110,14 @@
                     <Button text="Clear" onAction="#handleClear" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                     <Button fx:id="btnDelete" text="Delete" disable="true" styleClass="button-danger" maxWidth="Infinity" HBox.hgrow="ALWAYS" onAction="#handleDelete"/>
                 </HBox>
+
+                <Separator/>
+                <VBox spacing="10" styleClass="billing-section">
+                    <Label text="Stock Adjustments" styleClass="label-strong"/>
+                    <Button fx:id="btnRecordAdjustment" text="Record Return / Damage / Dump" disable="true" onAction="#handleRecordAdjustment" maxWidth="Infinity" styleClass="button-outlined"/>
+                    <ListView fx:id="listRecentAdjustments" prefHeight="140" maxHeight="160"/>
+                    <Label text="Use this for supplier returns, expired stock, dump / waste disposal, breakage, or other write-offs. Adjustments reduce on-hand stock and feed analytics." wrapText="true" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+                </VBox>
 
                 <Separator/>
                 <!-- AI Restock Suggestions (Popup) -->

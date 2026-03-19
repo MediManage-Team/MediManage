@@ -161,6 +161,24 @@ CREATE INDEX IF NOT EXISTS idx_report_dispatch_schedule_channel ON analytics_rep
 ALTER TABLE medicines
 ADD COLUMN generic_name TEXT;
 ALTER TABLE customers
+ADD COLUMN email TEXT;
+ALTER TABLE customers
+ADD COLUMN phone TEXT;
+ALTER TABLE customers
+ADD COLUMN address TEXT;
+ALTER TABLE customers
+ADD COLUMN nominee_name TEXT;
+ALTER TABLE customers
+ADD COLUMN nominee_relation TEXT;
+ALTER TABLE customers
+ADD COLUMN insurance_provider TEXT;
+ALTER TABLE customers
+ADD COLUMN insurance_policy_no TEXT;
+ALTER TABLE customers
+ADD COLUMN diseases TEXT;
+ALTER TABLE customers
+ADD COLUMN photo_id_path TEXT;
+ALTER TABLE customers
 ADD COLUMN current_balance REAL DEFAULT 0.0;
 -- Phase 1 Optimization: new columns
 CREATE TABLE IF NOT EXISTS message_templates (
@@ -363,13 +381,23 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
     poi_id INTEGER PRIMARY KEY AUTOINCREMENT,
     po_id INTEGER NOT NULL,
     medicine_id INTEGER NOT NULL,
+    medicine_name_snapshot TEXT,
+    generic_name_snapshot TEXT,
+    company_snapshot TEXT,
+    batch_number TEXT,
+    expiry_date TEXT,
+    purchase_date TEXT,
     ordered_qty INTEGER NOT NULL,
     received_qty INTEGER NOT NULL DEFAULT 0,
     unit_cost REAL NOT NULL,
+    selling_price REAL NOT NULL DEFAULT 0.0,
+    reorder_threshold INTEGER NOT NULL DEFAULT 10,
     FOREIGN KEY (po_id) REFERENCES purchase_orders(po_id) ON DELETE CASCADE,
     FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
 );
 CREATE INDEX IF NOT EXISTS idx_poi_po ON purchase_order_items(po_id);
+CREATE INDEX IF NOT EXISTS idx_poi_medicine_batch ON purchase_order_items(medicine_id, batch_number);
+CREATE INDEX IF NOT EXISTS idx_poi_expiry_date ON purchase_order_items(expiry_date);
 -- 27. EMPLOYEE ATTENDANCE
 CREATE TABLE IF NOT EXISTS employee_attendance (
     attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -386,6 +414,22 @@ CREATE INDEX IF NOT EXISTS idx_attendance_date ON employee_attendance(date);
 -- 28. SUPPLIER LINK ON MEDICINES
 ALTER TABLE medicines
 ADD COLUMN supplier_id INTEGER;
+ALTER TABLE purchase_order_items
+ADD COLUMN medicine_name_snapshot TEXT;
+ALTER TABLE purchase_order_items
+ADD COLUMN generic_name_snapshot TEXT;
+ALTER TABLE purchase_order_items
+ADD COLUMN company_snapshot TEXT;
+ALTER TABLE purchase_order_items
+ADD COLUMN batch_number TEXT;
+ALTER TABLE purchase_order_items
+ADD COLUMN expiry_date TEXT;
+ALTER TABLE purchase_order_items
+ADD COLUMN purchase_date TEXT;
+ALTER TABLE purchase_order_items
+ADD COLUMN selling_price REAL DEFAULT 0.0;
+ALTER TABLE purchase_order_items
+ADD COLUMN reorder_threshold INTEGER DEFAULT 10;
 -- ======================== PHASE 3: ADVANCED FEATURES ========================
 -- 29. LOCATIONS (multi-pharmacy/warehouse)
 CREATE TABLE IF NOT EXISTS locations (
@@ -451,6 +495,9 @@ ADD COLUMN loyalty_points INTEGER DEFAULT 0;
 ALTER TABLE medicines
 ADD COLUMN reorder_threshold INTEGER DEFAULT 10;
 -- 36. ADD CHECK CONSTRAINT TO STOCK
+DROP VIEW IF EXISTS v_medicine_management_overview;
+DROP VIEW IF EXISTS v_inventory_batch_expiry_timeline;
+
 CREATE TABLE IF NOT EXISTS stock_new (
     stock_id INTEGER PRIMARY KEY AUTOINCREMENT,
     medicine_id INTEGER UNIQUE,
@@ -464,3 +511,208 @@ DROP TABLE IF EXISTS stock;
 ALTER TABLE stock_new RENAME TO stock;
 PRAGMA foreign_keys=on;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_medicine ON stock(medicine_id);
+
+-- ======================== PHASE 4: PRODUCTION OPERATIONS ========================
+-- 37. BATCH INVENTORY (FEFO inventory control)
+CREATE TABLE IF NOT EXISTS inventory_batches (
+    batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    medicine_id INTEGER NOT NULL,
+    source_poi_id INTEGER,
+    batch_number TEXT NOT NULL,
+    batch_barcode TEXT,
+    expiry_date TEXT,
+    purchase_date TEXT,
+    unit_cost REAL NOT NULL DEFAULT 0.0,
+    selling_price REAL NOT NULL DEFAULT 0.0,
+    initial_quantity INTEGER NOT NULL DEFAULT 0 CHECK (initial_quantity >= 0),
+    available_quantity INTEGER NOT NULL DEFAULT 0 CHECK (available_quantity >= 0),
+    supplier_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id),
+    FOREIGN KEY (source_poi_id) REFERENCES purchase_order_items(poi_id) ON DELETE SET NULL,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(supplier_id)
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_batches_medicine ON inventory_batches(medicine_id, expiry_date, purchase_date);
+CREATE INDEX IF NOT EXISTS idx_inventory_batches_expiry ON inventory_batches(expiry_date, available_quantity);
+CREATE INDEX IF NOT EXISTS idx_inventory_batches_supplier ON inventory_batches(supplier_id, medicine_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_batches_barcode ON inventory_batches(batch_barcode);
+
+ALTER TABLE inventory_batches
+ADD COLUMN batch_barcode TEXT;
+
+DROP VIEW IF EXISTS v_medicine_management_overview;
+DROP VIEW IF EXISTS v_inventory_batch_expiry_timeline;
+
+CREATE VIEW v_inventory_batch_expiry_timeline AS
+SELECT ib.batch_id,
+       ib.medicine_id,
+       COALESCE(m.name, '') AS medicine_name,
+       COALESCE(m.company, '') AS company,
+       COALESCE(s.name, '') AS supplier_name,
+       ib.batch_number,
+       COALESCE(NULLIF(TRIM(ib.batch_barcode), ''), 'BT-' || ib.medicine_id || '-' || REPLACE(REPLACE(UPPER(COALESCE(ib.batch_number, 'NA')), ' ', ''), '/', '-')) AS batch_barcode,
+       COALESCE(ib.expiry_date, '') AS expiry_date,
+       CASE
+           WHEN ib.expiry_date IS NULL OR TRIM(ib.expiry_date) = '' THEN NULL
+           ELSE CAST(julianday(ib.expiry_date) - julianday('now') AS INTEGER)
+       END AS days_to_expiry,
+       ROW_NUMBER() OVER (
+           PARTITION BY ib.medicine_id
+           ORDER BY CASE WHEN ib.expiry_date IS NULL OR TRIM(ib.expiry_date) = '' THEN 1 ELSE 0 END,
+                    ib.expiry_date ASC,
+                    CASE WHEN ib.purchase_date IS NULL OR TRIM(ib.purchase_date) = '' THEN 1 ELSE 0 END,
+                    ib.purchase_date ASC,
+                    ib.batch_id ASC
+       ) AS expiry_sequence,
+       COALESCE(ib.purchase_date, '') AS purchase_date,
+       ib.unit_cost,
+       ib.selling_price,
+       ib.initial_quantity,
+       ib.available_quantity,
+       ROUND(ib.available_quantity * ib.unit_cost, 2) AS stock_cost_value,
+       ROUND(ib.available_quantity * ib.selling_price, 2) AS stock_sales_value,
+       ib.created_at
+FROM inventory_batches ib
+JOIN medicines m ON m.medicine_id = ib.medicine_id
+LEFT JOIN suppliers s ON s.supplier_id = ib.supplier_id;
+
+CREATE VIEW v_medicine_management_overview AS
+SELECT m.medicine_id,
+       m.name,
+       COALESCE(m.generic_name, '') AS generic_name,
+       COALESCE(m.company, '') AS company,
+       COALESCE(m.barcode, '') AS medicine_barcode,
+       COALESCE(stock.quantity, 0) AS current_stock,
+       ROUND(SUM(CASE
+           WHEN timeline.available_quantity > 0 THEN timeline.available_quantity
+           ELSE 0
+       END), 0) AS tracked_batch_units,
+       COALESCE(stock.quantity, 0) - ROUND(SUM(CASE
+           WHEN timeline.available_quantity > 0 THEN timeline.available_quantity
+           ELSE 0
+       END), 0) AS stock_gap_units,
+       COUNT(CASE WHEN timeline.available_quantity > 0 THEN 1 END) AS active_batch_count,
+       MIN(CASE
+           WHEN timeline.available_quantity > 0 AND timeline.expiry_date <> '' THEN timeline.expiry_date
+           ELSE NULL
+       END) AS earliest_batch_expiry,
+       ROUND(SUM(CASE
+           WHEN timeline.available_quantity > 0 AND timeline.days_to_expiry IS NOT NULL AND timeline.days_to_expiry < 0
+           THEN timeline.available_quantity
+           ELSE 0
+       END), 0) AS expired_units,
+       ROUND(SUM(CASE
+           WHEN timeline.available_quantity > 0 AND timeline.days_to_expiry BETWEEN 0 AND 30
+           THEN timeline.available_quantity
+           ELSE 0
+       END), 0) AS expiring_30d_units,
+       ROUND(SUM(CASE
+           WHEN timeline.available_quantity > 0 AND timeline.days_to_expiry IS NOT NULL AND timeline.days_to_expiry <= 30
+           THEN timeline.stock_cost_value
+           ELSE 0
+       END), 2) AS expiry_exposure_cost,
+       COALESCE(dumped.dumped_units, 0) AS dumped_units
+FROM medicines m
+LEFT JOIN stock ON stock.medicine_id = m.medicine_id
+LEFT JOIN v_inventory_batch_expiry_timeline timeline ON timeline.medicine_id = m.medicine_id
+LEFT JOIN (
+    SELECT medicine_id,
+           SUM(quantity) AS dumped_units
+    FROM inventory_adjustments
+    WHERE adjustment_type = 'DAMAGED'
+      AND (
+          UPPER(COALESCE(root_cause_tag, '')) LIKE '%DUMP%'
+          OR UPPER(COALESCE(root_cause_tag, '')) LIKE '%WASTE%'
+      )
+    GROUP BY medicine_id
+) dumped ON dumped.medicine_id = m.medicine_id
+WHERE m.active = 1
+GROUP BY m.medicine_id,
+         m.name,
+         m.generic_name,
+         m.company,
+         m.barcode,
+         stock.quantity,
+         dumped.dumped_units;
+
+-- 38. BATCH ALLOCATION PER BILL ITEM (actual COGS tracking)
+CREATE TABLE IF NOT EXISTS bill_item_batch_allocations (
+    allocation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bill_id INTEGER NOT NULL,
+    bill_item_id INTEGER NOT NULL,
+    medicine_id INTEGER NOT NULL,
+    batch_id INTEGER,
+    batch_number TEXT,
+    expiry_date TEXT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_cost REAL NOT NULL DEFAULT 0.0,
+    selling_price REAL NOT NULL DEFAULT 0.0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bill_id) REFERENCES bills(bill_id) ON DELETE CASCADE,
+    FOREIGN KEY (bill_item_id) REFERENCES bill_items(item_id) ON DELETE CASCADE,
+    FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id),
+    FOREIGN KEY (batch_id) REFERENCES inventory_batches(batch_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bill_item_batch_allocations_bill ON bill_item_batch_allocations(bill_id, bill_item_id);
+CREATE INDEX IF NOT EXISTS idx_bill_item_batch_allocations_batch ON bill_item_batch_allocations(batch_id, medicine_id);
+
+-- 39. BATCH / COGS FIELDS ON OPERATIONAL TABLES
+ALTER TABLE bill_items
+ADD COLUMN cost_of_goods REAL DEFAULT 0.0;
+ALTER TABLE inventory_batches
+ADD COLUMN batch_barcode TEXT;
+
+UPDATE inventory_batches
+SET batch_barcode = 'BT-' || medicine_id || '-' || REPLACE(REPLACE(UPPER(COALESCE(batch_number, 'NA')), ' ', ''), '/', '-')
+WHERE batch_barcode IS NULL
+   OR TRIM(batch_barcode) = '';
+ALTER TABLE inventory_adjustments
+ADD COLUMN batch_id INTEGER;
+
+-- 40. AUDIT EVENTS
+CREATE TABLE IF NOT EXISTS audit_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actor_user_id INTEGER,
+    event_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER,
+    summary TEXT NOT NULL,
+    details_json TEXT,
+    FOREIGN KEY (actor_user_id) REFERENCES users(user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_events_occurred_at ON audit_events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor_user_id, occurred_at DESC);
+
+-- 41. SUPERVISOR APPROVALS
+CREATE TABLE IF NOT EXISTS supervisor_approvals (
+    approval_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_by_user_id INTEGER,
+    approved_by_user_id INTEGER NOT NULL,
+    action_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER,
+    justification TEXT,
+    approval_notes TEXT,
+    approved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (requested_by_user_id) REFERENCES users(user_id),
+    FOREIGN KEY (approved_by_user_id) REFERENCES users(user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_supervisor_approvals_action ON supervisor_approvals(action_type, approved_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supervisor_approvals_requested_by ON supervisor_approvals(requested_by_user_id, approved_at DESC);
+
+-- 42. BACKUP HISTORY
+CREATE TABLE IF NOT EXISTS backup_history (
+    backup_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    backup_path TEXT NOT NULL,
+    backup_type TEXT NOT NULL DEFAULT 'MANUAL',
+    file_size_bytes INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'SUCCESS',
+    initiated_by_user_id INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (initiated_by_user_id) REFERENCES users(user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_backup_history_created_at ON backup_history(created_at DESC);

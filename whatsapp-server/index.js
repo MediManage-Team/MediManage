@@ -6,13 +6,26 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const {
+    SERVICE_NAME,
+    isOwnerVerified,
+    isPathWithinAllowedDir,
+    requireAdminToken
+} = require('./security');
 
 // --- Configuration ---
+const HOST = process.env.HOST || '127.0.0.1';
 const PORT = process.env.PORT || 3000;
 const MAX_AUTH_RETRIES = parseInt(process.env.MAX_AUTH_RETRIES, 10) || 3;
 const MAX_DISCONNECT_RETRIES = parseInt(process.env.MAX_DISCONNECT_RETRIES, 10) || 5;
 const SEND_RATE_LIMIT = parseInt(process.env.SEND_RATE_LIMIT, 10) || 10; // per minute
-const ALLOWED_PDF_DIR = path.resolve(process.env.ALLOWED_PDF_DIR || require('os').homedir());
+const ALLOWED_PDF_DIR = path.resolve(process.env.ALLOWED_PDF_DIR || os.homedir());
+const ADMIN_TOKEN = (process.env.MEDIMANAGE_LOCAL_API_TOKEN || '').trim();
+const APPDATA_ROOT = process.env.APPDATA
+    ? path.join(process.env.APPDATA, 'MediManage', 'whatsapp-bridge')
+    : path.join(os.homedir(), '.medimanage', 'whatsapp-bridge');
+const AUTH_DATA_DIR = path.join(APPDATA_ROOT, 'auth');
 
 // --- Structured Logger ---
 function log(level, msg, meta = {}) {
@@ -53,12 +66,64 @@ const PUPPETEER_ARGS = [
     '--disable-gpu'
 ];
 
+function ensureBridgeStorageDirs() {
+    fs.mkdirSync(APPDATA_ROOT, { recursive: true });
+    fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
+}
+
+function resolveBrowserExecutable() {
+    const candidates = [
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
+    try {
+        const puppeteer = require('puppeteer');
+        const executablePath = puppeteer.executablePath();
+        if (executablePath && fs.existsSync(executablePath)) {
+            return executablePath;
+        }
+    } catch (error) {
+        log('WARN', 'Could not resolve Puppeteer browser executable.', { error: error.toString() });
+    }
+
+    return undefined;
+}
+
+function clearAuthData() {
+    try {
+        fs.rmSync(AUTH_DATA_DIR, { recursive: true, force: true });
+    } catch (error) {
+        log('WARN', 'Failed to clear WhatsApp auth data.', { error: error.toString() });
+    } finally {
+        ensureBridgeStorageDirs();
+    }
+}
+
 function createClient() {
+    ensureBridgeStorageDirs();
+    const executablePath = resolveBrowserExecutable();
+    if (executablePath) {
+        log('INFO', 'Using browser executable for WhatsApp Bridge.', { executablePath });
+    } else {
+        log('WARN', 'No explicit browser executable resolved. Falling back to Puppeteer defaults.');
+    }
+
     return new Client({
-        authStrategy: new LocalAuth(),
+        authStrategy: new LocalAuth({ dataPath: AUTH_DATA_DIR }),
         puppeteer: {
             headless: true,
-            args: PUPPETEER_ARGS
+            args: PUPPETEER_ARGS,
+            executablePath
         }
     });
 }
@@ -68,7 +133,6 @@ let client = createClient();
 function attachClientEvents(c) {
     c.on('qr', (qr) => {
         log('INFO', 'New QR code generated. Scan via WhatsApp to link MediManage.');
-        qrcode.generate(qr, { small: true });
         qrCodeData = qr;
         clientStatus = 'QR_REQUIRED';
     });
@@ -91,7 +155,7 @@ function attachClientEvents(c) {
         }
 
         clientStatus = 'DISCONNECTED';
-        try { fs.rmSync('./.wwebjs_auth', { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        clearAuthData();
         c.initialize();
     });
 
@@ -129,7 +193,10 @@ process.on('unhandledRejection', (reason, promise) => {
 // Get Status
 app.get('/status', (req, res) => {
     res.json({
+        service: SERVICE_NAME,
         status: clientStatus,
+        healthy: clientStatus !== 'FAILED',
+        owner_verified: isOwnerVerified(req, ADMIN_TOKEN),
         authRetries,
         disconnectRetries
     });
@@ -145,7 +212,7 @@ app.get('/qr', (req, res) => {
 });
 
 // Send Message (Text or PDF Invoice)
-app.post('/send', sendLimiter, async (req, res) => {
+app.post('/send', requireAdminToken(ADMIN_TOKEN), sendLimiter, async (req, res) => {
     const { phone, message, pdfPath } = req.body;
 
     if (!phone || !message) {
@@ -180,16 +247,16 @@ app.post('/send', sendLimiter, async (req, res) => {
         // Send PDF attachment if provided
         if (pdfPath) {
             log('INFO', 'Processing PDF attachment...', { pdfPath });
-            const absolutePath = path.resolve(pdfPath); // Normalize path
-
-            if (!absolutePath.startsWith(ALLOWED_PDF_DIR)) {
-                log('WARN', 'Rejected PDF path outside allowed directory.', { pdfPath: absolutePath, allowed: ALLOWED_PDF_DIR });
-                return res.json({ success: false, partialSuccess: true, error: 'Invalid PDF path. File is outside the allowed directory.' });
-            }
+            const absolutePath = path.resolve(pdfPath);
 
             if (!fs.existsSync(absolutePath)) {
                  log('WARN', 'PDF file not found on disk.', { pdfPath: absolutePath });
                  return res.json({ success: false, partialSuccess: true, error: 'PDF file not found on server disk.' });
+            }
+
+            if (!isPathWithinAllowedDir(absolutePath, ALLOWED_PDF_DIR)) {
+                log('WARN', 'Rejected PDF path outside allowed directory.', { pdfPath: absolutePath, allowed: ALLOWED_PDF_DIR });
+                return res.json({ success: false, partialSuccess: true, error: 'Invalid PDF path. File is outside the allowed directory.' });
             }
 
             try {
@@ -213,7 +280,7 @@ app.post('/send', sendLimiter, async (req, res) => {
 });
 
 // Logout / Disconnect WhatsApp (clears session, requires re-scan)
-app.post('/logout', async (req, res) => {
+app.post('/logout', requireAdminToken(ADMIN_TOKEN), async (req, res) => {
     try {
         log('INFO', 'Logout requested. Disconnecting WhatsApp...');
         try { await client.logout(); } catch (e) { log('WARN', 'Logout call failed, forcing destroy.', { error: e.toString() }); }
@@ -237,7 +304,7 @@ app.post('/logout', async (req, res) => {
 });
 
 // Stop the bridge server entirely
-app.post('/shutdown', async (req, res) => {
+app.post('/shutdown', requireAdminToken(ADMIN_TOKEN), async (req, res) => {
     res.json({ success: true, message: 'Bridge shutting down.' });
     await shutdown('HTTP /shutdown');
 });
@@ -261,8 +328,8 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 // Start Server
-app.listen(PORT, () => {
-    log('INFO', `WhatsApp Bridge Server running on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+    log('INFO', `WhatsApp Bridge Server running on ${HOST}:${PORT}`);
     log('INFO', 'Bridging requests to whatsapp-web.js...');
     // Start Puppeteer client after a short delay
     setTimeout(() => {

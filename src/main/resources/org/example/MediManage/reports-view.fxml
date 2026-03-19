@@ -22,6 +22,7 @@
                 <DatePicker fx:id="dateStart" prefWidth="120"/>
                 <Label text="To:"/>
                 <DatePicker fx:id="dateEnd" prefWidth="120"/>
+                <Button fx:id="btnExportAnalytics" text="Export Analytics" onAction="#handleExportAnalytics" styleClass="button-outlined"/>
                 <Button text="Generate Report" onAction="#handleGenerate" styleClass="button-primary"/>
             </HBox>
 
@@ -112,6 +113,248 @@
                     </columnResizePolicy>
                 </TableView>
             </VBox>
+
+            <TitledPane text="Inventory Signals" expanded="true" animated="false" styleClass="card">
+                <VBox spacing="14" styleClass="content-pad-10">
+                    <Label text="Operational risk tables below are generated from the selected reporting window plus current inventory state." styleClass="text-muted" wrapText="true"/>
+
+                    <HBox spacing="12">
+                        <VBox styleClass="card kpi-card kpi-card-warning" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Reorder Needed" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblReorderCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Out of Stock" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblOutOfStockCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-warning" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Near Stockout" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblNearStockOutCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-profit" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Dead Stock" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblDeadStockCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-sales" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Returns / Damage / Dump" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblReturnDamageCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                    </HBox>
+
+                    <TabPane tabClosingPolicy="UNAVAILABLE" prefHeight="360">
+                        <tabs>
+                            <Tab text="Reorder Needed">
+                                <TableView fx:id="reorderTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colReorderMedicine" text="Medicine" prefWidth="220"/>
+                                        <TableColumn fx:id="colReorderCompany" text="Company" prefWidth="180"/>
+                                        <TableColumn fx:id="colReorderStock" text="Stock" prefWidth="90"/>
+                                        <TableColumn fx:id="colReorderThreshold" text="Threshold" prefWidth="100"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Out of Stock">
+                                <TableView fx:id="outOfStockTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colOutOfStockMedicine" text="Medicine" prefWidth="220"/>
+                                        <TableColumn fx:id="colOutOfStockCompany" text="Company" prefWidth="180"/>
+                                        <TableColumn fx:id="colOutOfStockDays" text="Days Out" prefWidth="90"/>
+                                        <TableColumn fx:id="colOutOfStockImpact" text="Revenue Impact (₹)" prefWidth="140"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Near Stockout">
+                                <TableView fx:id="nearStockOutTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colNearStockOutMedicine" text="Medicine" prefWidth="220"/>
+                                        <TableColumn fx:id="colNearStockOutCompany" text="Company" prefWidth="170"/>
+                                        <TableColumn fx:id="colNearStockOutStock" text="Stock" prefWidth="80"/>
+                                        <TableColumn fx:id="colNearStockOutDays" text="Days Left" prefWidth="90"/>
+                                        <TableColumn fx:id="colNearStockOutRisk" text="Revenue Risk (₹)" prefWidth="140"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Dead Stock">
+                                <TableView fx:id="deadStockTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colDeadStockMedicine" text="Medicine" prefWidth="220"/>
+                                        <TableColumn fx:id="colDeadStockCompany" text="Company" prefWidth="170"/>
+                                        <TableColumn fx:id="colDeadStockDays" text="Days Idle" prefWidth="90"/>
+                                        <TableColumn fx:id="colDeadStockValue" text="Dead Stock Value (₹)" prefWidth="140"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Returns / Damage / Dump">
+                                <TableView fx:id="returnDamageTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colReturnDamageMedicine" text="Medicine" prefWidth="220"/>
+                                        <TableColumn fx:id="colReturnDamageCompany" text="Company" prefWidth="160"/>
+                                        <TableColumn fx:id="colReturnDamageQty" text="Qty" prefWidth="80"/>
+                                        <TableColumn fx:id="colReturnDamageValue" text="Value (₹)" prefWidth="120"/>
+                                        <TableColumn fx:id="colReturnDamageTags" text="Root Causes" prefWidth="180"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                        </tabs>
+                    </TabPane>
+                </VBox>
+            </TitledPane>
+
+            <TitledPane text="Procurement &amp; Margin Signals" expanded="true" animated="false" styleClass="card">
+                <VBox spacing="14" styleClass="content-pad-10">
+                    <Label text="This section combines selected-period purchase activity with current margin leakage and near-term batch expiry exposure." styleClass="text-muted" wrapText="true"/>
+
+                    <HBox spacing="12">
+                        <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Purchase Spend" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblPurchaseSpend" text="₹0.00" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-sales" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Fast Movers" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblFastMoverCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-warning" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Margin Risk" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblMarginRiskCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-profit" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Expiry Exposure" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblExpiryExposureValue" text="₹0.00" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Suppliers Active" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblSupplierCoverage" text="0" styleClass="card-value"/>
+                        </VBox>
+                    </HBox>
+
+                    <HBox spacing="12">
+                        <VBox styleClass="card kpi-card" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Active Batch Lines" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblActiveBatchLines" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-warning" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Dumped Units" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblDumpedUnits" text="0" styleClass="card-value"/>
+                        </VBox>
+                        <VBox styleClass="card kpi-card kpi-card-info" HBox.hgrow="ALWAYS" alignment="CENTER">
+                            <Label text="Stock Gaps" styleClass="card-title text-muted"/>
+                            <Label fx:id="lblStockGapCount" text="0" styleClass="card-value"/>
+                        </VBox>
+                    </HBox>
+
+                    <VBox styleClass="card" minHeight="260">
+                        <Label text="Sales vs Purchase Spend" styleClass="section-title"/>
+                        <LineChart fx:id="purchaseSalesChart" VBox.vgrow="ALWAYS" createSymbols="true">
+                            <xAxis>
+                                <CategoryAxis fx:id="purchaseSalesXAxis" label="Date"/>
+                            </xAxis>
+                            <yAxis>
+                                <NumberAxis fx:id="purchaseSalesYAxis" label="Amount (₹)"/>
+                            </yAxis>
+                        </LineChart>
+                    </VBox>
+
+                    <TabPane tabClosingPolicy="UNAVAILABLE" prefHeight="360">
+                        <tabs>
+                            <Tab text="Fast Movers">
+                                <TableView fx:id="fastMovingTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colFastMovingMedicine" text="Medicine" prefWidth="220"/>
+                                        <TableColumn fx:id="colFastMovingCompany" text="Company" prefWidth="180"/>
+                                        <TableColumn fx:id="colFastMovingUnits" text="Units Sold" prefWidth="110"/>
+                                        <TableColumn fx:id="colFastMovingRevenue" text="Revenue" prefWidth="140"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Margin Risk">
+                                <TableView fx:id="marginRiskTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colMarginRiskMedicine" text="Medicine" prefWidth="200"/>
+                                        <TableColumn fx:id="colMarginRiskCompany" text="Company" prefWidth="160"/>
+                                        <TableColumn fx:id="colMarginRiskStock" text="Stock" prefWidth="80"/>
+                                        <TableColumn fx:id="colMarginRiskCost" text="Cost" prefWidth="100"/>
+                                        <TableColumn fx:id="colMarginRiskSell" text="Sell Price" prefWidth="100"/>
+                                        <TableColumn fx:id="colMarginRiskUnit" text="Unit Margin" prefWidth="110"/>
+                                        <TableColumn fx:id="colMarginRiskPercent" text="Margin %" prefWidth="90"/>
+                                        <TableColumn fx:id="colMarginRiskStatus" text="Status" prefWidth="110"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Expiry Exposure">
+                                <TableView fx:id="expiryExposureTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colExpiryExposureMedicine" text="Medicine" prefWidth="190"/>
+                                        <TableColumn fx:id="colExpiryExposureSupplier" text="Supplier" prefWidth="150"/>
+                                        <TableColumn fx:id="colExpiryExposureBatch" text="Batch / Barcode" prefWidth="160"/>
+                                        <TableColumn fx:id="colExpiryExposureDate" text="Expiry Line" prefWidth="130"/>
+                                        <TableColumn fx:id="colExpiryExposureQty" text="Qty" prefWidth="70"/>
+                                        <TableColumn fx:id="colExpiryExposureCost" text="Cost Value" prefWidth="120"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Medicine Control">
+                                <TableView fx:id="managementOverviewTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colManagementMedicine" text="Medicine" prefWidth="180"/>
+                                        <TableColumn fx:id="colManagementBarcode" text="Barcode" prefWidth="140"/>
+                                        <TableColumn fx:id="colManagementStock" text="Stock / Batch" prefWidth="120"/>
+                                        <TableColumn fx:id="colManagementGap" text="Gap" prefWidth="70"/>
+                                        <TableColumn fx:id="colManagementBatches" text="Batches" prefWidth="80"/>
+                                        <TableColumn fx:id="colManagementExpiry" text="Earliest Expiry" prefWidth="170"/>
+                                        <TableColumn fx:id="colManagementExpiring" text="Exp 30d" prefWidth="80"/>
+                                        <TableColumn fx:id="colManagementExpired" text="Expired" prefWidth="80"/>
+                                        <TableColumn fx:id="colManagementDumped" text="Dumped" prefWidth="80"/>
+                                        <TableColumn fx:id="colManagementExposure" text="Exposure" prefWidth="110"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                            <Tab text="Supplier Performance">
+                                <TableView fx:id="supplierPerformanceTable" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                                    <columns>
+                                        <TableColumn fx:id="colSupplierPerformanceName" text="Supplier" prefWidth="180"/>
+                                        <TableColumn fx:id="colSupplierPerformanceOrders" text="Orders" prefWidth="90"/>
+                                        <TableColumn fx:id="colSupplierPerformanceSkus" text="SKUs" prefWidth="80"/>
+                                        <TableColumn fx:id="colSupplierPerformanceUnits" text="Units" prefWidth="90"/>
+                                        <TableColumn fx:id="colSupplierPerformanceSpend" text="Spend" prefWidth="120"/>
+                                        <TableColumn fx:id="colSupplierPerformanceAvgCost" text="Avg Unit Cost" prefWidth="120"/>
+                                        <TableColumn fx:id="colSupplierPerformanceLastOrder" text="Last Order" prefWidth="150"/>
+                                    </columns>
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                    </columnResizePolicy>
+                                </TableView>
+                            </Tab>
+                        </tabs>
+                    </TabPane>
+                </VBox>
+            </TitledPane>
 
             <!-- AI Sales Analysis -->
             <TitledPane text="🤖 Patient Care Assistance Insights" expanded="true" animated="true" styleClass="card">

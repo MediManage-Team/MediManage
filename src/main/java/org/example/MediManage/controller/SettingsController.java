@@ -16,22 +16,47 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.prefs.Preferences;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.json.JSONObject;
 
 import org.example.MediManage.config.DatabaseConfig;
+import org.example.MediManage.dao.AuditLogDAO;
+import org.example.MediManage.dao.ReceiptSettingsDAO;
+import org.example.MediManage.model.AuditEvent;
+import org.example.MediManage.model.ReceiptSettings;
 import org.example.MediManage.security.CloudApiKeyStore;
-import org.example.MediManage.security.LocalAdminTokenManager;
 import org.example.MediManage.security.Permission;
 import org.example.MediManage.security.RbacPolicy;
+import org.example.MediManage.service.DatabaseMaintenanceService;
 import org.example.MediManage.service.ai.AIServiceProvider;
 import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.MediManageApplication;
 
 public class SettingsController {
+    private static final Logger LOGGER = Logger.getLogger(SettingsController.class.getName());
     // --- Database ---
     @FXML
     private TextField sqlitePathField;
+    @FXML
+    private javafx.scene.control.Label lblDbResolvedPath;
+    @FXML
+    private javafx.scene.control.Label lblDbFileSize;
+    @FXML
+    private javafx.scene.control.Label lblDbJournalMode;
+    @FXML
+    private javafx.scene.control.Label lblDbIntegrity;
+    @FXML
+    private javafx.scene.control.Label lblDbCounts;
+    @FXML
+    private javafx.scene.control.Label lblDbOpsCounts;
+    @FXML
+    private javafx.scene.control.Label lblDbLastBackup;
+    @FXML
+    private javafx.scene.control.ListView<String> listBackupHistory;
+    @FXML
+    private javafx.scene.control.ListView<String> listAuditEvents;
 
     public static class LocalModelItem {
         public final String name;
@@ -70,6 +95,8 @@ public class SettingsController {
     private VBox envContainer;
     @FXML
     private PasswordField hfTokenField;
+    @FXML
+    private javafx.scene.control.Label localModelStatusLabel;
 
     // --- Cloud AI ---
     @FXML
@@ -92,22 +119,41 @@ public class SettingsController {
     @FXML private TextField smtpPortField;
     @FXML private TextField smtpUserField;
     @FXML private PasswordField smtpPassField;
+    @FXML private TextField txtReceiptPharmacyName;
+    @FXML private TextField txtReceiptAddressLine1;
+    @FXML private TextField txtReceiptAddressLine2;
+    @FXML private TextField txtReceiptPhone;
+    @FXML private TextField txtReceiptEmail;
+    @FXML private TextField txtReceiptGstNumber;
+    @FXML private TextField txtReceiptLogoPath;
+    @FXML private javafx.scene.control.TextArea txtReceiptFooter;
+    @FXML private javafx.scene.control.CheckBox chkReceiptShowBarcode;
     
     // --- Local WhatsApp Bridge ---
     @FXML private javafx.scene.control.Label lblWhatsAppStatus;
+    @FXML private javafx.scene.control.Label lblWhatsAppHint;
+    @FXML private javafx.scene.control.Label lblWhatsAppQrPlaceholder;
     @FXML private javafx.scene.image.ImageView imgQRCode;
+    @FXML private javafx.scene.control.Button btnRefreshWhatsApp;
+    @FXML private javafx.scene.control.Button btnStartBridge;
+    @FXML private javafx.scene.control.Button btnDisconnectWhatsApp;
 
     // --- Customer Communication Templates ---
     @FXML private javafx.scene.control.TextArea txtWhatsAppTemplate;
     @FXML private TextField txtEmailSubjectTemplate;
     @FXML private javafx.scene.control.TextArea txtEmailBodyTemplate;
     private final org.example.MediManage.dao.MessageTemplateDAO messageTemplateDAO = new org.example.MediManage.dao.MessageTemplateDAO();
+    private final ReceiptSettingsDAO receiptSettingsDAO = new ReceiptSettingsDAO();
+    private final DatabaseMaintenanceService databaseMaintenanceService = new DatabaseMaintenanceService();
+    private final AuditLogDAO auditLogDAO = new AuditLogDAO();
 
     private final org.example.MediManage.service.ai.PythonEnvironmentManager envManager = AIServiceProvider
             .get().getEnvManager();
 
     private Preferences prefs;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private volatile String currentWhatsAppState = "UNKNOWN";
+    private java.util.concurrent.ScheduledFuture<?> whatsAppRefreshPoller;
 
     private static final java.util.Map<CloudApiKeyStore.Provider, java.util.List<String>> CLOUD_MODELS = java.util.Map.of(
         CloudApiKeyStore.Provider.GEMINI, java.util.List.of("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"),
@@ -123,12 +169,20 @@ public class SettingsController {
 
         // --- Database ---
         setupDatabaseSettings();
+        setupOperationsLists();
+        handleRefreshDatabaseHealth();
+        handleRefreshAuditTrail();
 
         // --- Local AI ---
         setupLocalModelsCombo();
+        if (localModelCombo != null) {
+            localModelCombo.getSelectionModel().selectedItemProperty()
+                    .addListener((obs, oldVal, newVal) -> updateLocalModelStatus());
+        }
 
         hardwareCombo.getItems().addAll("Auto", "Cloud Only (Base)", "CUDA (NVIDIA)", "CPU Only");
         hardwareCombo.setValue(prefs.get("ai_hardware", "Auto"));
+        updateLocalModelStatus();
         
         loadEnvironmentList();
 
@@ -175,6 +229,7 @@ public class SettingsController {
         smtpPortField.setText(prefs.get("smtp_port", "587"));
         smtpUserField.setText(prefs.get("smtp_user", ""));
         smtpPassField.setText(org.example.MediManage.security.SecureSecretStore.get("smtp_pass"));
+        loadReceiptSettings();
 
         // Initial load of WhatsApp Status
         javafx.application.Platform.runLater(this::handleRefreshWhatsApp);
@@ -194,7 +249,7 @@ public class SettingsController {
             var emailBody = messageTemplateDAO.getByKey(org.example.MediManage.dao.MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY);
             if (emailBody != null && txtEmailBodyTemplate != null) txtEmailBodyTemplate.setText(emailBody.getBodyTemplate());
         } catch (Exception e) {
-            System.err.println("Failed to load message templates: " + e.getMessage());
+            LOGGER.warning("Failed to load message templates: " + e.getMessage());
         }
     }
 
@@ -237,37 +292,200 @@ public class SettingsController {
             try {
                 org.example.MediManage.service.ai.AIOrchestrator orchestrator = new org.example.MediManage.service.ai.AIOrchestrator();
                 org.json.JSONArray installedModels = orchestrator.listLocalModels();
+                java.util.Map<String, LocalModelItem> uniqueModels = new java.util.LinkedHashMap<>();
+
+                if (installedModels != null) {
+                    for (int i = 0; i < installedModels.length(); i++) {
+                        org.json.JSONObject model = installedModels.getJSONObject(i);
+                        String name = model.optString("name", "Unknown");
+                        String path = model.optString("path", "");
+                        if (!path.isBlank()) {
+                            uniqueModels.putIfAbsent(path.toLowerCase(java.util.Locale.ROOT), new LocalModelItem(name, path));
+                        }
+                    }
+                }
                 
                 javafx.application.Platform.runLater(() -> {
                     boolean foundSaved = false;
-                    
-                    if (installedModels != null) {
-                        for (int i = 0; i < installedModels.length(); i++) {
-                            org.json.JSONObject model = installedModels.getJSONObject(i);
-                            String name = model.optString("name", "Unknown");
-                            String path = model.optString("path", "");
-                            LocalModelItem item = new LocalModelItem(name, path);
-                            localModelCombo.getItems().add(item);
-                            
-                            if (path.equals(savedPath)) {
-                                localModelCombo.setValue(item);
-                                foundSaved = true;
-                            }
+
+                    localModelCombo.getItems().clear();
+
+                    java.util.List<LocalModelItem> sortedItems = new java.util.ArrayList<>(uniqueModels.values());
+                    sortedItems.sort(java.util.Comparator.comparing(item -> item.name.toLowerCase(java.util.Locale.ROOT)));
+
+                    for (LocalModelItem item : sortedItems) {
+                        localModelCombo.getItems().add(item);
+                        if (item.path.equals(savedPath)) {
+                            localModelCombo.setValue(item);
+                            foundSaved = true;
                         }
                     }
 
                     // If a custom path was saved that isn't in the models dir, add it manually
                     if (!foundSaved && !savedPath.isEmpty()) {
                         File f = new File(savedPath);
-                        LocalModelItem customItem = new LocalModelItem(f.exists() ? f.getName() : "Custom Path", savedPath);
-                        localModelCombo.getItems().add(customItem);
-                        localModelCombo.setValue(customItem);
+                        if (f.exists()) {
+                            LocalModelItem customItem = new LocalModelItem(f.getName(), savedPath);
+                            localModelCombo.getItems().add(customItem);
+                            localModelCombo.setValue(customItem);
+                        } else {
+                            prefs.remove("local_model_path");
+                        }
                     }
+
+                    updateLocalModelStatus();
                 });
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to load local model list.", e);
+                javafx.application.Platform.runLater(() -> {
+                    if (localModelCombo != null) {
+                        localModelCombo.getItems().clear();
+                    }
+                    updateLocalModelStatus();
+                });
             }
         });
+    }
+
+    @FXML
+    private void handleRefreshLocalModels() {
+        setupLocalModelsCombo();
+        org.example.MediManage.util.ToastNotification.info("Refreshing installed models...");
+    }
+
+    @FXML
+    private void handleLoadSelectedModel() {
+        loadSelectedModel(true, true);
+    }
+
+    private void updateLocalModelStatus() {
+        if (localModelStatusLabel == null) {
+            return;
+        }
+
+        LocalModelItem selected = localModelCombo != null ? localModelCombo.getValue() : null;
+        String selectedName = selected != null ? selected.name : "No model selected";
+        String selectedPath = selected != null ? selected.path : prefs.get("local_model_path", "");
+
+        AppExecutors.runBackground(() -> {
+            try {
+                org.json.JSONObject health = AIServiceProvider.get().getLocalService().getHealth();
+                boolean loaded = health.optBoolean("model_loaded", false);
+                String modelName = health.optString("model_name", "").trim();
+                String provider = health.optString("provider", "").trim();
+                String statusText;
+
+                if (loaded) {
+                    statusText = "Loaded now: " + (modelName.isBlank() ? selectedName : modelName)
+                            + (provider.isBlank() ? "" : " on " + provider);
+                } else if (!selectedPath.isBlank()) {
+                    statusText = "Selected: " + selectedName + " • not loaded yet";
+                } else {
+                    statusText = "Choose a model, then click Load Selected.";
+                }
+
+                final String text = statusText;
+                javafx.application.Platform.runLater(() -> localModelStatusLabel.setText(text));
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() ->
+                        localModelStatusLabel.setText(selectedPath.isBlank()
+                                ? "Choose a model, then click Load Selected."
+                                : "Selected: " + selectedName + " • engine status unavailable"));
+            }
+        });
+    }
+
+    private void loadSelectedModel(boolean persistChoice, boolean showFeedback) {
+        LocalModelItem selectedModel = localModelCombo != null ? localModelCombo.getValue() : null;
+        if (selectedModel == null || selectedModel.path == null || selectedModel.path.isBlank()) {
+            if (showFeedback) {
+                showAlert(Alert.AlertType.WARNING, "No Model Selected", "Select a local model first.");
+            }
+            return;
+        }
+
+        if (localModelStatusLabel != null) {
+            localModelStatusLabel.setText("Loading " + selectedModel.name + "...");
+        }
+
+        AppExecutors.runBackground(() -> {
+            org.example.MediManage.service.ai.LocalAIService.ModelLoadResult result = AIServiceProvider.get()
+                    .getLocalService()
+                    .loadModelBlocking(selectedModel.path, resolveHardwareConfig());
+
+            javafx.application.Platform.runLater(() -> {
+                if (result.success()) {
+                    if (persistChoice) {
+                        prefs.put("local_model_path", result.modelPath());
+                        try { prefs.flush(); } catch (Exception ignored) {}
+                    }
+                    updateLocalModelStatus();
+                    if (showFeedback) {
+                        org.example.MediManage.util.ToastNotification.success("Loaded " + selectedModel.name);
+                    }
+                } else {
+                    String message = "Could not load model: " + result.message();
+                    localModelStatusLabel.setText(message);
+                    if (showFeedback) {
+                        showAlert(Alert.AlertType.WARNING, "Model Load Failed", message);
+                    }
+                }
+            });
+        });
+    }
+
+    private String resolveHardwareConfig() {
+        String hardware = hardwareCombo != null ? hardwareCombo.getValue() : prefs.get("ai_hardware", "Auto");
+        if (hardware == null) {
+            return "auto";
+        }
+        if (hardware.contains("CUDA")) {
+            return "cuda";
+        }
+        if (hardware.contains("CPU")) {
+            return "cpu";
+        }
+        if (hardware.contains("Base")) {
+            return "auto";
+        }
+        return "auto";
+    }
+
+    private void syncHardwareSelectionForEnv(String envName) {
+        if (hardwareCombo == null || envName == null) {
+            return;
+        }
+        switch (envName.toLowerCase(java.util.Locale.ROOT)) {
+            case "gpu" -> hardwareCombo.setValue("CUDA (NVIDIA)");
+            case "cpu" -> hardwareCombo.setValue("CPU Only");
+            case "base" -> hardwareCombo.setValue("Cloud Only (Base)");
+            default -> {
+            }
+        }
+    }
+
+    private void loadReceiptSettings() {
+        try {
+            populateReceiptSettings(receiptSettingsDAO.getSettings());
+        } catch (Exception e) {
+            LOGGER.warning("Failed to load receipt settings: " + e.getMessage());
+            populateReceiptSettings(new ReceiptSettings());
+        }
+    }
+
+    private void populateReceiptSettings(ReceiptSettings settings) {
+        if (settings == null) {
+            settings = new ReceiptSettings();
+        }
+        if (txtReceiptPharmacyName != null) txtReceiptPharmacyName.setText(nullToEmpty(settings.getPharmacyName()));
+        if (txtReceiptAddressLine1 != null) txtReceiptAddressLine1.setText(nullToEmpty(settings.getAddressLine1()));
+        if (txtReceiptAddressLine2 != null) txtReceiptAddressLine2.setText(nullToEmpty(settings.getAddressLine2()));
+        if (txtReceiptPhone != null) txtReceiptPhone.setText(nullToEmpty(settings.getPhone()));
+        if (txtReceiptEmail != null) txtReceiptEmail.setText(nullToEmpty(settings.getEmail()));
+        if (txtReceiptGstNumber != null) txtReceiptGstNumber.setText(nullToEmpty(settings.getGstNumber()));
+        if (txtReceiptLogoPath != null) txtReceiptLogoPath.setText(nullToEmpty(settings.getLogoPath()));
+        if (txtReceiptFooter != null) txtReceiptFooter.setText(nullToEmpty(settings.getFooterText()));
+        if (chkReceiptShowBarcode != null) chkReceiptShowBarcode.setSelected(settings.isShowBarcodeOnReceipt());
     }
 
     private void setupDatabaseSettings() {
@@ -280,6 +498,147 @@ public class SettingsController {
             }
             sqlitePathField.setText(sqlitePath);
         }
+    }
+
+    private void setupOperationsLists() {
+        if (listBackupHistory != null) {
+            listBackupHistory.setPlaceholder(new javafx.scene.control.Label("No backups recorded yet."));
+        }
+        if (listAuditEvents != null) {
+            listAuditEvents.setPlaceholder(new javafx.scene.control.Label("No audit events available."));
+        }
+    }
+
+    @FXML
+    private void handleRefreshDatabaseHealth() {
+        AppExecutors.runBackground(() -> {
+            try {
+                DatabaseMaintenanceService.DatabaseHealthSnapshot snapshot = databaseMaintenanceService.getHealthSnapshot();
+                java.util.List<DatabaseMaintenanceService.BackupHistoryEntry> backups = databaseMaintenanceService.getRecentBackups(8);
+                javafx.application.Platform.runLater(() -> {
+                    if (lblDbResolvedPath != null) lblDbResolvedPath.setText(snapshot.databasePath());
+                    if (lblDbFileSize != null) lblDbFileSize.setText(formatBytes(snapshot.fileSizeBytes()));
+                    if (lblDbJournalMode != null) lblDbJournalMode.setText(snapshot.journalMode());
+                    if (lblDbIntegrity != null) lblDbIntegrity.setText(snapshot.integrityStatus());
+                    if (lblDbCounts != null) {
+                        lblDbCounts.setText(snapshot.usersCount() + " / " + snapshot.medicinesCount() + " / " + snapshot.billsCount());
+                    }
+                    if (lblDbOpsCounts != null) {
+                        lblDbOpsCounts.setText(snapshot.activeBatchCount() + " / " + snapshot.auditEventCount());
+                    }
+                    if (lblDbLastBackup != null) {
+                        lblDbLastBackup.setText(snapshot.lastBackupAt() == null || snapshot.lastBackupAt().isBlank()
+                                ? "No backup recorded"
+                                : snapshot.lastBackupAt());
+                    }
+                    if (listBackupHistory != null) {
+                        listBackupHistory.setItems(javafx.collections.FXCollections.observableArrayList(
+                                backups.stream()
+                                        .map(entry -> entry.createdAt() + " | " + entry.backupType()
+                                                + " | " + formatBytes(entry.fileSizeBytes())
+                                                + " | " + entry.backupPath())
+                                        .toList()));
+                    }
+                });
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Database Health Failed", e.getMessage()));
+            }
+        });
+    }
+
+    @FXML
+    private void handleCreateBackup() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Save Database Backup");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("SQLite Backup", "*.db"));
+        chooser.setInitialFileName("medimanage_backup_" + java.time.LocalDate.now() + ".db");
+        File file = chooser.showSaveDialog(sqlitePathField == null ? null : sqlitePathField.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        Integer actorUserId = org.example.MediManage.util.UserSession.getInstance().getUser() == null
+                ? null
+                : org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+        AppExecutors.runBackground(() -> {
+            try {
+                databaseMaintenanceService.createBackup(file, actorUserId, "Manual backup from Settings");
+                javafx.application.Platform.runLater(() -> {
+                    handleRefreshDatabaseHealth();
+                    logSettingsEvent("DATABASE_BACKUP_CREATED", "Created database backup", new JSONObject()
+                            .put("backupPath", file.getAbsolutePath()));
+                    showAlert(Alert.AlertType.INFORMATION, "Backup Created", "Backup saved to " + file.getAbsolutePath());
+                });
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Backup Failed", e.getMessage()));
+            }
+        });
+    }
+
+    @FXML
+    private void handleRestoreBackup() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Restore Backup");
+        confirm.setHeaderText("Restore a database backup?");
+        confirm.setContentText("This will replace the active database file. A safety backup of the current DB will be created first.");
+        if (confirm.showAndWait().orElse(javafx.scene.control.ButtonType.CANCEL) != javafx.scene.control.ButtonType.OK) {
+            return;
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Select Backup File");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("SQLite Backup", "*.db", "*.sqlite"));
+        File file = chooser.showOpenDialog(sqlitePathField == null ? null : sqlitePathField.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        Integer actorUserId = org.example.MediManage.util.UserSession.getInstance().getUser() == null
+                ? null
+                : org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+        AppExecutors.runBackground(() -> {
+            try {
+                databaseMaintenanceService.restoreBackup(file, actorUserId, "Restore initiated from Settings");
+                javafx.application.Platform.runLater(() -> {
+                    handleRefreshDatabaseHealth();
+                    handleRefreshAuditTrail();
+                    logSettingsEvent("DATABASE_RESTORED", "Restored database backup", new JSONObject()
+                            .put("sourcePath", file.getAbsolutePath()));
+                    showAlert(Alert.AlertType.INFORMATION, "Restore Complete",
+                            "Backup restored successfully. Restart the application if any open screens show stale data.");
+                });
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Restore Failed", e.getMessage()));
+            }
+        });
+    }
+
+    @FXML
+    private void handleRefreshAuditTrail() {
+        AppExecutors.runBackground(() -> {
+            try {
+                java.util.List<AuditEvent> events = auditLogDAO.getRecentEvents(25);
+                javafx.application.Platform.runLater(() -> {
+                    if (listAuditEvents != null) {
+                        listAuditEvents.setItems(javafx.collections.FXCollections.observableArrayList(
+                                events.stream()
+                                        .map(event -> event.occurredAt()
+                                                + " | " + event.eventType()
+                                                + " | " + event.summary()
+                                                + (event.actorUsername() == null || event.actorUsername().isBlank()
+                                                        ? ""
+                                                        : " | by " + event.actorUsername()))
+                                        .toList()));
+                    }
+                });
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Audit Load Failed", e.getMessage()));
+            }
+        });
     }
 
     @FXML
@@ -354,7 +713,7 @@ public class SettingsController {
                     showAlert(Alert.AlertType.INFORMATION, "System Reset Successful", 
                         "All operational data has been deleted.\nThe system is now clean and ready for real usage.\n\nPlease restart the application.");
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    LOGGER.log(Level.WARNING, "Failed to clear operational data.", e);
                     showAlert(Alert.AlertType.ERROR, "System Reset Failed", 
                         "Failed to wipe demo data:\n" + e.getMessage());
                 }
@@ -476,7 +835,7 @@ public class SettingsController {
                     }
                 });
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to load environment list.", e);
             }
         });
     }
@@ -567,7 +926,7 @@ public class SettingsController {
 
                 javafx.application.Platform.runLater(this::loadEnvironmentList);
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to install or update environment " + envName + ".", e);
                 if (popup != null && !popup.isClosed()) {
                     popup.appendLog("❌ Error: " + e.getMessage());
                     popup.setStatus("❌ Installation failed");
@@ -595,6 +954,10 @@ public class SettingsController {
     private void handleActivateEnv(String envName) {
         prefs.put("active_python_env", envName);
         envManager.setActiveEnvironment(envName);
+        syncHardwareSelectionForEnv(envName);
+        if (hardwareCombo != null && hardwareCombo.getValue() != null) {
+            prefs.put("ai_hardware", hardwareCombo.getValue());
+        }
         loadEnvironmentList();
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
@@ -607,7 +970,9 @@ public class SettingsController {
                 MediManageApplication app = MediManageApplication.getInstance();
                 if (app != null) {
                     app.restartServer();
-                    scheduleModelReload();
+                    if (shouldAutoReloadLocalModel()) {
+                        scheduleModelReload();
+                    }
                 }
             }
         });
@@ -654,6 +1019,7 @@ public class SettingsController {
             localModelCombo.getItems().add(item);
         }
         localModelCombo.setValue(item);
+        updateLocalModelStatus();
     }
 
     @FXML
@@ -665,9 +1031,13 @@ public class SettingsController {
             javafx.stage.Stage stage = new javafx.stage.Stage();
             stage.setTitle("AI Model Store");
             stage.setScene(new javafx.scene.Scene(root, 900, 650));
+            stage.setOnHidden(event -> {
+                setupLocalModelsCombo();
+                updateLocalModelStatus();
+            });
             stage.show();
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Could not open model store.", e);
             showAlert(Alert.AlertType.ERROR, "Error", "Could not open Model Store: " + e.getMessage());
         }
     }
@@ -718,6 +1088,9 @@ public class SettingsController {
                 "Database configuration saved successfully.\n" +
                 "If the database backend changed, restart the application to reconnect cleanly.");
         org.example.MediManage.util.ToastNotification.success("Database configuration saved.");
+        logSettingsEvent("DATABASE_SETTINGS_SAVED", "Saved database settings", new JSONObject()
+                .put("sqlitePath", dbSettings.sqlitePath() == null ? "" : dbSettings.sqlitePath()));
+        handleRefreshDatabaseHealth();
     }
 
     @FXML
@@ -725,9 +1098,6 @@ public class SettingsController {
         if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
             return;
         }
-
-        LocalModelItem selectedModel = localModelCombo.getValue();
-        prefs.put("local_model_path", selectedModel != null ? selectedModel.path : "");
 
         String hardware = hardwareCombo.getValue();
         prefs.put("ai_hardware", hardware);
@@ -801,7 +1171,7 @@ public class SettingsController {
                 });
 
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to provision local AI environment.", e);
                 if (popup != null && !popup.isClosed()) {
                     popup.appendLog("❌ Error: " + e.getMessage());
                     popup.setStatus("❌ Installation failed");
@@ -853,12 +1223,75 @@ public class SettingsController {
         try { prefs.flush(); } catch (Exception ignored) {}
 
         org.example.MediManage.util.ToastNotification.success("Communication Settings Saved");
+        logSettingsEvent("COMMUNICATION_SETTINGS_SAVED", "Saved SMTP communication settings", new JSONObject()
+                .put("smtpHost", smtpHostField.getText() == null ? "" : smtpHostField.getText().trim())
+                .put("smtpPort", smtpPortField.getText() == null ? "" : smtpPortField.getText().trim())
+                .put("smtpUser", smtpUserField.getText() == null ? "" : smtpUserField.getText().trim()));
+    }
+
+    @FXML
+    private void handleBrowseReceiptLogo() {
+        if (txtReceiptLogoPath == null || txtReceiptLogoPath.getScene() == null) {
+            return;
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Select Receipt Logo");
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+
+        String currentPath = txtReceiptLogoPath.getText();
+        if (currentPath != null && !currentPath.isBlank()) {
+            File currentFile = new File(currentPath);
+            File parent = currentFile.getParentFile();
+            if (parent != null && parent.exists()) {
+                chooser.setInitialDirectory(parent);
+            }
+        }
+
+        File selected = chooser.showOpenDialog(txtReceiptLogoPath.getScene().getWindow());
+        if (selected != null) {
+            txtReceiptLogoPath.setText(selected.getAbsolutePath());
+        }
+    }
+
+    @FXML
+    private void handleSaveReceiptSettings() {
+        if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) {
+            return;
+        }
+
+        ReceiptSettings settings = new ReceiptSettings();
+        settings.setPharmacyName(valueOrDefault(txtReceiptPharmacyName, "MediManage Pharmacy"));
+        settings.setAddressLine1(valueOrDefault(txtReceiptAddressLine1, ""));
+        settings.setAddressLine2(valueOrDefault(txtReceiptAddressLine2, ""));
+        settings.setPhone(valueOrDefault(txtReceiptPhone, ""));
+        settings.setEmail(valueOrDefault(txtReceiptEmail, ""));
+        settings.setGstNumber(valueOrDefault(txtReceiptGstNumber, ""));
+        settings.setLogoPath(valueOrDefault(txtReceiptLogoPath, ""));
+        settings.setFooterText(valueOrDefault(txtReceiptFooter, "Thank you for your purchase!"));
+        settings.setShowBarcodeOnReceipt(chkReceiptShowBarcode != null && chkReceiptShowBarcode.isSelected());
+
+        try {
+            receiptSettingsDAO.saveSettings(settings);
+            org.example.MediManage.util.ToastNotification.success("Receipt Branding Saved");
+            logSettingsEvent("RECEIPT_BRANDING_SAVED", "Saved receipt branding", new JSONObject()
+                    .put("pharmacyName", settings.getPharmacyName())
+                    .put("phone", settings.getPhone())
+                    .put("email", settings.getEmail())
+                    .put("showBarcode", settings.isShowBarcodeOnReceipt()));
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Receipt Settings Error",
+                    "Failed to save receipt branding: " + e.getMessage());
+        }
     }
 
     @FXML
     private void handleRefreshWhatsApp() {
         lblWhatsAppStatus.setText("Checking...");
-        imgQRCode.setImage(null);
+        setWhatsAppQrImage(null);
+        setWhatsAppQrPlaceholder("Checking WhatsApp Bridge status...");
         
         AppExecutors.runBackground(() -> {
             try {
@@ -873,25 +1306,15 @@ public class SettingsController {
                 String statusMsg = statusJson.optString("status", "UNKNOWN");
                 
                 javafx.application.Platform.runLater(() -> {
-                    lblWhatsAppStatus.setText(statusMsg);
-                    if ("CONNECTED".equals(statusMsg)) {
-                        lblWhatsAppStatus.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
-                        try {
-                            javafx.scene.image.Image connectedImg = new javafx.scene.image.Image("https://img.icons8.com/color/512/whatsapp--v1.png", true);
-                            imgQRCode.setImage(connectedImg);
-                        } catch (Exception ignored) {}
-                    } else if ("QR_REQUIRED".equals(statusMsg)) {
-                        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+                    applyWhatsAppState(statusMsg);
+                    if ("QR_REQUIRED".equalsIgnoreCase(statusMsg)) {
                         fetchAndDisplayQR();
-                    } else {
-                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
                     }
                 });
                 
             } catch (Exception e) {
                 javafx.application.Platform.runLater(() -> {
-                    lblWhatsAppStatus.setText("NOT RUNNING. Start Node Bridge.");
-                    lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                    applyWhatsAppState("NOT_RUNNING");
                 });
             }
         });
@@ -924,72 +1347,49 @@ public class SettingsController {
                         }
                         
                         javafx.application.Platform.runLater(() -> {
-                            imgQRCode.setImage(image);
+                            setWhatsAppQrImage(image);
+                            if (lblWhatsAppHint != null) {
+                                lblWhatsAppHint.setText("Open WhatsApp on the phone, then scan this QR from Linked Devices.");
+                            }
                             org.example.MediManage.util.ToastNotification.info("Scan the QR Code to Link WhatsApp Bridge!");
                         });
                     } catch (Exception ex) {
-                        ex.printStackTrace();
+                        LOGGER.log(Level.WARNING, "Failed to render WhatsApp QR code.", ex);
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to fetch WhatsApp QR code.", e);
             }
         });
     }
 
     @FXML
-    private javafx.scene.control.Button btnStartBridge;
-    private Process whatsappBridgeProcess;
-
-    @FXML
     private void handleStartWhatsAppBridge() {
-        // Check if already running
-        if (whatsappBridgeProcess != null && whatsappBridgeProcess.isAlive()) {
-            showAlert(Alert.AlertType.INFORMATION, "WhatsApp Bridge", "Bridge is already running.");
-            handleRefreshWhatsApp();
-            return;
-        }
-
-        btnStartBridge.setDisable(true);
-        btnStartBridge.setText("⏳ Starting...");
-        lblWhatsAppStatus.setText("Starting Node Bridge...");
-        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+        applyWhatsAppState("INITIALIZING");
+        startWhatsAppAutoRefresh();
 
         AppExecutors.runBackground(() -> {
             try {
-                java.io.File serverDir = org.example.MediManage.config.WhatsAppBridgeConfig.resolveServerDir();
-                if (serverDir == null || !serverDir.isDirectory()) {
-                    javafx.application.Platform.runLater(() -> {
-                        lblWhatsAppStatus.setText("ERROR: whatsapp-server/ directory not found.");
-                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
-                        btnStartBridge.setDisable(false);
-                        btnStartBridge.setText("▶ Start Node Bridge");
-                    });
-                    return;
+                org.example.MediManage.MediManageApplication app = org.example.MediManage.MediManageApplication.getInstance();
+                if (app == null) {
+                    throw new IllegalStateException("Application instance is unavailable.");
                 }
-
-                // Start the server (node_modules check is handled in MediManageApplication)
-                ProcessBuilder pb = new ProcessBuilder("node", "index.js");
-                pb.directory(serverDir);
-                pb.redirectErrorStream(true);
-                whatsappBridgeProcess = pb.start();
+                app.startWhatsAppBridge();
 
                 // Wait a few seconds for the server to start, then refresh status
                 Thread.sleep(3000);
 
                 javafx.application.Platform.runLater(() -> {
-                    btnStartBridge.setDisable(false);
-                    btnStartBridge.setText("▶ Start Node Bridge");
                     handleRefreshWhatsApp();
                 });
 
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to start WhatsApp bridge from Settings.", e);
                 javafx.application.Platform.runLater(() -> {
-                    lblWhatsAppStatus.setText("FAILED TO START: " + e.getMessage());
-                    lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
-                    btnStartBridge.setDisable(false);
-                    btnStartBridge.setText("▶ Start Node Bridge");
+                    applyWhatsAppState("NOT_RUNNING");
+                    if (lblWhatsAppHint != null) {
+                        lblWhatsAppHint.setText("Bridge failed to start: " + e.getMessage());
+                    }
                 });
             }
         });
@@ -999,32 +1399,34 @@ public class SettingsController {
     private void handleDisconnectWhatsApp() {
         lblWhatsAppStatus.setText("Disconnecting...");
         lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+        if (lblWhatsAppHint != null) {
+            lblWhatsAppHint.setText("Disconnecting WhatsApp. A fresh QR may be needed after this.");
+        }
 
         AppExecutors.runBackground(() -> {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.logoutUrl()))
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.noBody());
+                org.example.MediManage.config.WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                HttpRequest request = requestBuilder.build();
                 HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
                 javafx.application.Platform.runLater(() -> {
                     if (resp.statusCode() == 200) {
-                        lblWhatsAppStatus.setText("DISCONNECTED. Scan QR to reconnect.");
-                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
-                        imgQRCode.setImage(null);
+                        applyWhatsAppState("DISCONNECTED");
                         showAlert(Alert.AlertType.INFORMATION, "WhatsApp", "WhatsApp disconnected successfully. Scan QR to reconnect.");
                         // Auto-refresh to show new QR after a delay
                         AppExecutors.schedule(() -> javafx.application.Platform.runLater(this::handleRefreshWhatsApp), 4, java.util.concurrent.TimeUnit.SECONDS);
                     } else {
-                        lblWhatsAppStatus.setText("Disconnect failed. Try again.");
-                        lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                        if (lblWhatsAppHint != null) {
+                            lblWhatsAppHint.setText("Disconnect failed. Try again.");
+                        }
                     }
                 });
             } catch (Exception e) {
                 javafx.application.Platform.runLater(() -> {
-                    lblWhatsAppStatus.setText("Bridge not running.");
-                    lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                    applyWhatsAppState("NOT_RUNNING");
                 });
             }
         });
@@ -1032,24 +1434,150 @@ public class SettingsController {
 
     @FXML
     private void handleStopWhatsAppBridge() {
-        lblWhatsAppStatus.setText("Stopping bridge...");
-        lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+        applyWhatsAppState("INITIALIZING");
 
         AppExecutors.runBackground(() -> {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.shutdownUrl()))
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.noBody());
+                org.example.MediManage.config.WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                HttpRequest request = requestBuilder.build();
                 httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             } catch (Exception ignored) {}
 
             javafx.application.Platform.runLater(() -> {
-                lblWhatsAppStatus.setText("STOPPED. Use Start Bridge to restart.");
-                lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
-                imgQRCode.setImage(null);
+                applyWhatsAppState("STOPPED");
             });
         });
+    }
+
+    private void applyWhatsAppState(String rawStatus) {
+        String status = rawStatus == null ? "UNKNOWN" : rawStatus.trim().toUpperCase(java.util.Locale.ROOT);
+        currentWhatsAppState = status;
+        if (lblWhatsAppStatus == null) {
+            return;
+        }
+
+        switch (status) {
+            case "CONNECTED" -> {
+                lblWhatsAppStatus.setText("Connected");
+                lblWhatsAppStatus.setStyle("-fx-text-fill: #5fe6b3; -fx-font-weight: bold;");
+                if (lblWhatsAppHint != null) {
+                    lblWhatsAppHint.setText("WhatsApp is linked and ready to send invoices.");
+                }
+                setWhatsAppQrImage(null);
+                setWhatsAppQrPlaceholder("WhatsApp is already linked.");
+                if (btnStartBridge != null) {
+                    btnStartBridge.setText("Connected");
+                    btnStartBridge.setDisable(true);
+                }
+                if (btnRefreshWhatsApp != null) {
+                    btnRefreshWhatsApp.setDisable(false);
+                }
+                setWhatsAppDisconnectVisible(true);
+            }
+            case "QR_REQUIRED", "DISCONNECTED" -> {
+                lblWhatsAppStatus.setText("Scan QR to connect");
+                lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+                if (lblWhatsAppHint != null) {
+                    lblWhatsAppHint.setText("Open WhatsApp on the phone, then scan the QR from Linked Devices.");
+                }
+                setWhatsAppQrImage(null);
+                setWhatsAppQrPlaceholder("Waiting for a fresh QR code...");
+                if (btnStartBridge != null) {
+                    btnStartBridge.setText("Refresh QR");
+                    btnStartBridge.setDisable(false);
+                }
+                if (btnRefreshWhatsApp != null) {
+                    btnRefreshWhatsApp.setDisable(false);
+                }
+                setWhatsAppDisconnectVisible(true);
+            }
+            case "INITIALIZING", "AUTHENTICATING" -> {
+                lblWhatsAppStatus.setText("Starting...");
+                lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
+                if (lblWhatsAppHint != null) {
+                    lblWhatsAppHint.setText("The bridge is starting. This usually takes a few seconds.");
+                }
+                setWhatsAppQrImage(null);
+                setWhatsAppQrPlaceholder("QR code will appear here if pairing is needed.");
+                if (btnStartBridge != null) {
+                    btnStartBridge.setText("Starting...");
+                    btnStartBridge.setDisable(true);
+                }
+                if (btnRefreshWhatsApp != null) {
+                    btnRefreshWhatsApp.setDisable(true);
+                }
+                setWhatsAppDisconnectVisible(false);
+            }
+            default -> {
+                lblWhatsAppStatus.setText("Not connected");
+                lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
+                if (lblWhatsAppHint != null) {
+                    lblWhatsAppHint.setText("Tap Start WhatsApp. A QR code appears here only when pairing is required.");
+                }
+                setWhatsAppQrImage(null);
+                setWhatsAppQrPlaceholder("QR code appears here after WhatsApp starts.");
+                if (btnStartBridge != null) {
+                    btnStartBridge.setText("Start WhatsApp");
+                    btnStartBridge.setDisable(false);
+                }
+                if (btnRefreshWhatsApp != null) {
+                    btnRefreshWhatsApp.setDisable(false);
+                }
+                setWhatsAppDisconnectVisible(false);
+            }
+        }
+
+        if (!isWhatsAppPendingState()) {
+            cancelWhatsAppAutoRefresh();
+        }
+    }
+
+    private void setWhatsAppQrImage(javafx.scene.image.Image image) {
+        if (imgQRCode != null) {
+            imgQRCode.setImage(image);
+            imgQRCode.setVisible(image != null);
+        }
+        if (lblWhatsAppQrPlaceholder != null) {
+            lblWhatsAppQrPlaceholder.setVisible(image == null);
+        }
+    }
+
+    private void setWhatsAppQrPlaceholder(String text) {
+        if (lblWhatsAppQrPlaceholder != null) {
+            lblWhatsAppQrPlaceholder.setText(text);
+        }
+    }
+
+    private void setWhatsAppDisconnectVisible(boolean visible) {
+        if (btnDisconnectWhatsApp != null) {
+            btnDisconnectWhatsApp.setVisible(visible);
+            btnDisconnectWhatsApp.setManaged(visible);
+        }
+    }
+
+    private void startWhatsAppAutoRefresh() {
+        cancelWhatsAppAutoRefresh();
+        final java.util.concurrent.atomic.AtomicInteger pollsRemaining = new java.util.concurrent.atomic.AtomicInteger(12);
+        whatsAppRefreshPoller = AppExecutors.scheduleAtFixedRate(() -> javafx.application.Platform.runLater(() -> {
+            handleRefreshWhatsApp();
+            if (pollsRemaining.decrementAndGet() <= 0 || !isWhatsAppPendingState()) {
+                cancelWhatsAppAutoRefresh();
+            }
+        }), 2, 2, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private void cancelWhatsAppAutoRefresh() {
+        if (whatsAppRefreshPoller != null) {
+            whatsAppRefreshPoller.cancel(false);
+            whatsAppRefreshPoller = null;
+        }
+    }
+
+    private boolean isWhatsAppPendingState() {
+        return "INITIALIZING".equals(currentWhatsAppState) || "AUTHENTICATING".equals(currentWhatsAppState);
     }
 
     private boolean enforcePermission(Permission permission) {
@@ -1064,6 +1592,10 @@ public class SettingsController {
 
     // Cleaned up duplicate
     private void triggerModelReload() {
+        if (!shouldAutoReloadLocalModel()) {
+            return;
+        }
+
         LocalModelItem selectedModel = localModelCombo.getValue();
         String modelPath = selectedModel != null ? selectedModel.path : "";
         if (modelPath.isEmpty()) {
@@ -1076,37 +1608,25 @@ public class SettingsController {
             config = "cuda";
         else if (hardware.contains("CPU"))
             config = "cpu";
+        final String finalConfig = config;
 
         try {
-            JSONObject json = new JSONObject();
-            json.put("model_path", modelPath);
-            json.put("hardware_config", config);
-
-            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:5000/load_model"))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.toString()));
-            LocalAdminTokenManager.applyHeader(requestBuilder);
-            HttpRequest request = requestBuilder.build();
-
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenAccept(response -> {
-                        javafx.application.Platform.runLater(() -> {
-                            if (response.statusCode() == 200) {
-                                showAlert(Alert.AlertType.INFORMATION, "Model Loaded",
-                                        "AI Model reloaded successfully: " + response.body());
-                            } else {
-                                showAlert(Alert.AlertType.WARNING, "Model Load Failed",
-                                        "Could not reload model: " + response.body());
-                            }
-                        });
-                    })
-                    .exceptionally(ex -> {
-                        // Silent — engine might be offline
-                        return null;
-                    });
+            AppExecutors.runBackground(() -> {
+                org.example.MediManage.service.ai.LocalAIService.ModelLoadResult result = AIServiceProvider.get()
+                        .getLocalService()
+                        .loadModelBlocking(modelPath, finalConfig);
+                javafx.application.Platform.runLater(() -> {
+                    if (result.success()) {
+                        showAlert(Alert.AlertType.INFORMATION, "Model Loaded",
+                                "AI model reloaded successfully.");
+                    } else {
+                        showAlert(Alert.AlertType.WARNING, "Model Load Failed",
+                                "Could not reload model: " + result.message());
+                    }
+                });
+            });
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Failed to trigger model reload.", e);
         }
     }
 
@@ -1127,7 +1647,7 @@ public class SettingsController {
                         HttpResponse<String> resp = httpClient.send(req,
                                 HttpResponse.BodyHandlers.ofString());
                         if (resp.statusCode() == 200) {
-                            System.out.println("✅ New AI Engine is healthy — reloading model...");
+                            LOGGER.info("New AI Engine is healthy; reloading model.");
                             javafx.application.Platform.runLater(this::triggerModelReload);
                             return;
                         }
@@ -1135,11 +1655,65 @@ public class SettingsController {
                         // Server not up yet, keep waiting
                     }
                 }
-                System.err.println("⚠️ Timeout waiting for AI Engine — model not auto-loaded.");
+                LOGGER.warning("Timeout waiting for AI Engine; model was not auto-loaded.");
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
         });
+    }
+
+    private boolean shouldAutoReloadLocalModel() {
+        String activeEnv = prefs != null
+                ? prefs.get("active_python_env", envManager.getActiveEnvironment())
+                : envManager.getActiveEnvironment();
+        if ("base".equalsIgnoreCase(activeEnv)) {
+            return false;
+        }
+
+        String hardware = hardwareCombo != null ? hardwareCombo.getValue() : null;
+        return hardware == null || !hardware.toLowerCase().contains("base");
+    }
+
+    private String valueOrDefault(javafx.scene.control.TextInputControl field, String defaultValue) {
+        if (field == null) {
+            return defaultValue;
+        }
+        String value = field.getText();
+        if (value == null) {
+            return defaultValue;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? defaultValue : trimmed;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        double kb = bytes / 1024.0;
+        if (kb < 1024) {
+            return String.format(java.util.Locale.ROOT, "%.1f KB", kb);
+        }
+        double mb = kb / 1024.0;
+        if (mb < 1024) {
+            return String.format(java.util.Locale.ROOT, "%.1f MB", mb);
+        }
+        return String.format(java.util.Locale.ROOT, "%.2f GB", mb / 1024.0);
+    }
+
+    private void logSettingsEvent(String eventType, String summary, JSONObject details) {
+        try {
+            Integer actorUserId = org.example.MediManage.util.UserSession.getInstance().getUser() == null
+                    ? null
+                    : org.example.MediManage.util.UserSession.getInstance().getUser().getId();
+            auditLogDAO.logEvent(actorUserId, eventType, "SETTINGS", null, summary, details == null ? "" : details.toString());
+            handleRefreshAuditTrail();
+        } catch (Exception ignored) {
+        }
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {

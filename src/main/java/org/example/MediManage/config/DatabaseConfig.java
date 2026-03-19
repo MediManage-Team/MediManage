@@ -73,6 +73,10 @@ public class DatabaseConfig {
         return new ConnectionSettings(backend, sqlitePath);
     }
 
+    public static java.io.File getResolvedDatabaseFile() {
+        return resolveDatabaseFile(getCurrentSettings().sqlitePath());
+    }
+
     public static void testConnection(ConnectionSettings settings) throws SQLException {
         try (Connection ignored = createSqliteConnection(settings)) {
             // Successful open/close means config is valid.

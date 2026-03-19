@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<ScrollPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1"
+    fx:controller="org.example.MediManage.controller.LocationsController"
+    fitToWidth="true"
+    fitToHeight="true"
+    pannable="true"
+    styleClass="edge-to-edge">
+    <content>
+        <VBox spacing="18" styleClass="dark-panel">
+            <padding>
+                <Insets top="18" right="20" bottom="18" left="20"/>
+            </padding>
+
+            <HBox alignment="CENTER_LEFT" spacing="10">
+                <Label text="Locations &amp; Transfers" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Refresh" onAction="#handleRefresh" styleClass="button-outlined"/>
+            </HBox>
+
+            <Label text="Manage branch or warehouse locations, allocate stock per site, and move inventory through pending/completed transfer workflows." styleClass="text-muted" wrapText="true"/>
+
+            <HBox spacing="16" VBox.vgrow="ALWAYS">
+                <VBox spacing="12" styleClass="card" HBox.hgrow="ALWAYS" prefWidth="320">
+                    <Label text="Locations" styleClass="section-title"/>
+                    <TableView fx:id="locationTable" prefHeight="320" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                        <columns>
+                            <TableColumn fx:id="colLocationName" text="Name" prefWidth="140"/>
+                            <TableColumn fx:id="colLocationType" text="Type" prefWidth="90"/>
+                            <TableColumn fx:id="colLocationPhone" text="Phone" prefWidth="120"/>
+                            <TableColumn fx:id="colLocationAddress" text="Address" prefWidth="180"/>
+                        </columns>
+                        <columnResizePolicy>
+                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                        </columnResizePolicy>
+                    </TableView>
+
+                    <Separator/>
+
+                    <VBox spacing="6">
+                        <Label text="Location Name" style="-fx-font-weight: bold;"/>
+                        <TextField fx:id="txtLocationName" promptText="Main Pharmacy"/>
+                    </VBox>
+                    <VBox spacing="6">
+                        <Label text="Location Type" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="cmbLocationType" maxWidth="Infinity"/>
+                    </VBox>
+                    <VBox spacing="6">
+                        <Label text="Phone" style="-fx-font-weight: bold;"/>
+                        <TextField fx:id="txtLocationPhone" promptText="+91..."/>
+                    </VBox>
+                    <VBox spacing="6">
+                        <Label text="Address" style="-fx-font-weight: bold;"/>
+                        <TextField fx:id="txtLocationAddress" promptText="Street / area / city"/>
+                    </VBox>
+
+                    <HBox spacing="10">
+                        <Button fx:id="btnSaveLocation" text="Add Location" onAction="#handleSaveLocation" styleClass="button-primary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                        <Button text="Clear" onAction="#handleClearLocation" styleClass="button-outlined" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                    </HBox>
+                </VBox>
+
+                <VBox spacing="12" styleClass="card" HBox.hgrow="ALWAYS" prefWidth="420">
+                    <Label text="Allocated Stock" styleClass="section-title"/>
+                    <Label fx:id="lblSelectedLocation" text="Select a location to manage allocated stock." styleClass="text-muted" wrapText="true"/>
+                    <Label text="Setting a location quantity updates the master stock total from the sum of all location allocations for that medicine." styleClass="text-muted" wrapText="true"/>
+
+                    <TableView fx:id="locationStockTable" prefHeight="320" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                        <columns>
+                            <TableColumn fx:id="colStockMedicine" text="Medicine" prefWidth="160"/>
+                            <TableColumn fx:id="colStockGeneric" text="Generic" prefWidth="140"/>
+                            <TableColumn fx:id="colStockCompany" text="Company" prefWidth="120"/>
+                            <TableColumn fx:id="colStockQty" text="Qty" prefWidth="70"/>
+                            <TableColumn fx:id="colStockMin" text="Min" prefWidth="70"/>
+                        </columns>
+                        <columnResizePolicy>
+                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                        </columnResizePolicy>
+                    </TableView>
+
+                    <Separator/>
+
+                    <VBox spacing="6">
+                        <Label text="Medicine" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="cmbStockMedicine" maxWidth="Infinity"/>
+                    </VBox>
+                    <VBox spacing="6">
+                        <Label text="Allocated Quantity" style="-fx-font-weight: bold;"/>
+                        <TextField fx:id="txtStockQuantity" promptText="0"/>
+                    </VBox>
+                    <Button text="Set Location Quantity" onAction="#handleSetLocationStock" styleClass="button-primary" maxWidth="Infinity"/>
+                </VBox>
+
+                <VBox spacing="12" styleClass="card" HBox.hgrow="ALWAYS" prefWidth="420">
+                    <Label text="Transfers" styleClass="section-title"/>
+                    <Label text="Transfers stay pending until you complete them. Completion deducts source stock and increases destination stock." styleClass="text-muted" wrapText="true"/>
+
+                    <GridPane hgap="10" vgap="10">
+                        <Label text="From" GridPane.rowIndex="0" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="cmbTransferFrom" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" maxWidth="Infinity"/>
+
+                        <Label text="To" GridPane.rowIndex="1" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="cmbTransferTo" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" maxWidth="Infinity"/>
+
+                        <Label text="Medicine" GridPane.rowIndex="2" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                        <ComboBox fx:id="cmbTransferMedicine" GridPane.rowIndex="2" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" maxWidth="Infinity"/>
+
+                        <Label text="Quantity" GridPane.rowIndex="3" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                        <TextField fx:id="txtTransferQuantity" promptText="0" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS"/>
+
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="70" prefWidth="90"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+                    </GridPane>
+
+                    <HBox spacing="10">
+                        <Button text="Request Transfer" onAction="#handleCreateTransfer" styleClass="button-primary" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                        <Button text="Complete Selected" onAction="#handleCompleteTransfer" styleClass="button-success" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                    </HBox>
+
+                    <TableView fx:id="transferTable" prefHeight="320" VBox.vgrow="ALWAYS" styleClass="dashboard-table">
+                        <columns>
+                            <TableColumn fx:id="colTransferRoute" text="Route" prefWidth="180"/>
+                            <TableColumn fx:id="colTransferMedicine" text="Medicine" prefWidth="140"/>
+                            <TableColumn fx:id="colTransferQty" text="Qty" prefWidth="70"/>
+                            <TableColumn fx:id="colTransferStatus" text="Status" prefWidth="90"/>
+                            <TableColumn fx:id="colTransferRequestedAt" text="Requested" prefWidth="140"/>
+                        </columns>
+                        <columnResizePolicy>
+                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                        </columnResizePolicy>
+                    </TableView>
+                </VBox>
+            </HBox>
+        </VBox>
+    </content>
+</ScrollPane>

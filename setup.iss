@@ -1,10 +1,15 @@
+#define MyAppVersion GetEnv('APP_VERSION')
+#if MyAppVersion == ""
+  #define MyAppVersion "6.5.0"
+#endif
+
 [Setup]
 AppName=MediManage
-AppVersion=1.0.0
+AppVersion={#MyAppVersion}
 AppPublisher=MediManage Team
 DefaultDirName={autopf}\MediManage
 DefaultGroupName=MediManage
-OutputBaseFilename=MediManage_Setup
+OutputBaseFilename=MediManage_Setup_{#MyAppVersion}
 Compression=lzma2/ultra64
 InternalCompressLevel=ultra
 SolidCompression=yes

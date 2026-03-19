@@ -10,6 +10,8 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 dist/
+output/
+tmp/
 
 # ── IDE: IntelliJ IDEA ───────────────────────────────────
 .idea/
@@ -46,6 +48,8 @@ Desktop.ini
 
 # ── Database ──────────────────────────────────────────────
 *.db
+*.db-shm
+*.db-wal
 *.db.bak
 *.db.backup_*
 *.db.backup-*
@@ -59,6 +63,8 @@ ai_engine/envs/
 ai_engine/.venv*/
 ai_engine/__pycache__/
 __pycache__/
+.pytest_cache/
+pytest-cache-files-*/
 *.py[cod]
 *$py.class
 .venv/
@@ -87,9 +93,11 @@ Output/
 
 # ── Generated Invoices ───────────────────────────
 Invoice_*.pdf
+JasperTestOutput.pdf
 
 # ── Maven Wrapper (keep jar) ─────────────────────────────
 !.mvn/wrapper/maven-wrapper.jar
 whatsapp-server/.wwebjs_auth/
+whatsapp-server/.wwebjs_cache/
 whatsapp-server/node_modules/
 whatsapp-server/.env

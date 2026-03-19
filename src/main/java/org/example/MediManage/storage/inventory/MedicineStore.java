@@ -7,6 +7,8 @@ import java.util.List;
 public interface MedicineStore {
     List<Medicine> getAllMedicines();
 
+    Medicine getMedicineById(int medicineId);
+
     List<Medicine> getMedicinesPage(int offset, int limit);
 
     int countActiveMedicines();
@@ -15,10 +17,12 @@ public interface MedicineStore {
 
     int countMedicines(String keyword);
 
-    void addMedicine(String name, String genericName, String company, String expiry, double price, int initialStock,
+    int addMedicine(String name, String genericName, String company, String expiry, double price, int initialStock,
             double purchasePrice, int reorderThreshold);
 
     void updateMedicine(Medicine medicine, int reorderThreshold);
+
+    void updateBarcode(int medicineId, String barcode);
 
     void updateStock(int medicineId, int newQuantity);
 

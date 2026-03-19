@@ -55,8 +55,9 @@ if not exist "%PY_SRC%\python.exe" (
     echo [Python] Installing local pip...
     curl -# -o "%PY_SRC%\get-pip.py" "https://bootstrap.pypa.io/get-pip.py"
     
-    :: Modify the ._pth file so site-packages works for local pip
-    echo Lib\site-packages>> "%PY_SRC%\python311._pth"
+    :: Modify the ._pth file so site-packages and .pth processing work for local pip
+    findstr /x /c:"Lib\site-packages" "%PY_SRC%\python311._pth" >nul 2>nul || echo Lib\site-packages>> "%PY_SRC%\python311._pth"
+    findstr /x /c:"import site" "%PY_SRC%\python311._pth" >nul 2>nul || echo import site>> "%PY_SRC%\python311._pth"
     
     "%PY_SRC%\python.exe" "%PY_SRC%\get-pip.py"
     if errorlevel 1 (
@@ -64,6 +65,9 @@ if not exist "%PY_SRC%\python.exe" (
         exit /b 1
     )
 )
+
+findstr /x /c:"Lib\site-packages" "%PY_SRC%\python311._pth" >nul 2>nul || echo Lib\site-packages>> "%PY_SRC%\python311._pth"
+findstr /x /c:"import site" "%PY_SRC%\python311._pth" >nul 2>nul || echo import site>> "%PY_SRC%\python311._pth"
 
 echo [Python] Installing build tools...
 "%PY_SRC%\python.exe" -m pip install --upgrade pip setuptools wheel cmake scikit-build-core

@@ -565,6 +565,25 @@
     -fx-background-insets: 0;
 }
 
+.app-content-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+
+.app-content-scroll>.viewport {
+    -fx-background-color: #1e1a38;
+}
+
+.sidebar-scroll {
+    -fx-background-color: #0f1724;
+    -fx-border-color: transparent #2a2650 transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+.sidebar-scroll>.viewport {
+    -fx-background-color: #0f1724;
+}
+
 .scroll-bar {
     -fx-background-color: transparent;
 }

@@ -26,8 +26,23 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: whatsapp-server/package-lock.json
+
       - name: Install Python test dependencies
         run: python -m pip install --upgrade pip pytest
+
+      - name: Install WhatsApp bridge dependencies
+        run: npm ci
+        working-directory: whatsapp-server
+
+      - name: Run WhatsApp bridge tests
+        run: npm test
+        working-directory: whatsapp-server
 
       - name: Run AI Engine contract tests
         run: pytest ai_engine/tests
