@@ -44,7 +44,7 @@ final class BillingCheckoutSupport {
     List<PaymentSplit> showSplitPaymentDialog(double totalAmount) {
         Dialog<List<PaymentSplit>> dialog = new Dialog<>();
         dialog.setTitle("Split Payment");
-        dialog.setHeaderText(String.format("Total: \u20b9%.2f \u2014 Split across payment methods", totalAmount));
+        dialog.setHeaderText(String.format("Total: Rs. %.2f - Split across payment methods", totalAmount));
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         dialog.getDialogPane().setPrefWidth(500);
 
@@ -98,7 +98,7 @@ final class BillingCheckoutSupport {
         Runnable updateRemaining = () -> {
             double paid = splits.stream().mapToDouble(PaymentSplit::getAmount).sum();
             double remaining = totalAmount - paid;
-            remainingLabel.setText(String.format("Remaining: \u20b9%.2f", remaining));
+            remainingLabel.setText(String.format("Remaining: Rs. %.2f", remaining));
             remainingLabel.setStyle(remaining > PAYMENT_TOLERANCE
                     ? "-fx-text-fill: #ff6b6b;"
                     : "-fx-text-fill: #5fe6b3;");
@@ -118,7 +118,7 @@ final class BillingCheckoutSupport {
                     alertHandler.show(
                             Alert.AlertType.WARNING,
                             "Amount Mismatch",
-                            String.format("Total splits (\u20b9%.2f) must equal bill total (\u20b9%.2f)", paid,
+                            String.format("Total splits (Rs. %.2f) must equal bill total (Rs. %.2f)", paid,
                                     totalAmount));
                     return null;
                 }
@@ -153,9 +153,9 @@ final class BillingCheckoutSupport {
             return;
         }
 
-        ButtonType btnBoth = new ButtonType("\ud83d\udce8 Send Both");
-        ButtonType btnEmail = new ButtonType("\ud83d\udce7 Email Invoice");
-        ButtonType btnWhatsApp = new ButtonType("\ud83d\udcac WhatsApp Invoice");
+        ButtonType btnBoth = new ButtonType("Send Both");
+        ButtonType btnEmail = new ButtonType("Email Invoice");
+        ButtonType btnWhatsApp = new ButtonType("WhatsApp Invoice");
         dialog.getButtonTypes().setAll(btnBoth, btnEmail, btnWhatsApp, btnClose);
 
         java.util.Optional<ButtonType> choice = dialog.showAndWait();

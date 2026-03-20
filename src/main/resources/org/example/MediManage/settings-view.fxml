@@ -166,7 +166,7 @@
                         </HBox>
 
                         <Label fx:id="lblWhatsAppHint"
-                               text="Start WhatsApp when you are ready. A QR code appears only if pairing is needed."
+                               text="WhatsApp starts automatically at launch. A QR code appears only if pairing is needed."
                                styleClass="text-muted"
                                wrapText="true"/>
 
@@ -241,22 +241,78 @@
 
                 <javafx.scene.control.Separator/>
                 <Label text="Customer Communication Templates" style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #00d4ff;"/>
-                <Label text="Customize messages sent to customers via WhatsApp and Email. Use placeholders to insert dynamic data." styleClass="text-muted" wrapText="true"/>
-                <Label text="Available Placeholders: {{customer_name}}, {{bill_id}}, {{total_amount}}, {{pharmacy_name}}, {{care_note}}" style="-fx-font-family: monospace; -fx-font-size: 11px; -fx-text-fill: #5fe6b3; -fx-padding: 5; -fx-background-color: #1a2035; -fx-background-radius: 5;" wrapText="true"/>
+                <Label text="Customize WhatsApp and email text with live previews. The preview sample uses Asha Patel, bill #1042, and total amount 498.75. Pharmacy name comes from the Receipt Branding section above." styleClass="text-muted" wrapText="true"/>
+                <Label text="Available Placeholders: {{customer_name}}, {{bill_id}}, {{total_amount}}, {{pharmacy_name}}, {{care_note}}" style="-fx-font-family: monospace; -fx-font-size: 11px; -fx-text-fill: #5fe6b3; -fx-padding: 6 8; -fx-background-color: #1a2035; -fx-background-radius: 6;" wrapText="true"/>
 
-                <VBox spacing="6">
-                    <Label text="WhatsApp Invoice Message" style="-fx-font-weight: bold; -fx-text-fill: #25D366;"/>
-                    <TextArea fx:id="txtWhatsAppTemplate" prefRowCount="6" promptText="WhatsApp message template..." wrapText="true"/>
-                </VBox>
+                <VBox spacing="12">
+                    <VBox spacing="10" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 10; -fx-padding: 14; -fx-background-radius: 10;">
+                        <Label text="PDF Template Overrides" style="-fx-font-weight: bold; -fx-text-fill: #e8c66a;"/>
+                        <Label text="Leave these blank to keep the current built-in PDF design. Add a custom JasperReports .jrxml file only when you want a different invoice or receipt layout." styleClass="text-muted" wrapText="true"/>
+                        <Label text="PDF Variables: $P{CustomerName}, $P{TotalAmount}, $P{CareProtocol}, $P{PharmacyName}, $P{AddressBlock}, $P{ContactLine}, $P{FooterText}, $P{DocumentNumber}, $P{LogoImage}. Receipt templates also support $P{BarcodeImage}. Item row fields: $F{name}, $F{qty}, $F{price}, $F{total}. Use $P{CareProtocol} to show the AI care protocol block in a custom invoice or receipt template." style="-fx-font-family: monospace; -fx-font-size: 11px; -fx-text-fill: #5fe6b3; -fx-padding: 6 8; -fx-background-color: #1a2035; -fx-background-radius: 6;" wrapText="true"/>
 
-                <VBox spacing="6">
-                    <Label text="Email Subject" style="-fx-font-weight: bold; -fx-text-fill: #4285F4;"/>
-                    <TextField fx:id="txtEmailSubjectTemplate" promptText="Email subject template..."/>
-                </VBox>
+                        <GridPane hgap="12" vgap="10">
+                            <Label text="Invoice PDF" GridPane.rowIndex="0" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                            <HBox spacing="8" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS">
+                                <TextField fx:id="txtInvoiceTemplatePath" promptText="Optional custom invoice .jrxml template" HBox.hgrow="ALWAYS"/>
+                                <Button text="Browse" onAction="#handleBrowseInvoiceTemplate" styleClass="button-outlined"/>
+                                <Button text="Use Built-In" onAction="#handleClearInvoiceTemplate" styleClass="button-outlined"/>
+                            </HBox>
 
-                <VBox spacing="6">
-                    <Label text="Email Body" style="-fx-font-weight: bold; -fx-text-fill: #4285F4;"/>
-                    <TextArea fx:id="txtEmailBodyTemplate" prefRowCount="6" promptText="Email body template..." wrapText="true"/>
+                            <Label text="Receipt PDF" GridPane.rowIndex="1" GridPane.columnIndex="0" style="-fx-font-weight: bold;"/>
+                            <HBox spacing="8" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS">
+                                <TextField fx:id="txtReceiptTemplatePath" promptText="Optional custom receipt .jrxml template" HBox.hgrow="ALWAYS"/>
+                                <Button text="Browse" onAction="#handleBrowseReceiptTemplate" styleClass="button-outlined"/>
+                                <Button text="Use Built-In" onAction="#handleClearReceiptTemplate" styleClass="button-outlined"/>
+                            </HBox>
+
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="120" prefWidth="140"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+                        </GridPane>
+                    </VBox>
+
+                    <VBox spacing="10" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 10; -fx-padding: 14; -fx-background-radius: 10;">
+                        <HBox spacing="12" alignment="TOP_LEFT">
+                            <VBox spacing="6" HBox.hgrow="ALWAYS">
+                                <Label text="WhatsApp Invoice Message" style="-fx-font-weight: bold; -fx-text-fill: #25D366;"/>
+                                <Label text="Keep this message short and attachment-focused so it reads well on mobile." styleClass="text-muted" wrapText="true"/>
+                                <TextArea fx:id="txtWhatsAppTemplate" prefRowCount="14" prefHeight="240" minHeight="240" promptText="WhatsApp message template..." wrapText="true"/>
+                            </VBox>
+                            <VBox spacing="6" HBox.hgrow="ALWAYS">
+                                <Label text="Live Preview" style="-fx-font-weight: bold; -fx-text-fill: #5fe6b3;"/>
+                                <TextArea fx:id="txtWhatsAppPreview" prefRowCount="14" prefHeight="240" minHeight="240" editable="false" focusTraversable="false" wrapText="true" style="-fx-opacity: 1;"/>
+                            </VBox>
+                        </HBox>
+                    </VBox>
+
+                    <VBox spacing="10" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 10; -fx-padding: 14; -fx-background-radius: 10;">
+                        <HBox spacing="12" alignment="TOP_LEFT">
+                            <VBox spacing="6" HBox.hgrow="ALWAYS">
+                                <Label text="Email Subject" style="-fx-font-weight: bold; -fx-text-fill: #4285F4;"/>
+                                <Label text="Keep the subject concise so customers can identify the bill immediately." styleClass="text-muted" wrapText="true"/>
+                                <TextField fx:id="txtEmailSubjectTemplate" promptText="Email subject template..."/>
+                            </VBox>
+                            <VBox spacing="6" HBox.hgrow="ALWAYS">
+                                <Label text="Live Preview" style="-fx-font-weight: bold; -fx-text-fill: #5fe6b3;"/>
+                                <TextField fx:id="txtEmailSubjectPreview" editable="false" focusTraversable="false"/>
+                            </VBox>
+                        </HBox>
+                    </VBox>
+
+                    <VBox spacing="10" styleClass="card" style="-fx-border-color: #2d3555; -fx-border-radius: 10; -fx-padding: 14; -fx-background-radius: 10;">
+                        <HBox spacing="12" alignment="TOP_LEFT">
+                            <VBox spacing="6" HBox.hgrow="ALWAYS">
+                                <Label text="Email Body" style="-fx-font-weight: bold; -fx-text-fill: #4285F4;"/>
+                                <Label text="Use a more complete message here. The PDF remains the primary invoice attachment." styleClass="text-muted" wrapText="true"/>
+                                <TextArea fx:id="txtEmailBodyTemplate" prefRowCount="14" prefHeight="240" minHeight="240" promptText="Email body template..." wrapText="true"/>
+                            </VBox>
+                            <VBox spacing="6" HBox.hgrow="ALWAYS">
+                                <Label text="Live Preview" style="-fx-font-weight: bold; -fx-text-fill: #5fe6b3;"/>
+                                <TextArea fx:id="txtEmailBodyPreview" prefRowCount="14" prefHeight="240" minHeight="240" editable="false" focusTraversable="false" wrapText="true" style="-fx-opacity: 1;"/>
+                            </VBox>
+                        </HBox>
+                    </VBox>
                 </VBox>
 
                 <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 10 0 0 0;">
@@ -273,8 +329,9 @@
                     <Region HBox.hgrow="ALWAYS"/>
                     <Button text="Refresh Audit" onAction="#handleRefreshAuditTrail" styleClass="button-outlined"/>
                 </HBox>
-                <ListView fx:id="listAuditEvents" prefHeight="150" maxHeight="170"/>
-                <Label text="Shows recent medicine changes, stock write-offs, purchase receipts, approvals, and backup or restore activity." styleClass="text-muted" wrapText="true"/>
+                <Label text="Expanded multi-line event history with actor, entity, and key change details for recent operational activity." styleClass="text-muted" wrapText="true"/>
+                <ListView fx:id="listAuditEvents" prefHeight="280" minHeight="260"/>
+                <Label text="Shows medicine changes, stock write-offs, purchases, approvals, and backup or restore activity. Use Refresh Audit to pull the latest events." styleClass="text-muted" wrapText="true"/>
             </VBox>
         </TitledPane>
     </VBox>

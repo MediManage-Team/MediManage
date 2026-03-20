@@ -60,6 +60,26 @@ Java is the desktop client only. All AI routing, prompts, provider calls, and MC
 .\mvnw.cmd javafx:run
 ```
 
+```bash
+./mvnw clean compile
+./mvnw javafx:run
+```
+
+### Quick launchers
+
+From the repo root:
+
+```powershell
+.\run_windows.bat
+```
+
+```bash
+bash ./run_linux.sh
+```
+
+These scripts prefer the packaged app image if it exists, then the installed
+app location, and fall back to the Maven development launcher.
+
 ### Python AI engine
 
 ```powershell
@@ -68,11 +88,21 @@ ai_engine\.venv\Scripts\pip.exe install -r ai_engine\requirements\requirements.t
 ai_engine\.venv\Scripts\python.exe ai_engine\server\server.py
 ```
 
+```bash
+python3 -m venv ai_engine/.venv
+ai_engine/.venv/bin/pip install -r ai_engine/requirements/requirements.txt
+ai_engine/.venv/bin/python ai_engine/server/server.py
+```
+
 ### Standalone launcher
 
 ```powershell
 .\run_ai_engine.bat
 ```
+
+On Linux, the desktop app provisions its own user-local AI venv at
+`~/.local/share/MediManage/ai_engine/.venv` on first launch when the bundled
+runtime is not present.
 
 ## Packaging
 
@@ -80,6 +110,33 @@ ai_engine\.venv\Scripts\python.exe ai_engine\server\server.py
 - `scripts/prepare_offline_environments.bat` prepares the portable Python and Node runtimes used for packaging
 - `scripts/compile_source_code.bat` protects the packaged Python and WhatsApp bridge sources
 - `setup.iss` creates the Windows installer
+- `scripts/build_linux_package.sh` builds the Linux app image and `.deb` package
+
+### Linux runtime requirements
+
+- JDK 21+ with `jpackage`
+- Python 3 with `venv` support (`python3-venv` on Ubuntu)
+- Node.js + `npm`
+- Chromium, Google Chrome, or Microsoft Edge for the WhatsApp bridge
+
+### Linux packaging
+
+```bash
+bash scripts/build_linux_package.sh
+```
+
+From Windows with WSL configured:
+
+```powershell
+.\scripts\build_linux_package_wsl.ps1
+```
+
+The Linux package bundles the raw `ai_engine` and `whatsapp-server` sources.
+At runtime:
+
+- the SQLite database is stored under `~/.local/share/MediManage/runtime/db`
+- the AI engine venv is stored under `~/.local/share/MediManage/ai_engine/.venv`
+- the WhatsApp bridge working copy is stored under `~/.local/share/MediManage/whatsapp-server`
 
 ## Important Settings Areas
 
@@ -100,4 +157,3 @@ ai_engine\.venv\Scripts\python.exe ai_engine\server\server.py
 - Locations and transfers
 - Prescription and doctor flows
 - Demo seeding SQL and local model test scaffolding
-

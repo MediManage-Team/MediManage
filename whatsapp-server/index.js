@@ -22,9 +22,7 @@ const MAX_DISCONNECT_RETRIES = parseInt(process.env.MAX_DISCONNECT_RETRIES, 10) 
 const SEND_RATE_LIMIT = parseInt(process.env.SEND_RATE_LIMIT, 10) || 10; // per minute
 const ALLOWED_PDF_DIR = path.resolve(process.env.ALLOWED_PDF_DIR || os.homedir());
 const ADMIN_TOKEN = (process.env.MEDIMANAGE_LOCAL_API_TOKEN || '').trim();
-const APPDATA_ROOT = process.env.APPDATA
-    ? path.join(process.env.APPDATA, 'MediManage', 'whatsapp-bridge')
-    : path.join(os.homedir(), '.medimanage', 'whatsapp-bridge');
+const APPDATA_ROOT = resolveBridgeDataRoot();
 const AUTH_DATA_DIR = path.join(APPDATA_ROOT, 'auth');
 
 // --- Structured Logger ---
@@ -66,21 +64,63 @@ const PUPPETEER_ARGS = [
     '--disable-gpu'
 ];
 
+function resolveBridgeDataRoot() {
+    const explicitAppDataDir = (process.env.MEDIMANAGE_APP_DATA_DIR || '').trim();
+    if (explicitAppDataDir) {
+        return path.join(explicitAppDataDir, 'whatsapp-bridge');
+    }
+
+    if (process.env.APPDATA) {
+        return path.join(process.env.APPDATA, 'MediManage', 'whatsapp-bridge');
+    }
+
+    const xdgDataHome = (process.env.XDG_DATA_HOME || '').trim();
+    const modernLinuxRoot = path.join(
+        xdgDataHome || path.join(os.homedir(), '.local', 'share'),
+        'MediManage',
+        'whatsapp-bridge'
+    );
+    const legacyLinuxRoot = path.join(os.homedir(), '.medimanage', 'whatsapp-bridge');
+
+    if (fs.existsSync(legacyLinuxRoot) && !fs.existsSync(modernLinuxRoot)) {
+        return legacyLinuxRoot;
+    }
+
+    return modernLinuxRoot;
+}
+
 function ensureBridgeStorageDirs() {
     fs.mkdirSync(APPDATA_ROOT, { recursive: true });
     fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
 }
 
 function resolveBrowserExecutable() {
+    const platform = os.platform();
     const candidates = [
         process.env.PUPPETEER_EXECUTABLE_PATH,
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
-    ].filter(Boolean);
+        process.env.CHROME_BIN
+    ];
 
-    for (const candidate of candidates) {
+    if (platform === 'win32') {
+        candidates.push(
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+            'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+        );
+    } else {
+        candidates.push(
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/snap/bin/chromium',
+            '/usr/bin/microsoft-edge',
+            '/usr/bin/microsoft-edge-stable'
+        );
+    }
+
+    for (const candidate of candidates.filter(Boolean)) {
         if (fs.existsSync(candidate)) {
             return candidate;
         }

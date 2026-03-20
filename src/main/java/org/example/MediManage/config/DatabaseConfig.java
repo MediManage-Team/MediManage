@@ -1,7 +1,12 @@
 package org.example.MediManage.config;
 
+import org.example.MediManage.util.AppPaths;
+
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -102,64 +107,87 @@ public class DatabaseConfig {
     }
 
     private static java.io.File resolveDatabaseFile(String configuredPath) {
-        // Reliably determine the actual installation directory, not just the working directory
-        String installPath = System.getProperty("user.dir");
-        try {
-            String path = DatabaseConfig.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
-            // Handle Windows paths properly if they start with "/" like "/C:/..."
-            if (path.startsWith("/") && path.contains(":")) {
-                path = path.substring(1);
-            }
-            java.io.File appFile = new java.io.File(path);
-            
-            if (path.endsWith(".jar")) {
-                java.io.File appDir = appFile.getParentFile();
-                if (appDir != null && (appDir.getName().equals("app") || appDir.getName().equals("lib"))) {
-                    installPath = appDir.getParentFile().getAbsolutePath();
-                } else if (appDir != null) {
-                    installPath = appDir.getAbsolutePath();
-                }
-            } else {
-                installPath = appFile.getParentFile().getParentFile().getAbsolutePath(); 
-            }
-        } catch (Exception e) {
-            System.err.println("⚠️ Could not determine code source location, falling back to user.dir: " + e.getMessage());
-        }
-
-        boolean isInstalled = installPath.contains("Program Files") || installPath.contains("Program Files (x86)") || new java.io.File(installPath, "runtime").exists();
+        Path installRoot = AppPaths.resolveInstallRoot();
+        boolean isInstalled = AppPaths.isPackagedInstall(installRoot);
+        Path relativeBase = isInstalled && !AppPaths.isWindows()
+                ? AppPaths.appDataDir()
+                : installRoot;
 
         if (configuredPath != null && !configuredPath.trim().isEmpty()) {
-            java.io.File configuredFile = new java.io.File(configuredPath.trim());
-            
-            // If the configured path is relative, resolve it against the calculated installPath rather than System32
+            String normalizedPath = configuredPath.trim();
+            java.io.File configuredFile = new java.io.File(normalizedPath);
+
             if (!configuredFile.isAbsolute()) {
-                if (isInstalled && configuredPath.trim().equals("medimanage.db")) {
-                    // For the installed app, force the default "medimanage.db" into runtime/db
-                    java.io.File dbFolder = new java.io.File(installPath, "runtime/db");
-                    dbFolder.mkdirs();
-                    configuredFile = new java.io.File(dbFolder, "medimanage.db");
+                if (isInstalled && normalizedPath.equals("medimanage.db")) {
+                    configuredFile = defaultInstalledDatabasePath(installRoot).toFile();
                 } else {
-                    configuredFile = new java.io.File(installPath, configuredPath.trim());
+                    configuredFile = relativeBase.resolve(normalizedPath).toFile();
                 }
             }
-            
+
             java.io.File parent = configuredFile.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
                 System.err.println("❌ Failed to create configured DB dir: " + parent.getAbsolutePath());
             }
+            seedBundledDatabaseIfNeeded(configuredFile.toPath(), installRoot,
+                    isInstalled && normalizedPath.equals("medimanage.db"));
             return configuredFile.getAbsoluteFile();
         }
 
-        // Default logic if configuredPath is completely empty
         if (isInstalled) {
-            java.io.File dbFolder = new java.io.File(installPath, "runtime/db");
+            Path defaultPath = defaultInstalledDatabasePath(installRoot);
+            java.io.File dbFolder = defaultPath.getParent().toFile();
             if (!dbFolder.exists()) {
                 dbFolder.mkdirs();
             }
-            return new java.io.File(dbFolder, "medimanage.db");
+            seedBundledDatabaseIfNeeded(defaultPath, installRoot, true);
+            return defaultPath.toFile();
         } else {
-            return new java.io.File(installPath, "medimanage.db");
+            return installRoot.resolve("medimanage.db").toFile();
         }
+    }
+
+    private static Path defaultInstalledDatabasePath(Path installRoot) {
+        if (AppPaths.isWindows()) {
+            return installRoot.resolve("runtime").resolve("db").resolve("medimanage.db");
+        }
+        return AppPaths.appDataPath("runtime", "db", "medimanage.db");
+    }
+
+    private static void seedBundledDatabaseIfNeeded(Path target, Path installRoot, boolean isInstalled) {
+        if (!isInstalled || target == null || Files.exists(target)) {
+            return;
+        }
+
+        Path source = bundledDatabaseSource(installRoot);
+        if (source == null || target.equals(source)) {
+            return;
+        }
+
+        try {
+            if (target.getParent() != null) {
+                Files.createDirectories(target.getParent());
+            }
+            Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES);
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to seed packaged database from " + source + ": " + e.getMessage());
+        }
+    }
+
+    private static Path bundledDatabaseSource(Path installRoot) {
+        Path[] candidates = new Path[] {
+                installRoot.resolve("runtime").resolve("db").resolve("medimanage.db"),
+                installRoot.resolve("base_medimanage.db"),
+                installRoot.resolve("app").resolve("base_medimanage.db"),
+                installRoot.resolve("lib").resolve("app").resolve("base_medimanage.db")
+        };
+
+        for (Path candidate : candidates) {
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private static Preferences initializePreferences() {

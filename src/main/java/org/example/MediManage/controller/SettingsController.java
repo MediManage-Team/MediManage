@@ -6,13 +6,19 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import org.example.MediManage.MediManageApplication;
 import org.example.MediManage.config.DatabaseConfig;
@@ -39,11 +45,21 @@ import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.prefs.Preferences;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class SettingsController {
     private static final Logger LOGGER = Logger.getLogger(SettingsController.class.getName());
+    private static final long WHATSAPP_STATUS_REFRESH_DELAY_SECONDS = 2L;
+    private static final int MAX_WHATSAPP_AUTO_REFRESH_ATTEMPTS = 15;
+    private static final String TEMPLATE_PREVIEW_CUSTOMER_NAME = "Asha Patel";
+    private static final int TEMPLATE_PREVIEW_BILL_ID = 1042;
+    private static final double TEMPLATE_PREVIEW_TOTAL_AMOUNT = 498.75;
+    private static final String TEMPLATE_PREVIEW_CARE_NOTE =
+            "Patient Care Protocol note: a personalized care guide for these medicines is included at the end of the attached PDF.";
 
     @FXML private TextField sqlitePathField;
     @FXML private Label lblDbResolvedPath;
@@ -54,7 +70,7 @@ public class SettingsController {
     @FXML private Label lblDbOpsCounts;
     @FXML private Label lblDbLastBackup;
     @FXML private ListView<String> listBackupHistory;
-    @FXML private ListView<String> listAuditEvents;
+    @FXML private ListView<AuditEvent> listAuditEvents;
 
     @FXML private ComboBox<String> providerCombo;
     @FXML private ComboBox<String> modelCombo;
@@ -76,6 +92,8 @@ public class SettingsController {
     @FXML private TextField txtReceiptGstNumber;
     @FXML private TextField txtReceiptLogoPath;
     @FXML private TextArea txtReceiptFooter;
+    @FXML private TextField txtInvoiceTemplatePath;
+    @FXML private TextField txtReceiptTemplatePath;
     @FXML private CheckBox chkReceiptShowBarcode;
 
     @FXML private Label lblWhatsAppStatus;
@@ -89,14 +107,20 @@ public class SettingsController {
     @FXML private TextArea txtWhatsAppTemplate;
     @FXML private TextField txtEmailSubjectTemplate;
     @FXML private TextArea txtEmailBodyTemplate;
+    @FXML private TextArea txtWhatsAppPreview;
+    @FXML private TextField txtEmailSubjectPreview;
+    @FXML private TextArea txtEmailBodyPreview;
 
     private final MessageTemplateDAO messageTemplateDAO = new MessageTemplateDAO();
     private final ReceiptSettingsDAO receiptSettingsDAO = new ReceiptSettingsDAO();
     private final DatabaseMaintenanceService databaseMaintenanceService = new DatabaseMaintenanceService();
     private final AuditLogDAO auditLogDAO = new AuditLogDAO();
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final AtomicInteger whatsAppAutoRefreshAttempts = new AtomicInteger();
 
     private Preferences prefs;
+    private volatile ScheduledFuture<?> whatsAppStatusRefreshTask;
+    private int activeReceiptSettingId;
 
     private static final Map<CloudApiKeyStore.Provider, List<String>> CLOUD_MODELS = Map.of(
             CloudApiKeyStore.Provider.GEMINI, List.of("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"),
@@ -115,6 +139,7 @@ public class SettingsController {
         handleRefreshAuditTrail();
         initializeCloudSettings();
         initializeCommunicationSettings();
+        initializeTemplatePreviewBindings();
         loadReceiptSettings();
         loadMessageTemplates();
         Platform.runLater(this::handleRefreshWhatsApp);
@@ -147,7 +172,7 @@ public class SettingsController {
         DatabaseConfig.ConnectionSettings current = DatabaseConfig.getCurrentSettings();
         String sqlitePath = current.sqlitePath();
         if (sqlitePath == null || sqlitePath.isBlank()) {
-            sqlitePath = new File(System.getProperty("user.dir"), "medimanage.db").getAbsolutePath();
+            sqlitePath = DatabaseConfig.getResolvedDatabaseFile().getAbsolutePath();
         }
         sqlitePathField.setText(sqlitePath);
     }
@@ -155,6 +180,24 @@ public class SettingsController {
     private void setupOperationsLists() {
         listBackupHistory.setPlaceholder(new Label("No backups recorded yet."));
         listAuditEvents.setPlaceholder(new Label("No audit events available."));
+        listAuditEvents.setFixedCellSize(-1);
+        listAuditEvents.setCellFactory(listView -> new AuditEventListCell());
+    }
+
+    private void initializeTemplatePreviewBindings() {
+        if (txtWhatsAppTemplate != null) {
+            txtWhatsAppTemplate.textProperty().addListener((obs, oldValue, newValue) -> refreshTemplatePreviews());
+        }
+        if (txtEmailSubjectTemplate != null) {
+            txtEmailSubjectTemplate.textProperty().addListener((obs, oldValue, newValue) -> refreshTemplatePreviews());
+        }
+        if (txtEmailBodyTemplate != null) {
+            txtEmailBodyTemplate.textProperty().addListener((obs, oldValue, newValue) -> refreshTemplatePreviews());
+        }
+        if (txtReceiptPharmacyName != null) {
+            txtReceiptPharmacyName.textProperty().addListener((obs, oldValue, newValue) -> refreshTemplatePreviews());
+        }
+        refreshTemplatePreviews();
     }
 
     private void loadMessageTemplates() {
@@ -162,12 +205,16 @@ public class SettingsController {
             MessageTemplate wa = messageTemplateDAO.getByKey(MessageTemplateDAO.KEY_WHATSAPP_INVOICE);
             MessageTemplate subject = messageTemplateDAO.getByKey(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT);
             MessageTemplate body = messageTemplateDAO.getByKey(MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY);
-            if (wa != null) txtWhatsAppTemplate.setText(wa.getBodyTemplate());
-            if (subject != null) txtEmailSubjectTemplate.setText(subject.getBodyTemplate());
-            if (body != null) txtEmailBodyTemplate.setText(body.getBodyTemplate());
+            txtWhatsAppTemplate.setText(resolveTemplateText(wa, MessageTemplateDAO.KEY_WHATSAPP_INVOICE));
+            txtEmailSubjectTemplate.setText(resolveTemplateText(subject, MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT));
+            txtEmailBodyTemplate.setText(resolveTemplateText(body, MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY));
         } catch (Exception e) {
             LOGGER.warning("Failed to load message templates: " + e.getMessage());
+            txtWhatsAppTemplate.setText(messageTemplateDAO.getDefaultBody(MessageTemplateDAO.KEY_WHATSAPP_INVOICE));
+            txtEmailSubjectTemplate.setText(messageTemplateDAO.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT));
+            txtEmailBodyTemplate.setText(messageTemplateDAO.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY));
         }
+        refreshTemplatePreviews();
     }
 
     @FXML
@@ -204,6 +251,7 @@ public class SettingsController {
 
     private void populateReceiptSettings(ReceiptSettings settings) {
         ReceiptSettings value = settings == null ? new ReceiptSettings() : settings;
+        activeReceiptSettingId = value.getSettingId();
         txtReceiptPharmacyName.setText(nullToEmpty(value.getPharmacyName()));
         txtReceiptAddressLine1.setText(nullToEmpty(value.getAddressLine1()));
         txtReceiptAddressLine2.setText(nullToEmpty(value.getAddressLine2()));
@@ -212,7 +260,10 @@ public class SettingsController {
         txtReceiptGstNumber.setText(nullToEmpty(value.getGstNumber()));
         txtReceiptLogoPath.setText(nullToEmpty(value.getLogoPath()));
         txtReceiptFooter.setText(nullToEmpty(value.getFooterText()));
+        txtInvoiceTemplatePath.setText(nullToEmpty(value.getInvoiceTemplatePath()));
+        txtReceiptTemplatePath.setText(nullToEmpty(value.getReceiptTemplatePath()));
         chkReceiptShowBarcode.setSelected(value.isShowBarcodeOnReceipt());
+        refreshTemplatePreviews();
     }
 
     @FXML
@@ -297,12 +348,8 @@ public class SettingsController {
     private void handleRefreshAuditTrail() {
         AppExecutors.runBackground(() -> {
             try {
-                List<AuditEvent> events = auditLogDAO.getRecentEvents(25);
-                Platform.runLater(() -> listAuditEvents.setItems(javafx.collections.FXCollections.observableArrayList(
-                        events.stream()
-                                .map(event -> event.occurredAt() + " | " + event.eventType() + " | " + event.summary()
-                                        + (event.actorUsername() == null || event.actorUsername().isBlank() ? "" : " | by " + event.actorUsername()))
-                                .toList())));
+                List<AuditEvent> events = auditLogDAO.getRecentEvents(50);
+                Platform.runLater(() -> listAuditEvents.setItems(javafx.collections.FXCollections.observableArrayList(events)));
             } catch (Exception e) {
                 Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Audit Load Failed", e.getMessage()));
             }
@@ -446,9 +493,30 @@ public class SettingsController {
     }
 
     @FXML
+    private void handleBrowseInvoiceTemplate() {
+        browseReportTemplate(txtInvoiceTemplatePath, "Select Invoice JRXML Template");
+    }
+
+    @FXML
+    private void handleBrowseReceiptTemplate() {
+        browseReportTemplate(txtReceiptTemplatePath, "Select Receipt JRXML Template");
+    }
+
+    @FXML
+    private void handleClearInvoiceTemplate() {
+        txtInvoiceTemplatePath.clear();
+    }
+
+    @FXML
+    private void handleClearReceiptTemplate() {
+        txtReceiptTemplatePath.clear();
+    }
+
+    @FXML
     private void handleSaveReceiptSettings() {
         if (!enforcePermission(Permission.MANAGE_SYSTEM_SETTINGS)) return;
         ReceiptSettings settings = new ReceiptSettings();
+        settings.setSettingId(activeReceiptSettingId);
         settings.setPharmacyName(valueOrDefault(txtReceiptPharmacyName, "MediManage Pharmacy"));
         settings.setAddressLine1(valueOrDefault(txtReceiptAddressLine1, ""));
         settings.setAddressLine2(valueOrDefault(txtReceiptAddressLine2, ""));
@@ -457,15 +525,20 @@ public class SettingsController {
         settings.setGstNumber(valueOrDefault(txtReceiptGstNumber, ""));
         settings.setLogoPath(valueOrDefault(txtReceiptLogoPath, ""));
         settings.setFooterText(valueOrDefault(txtReceiptFooter, "Thank you for your purchase!"));
-        settings.setShowBarcodeOnReceipt(chkReceiptShowBarcode.isSelected());
         try {
+            settings.setInvoiceTemplatePath(validateOptionalJrxmlPath(txtInvoiceTemplatePath, "invoice"));
+            settings.setReceiptTemplatePath(validateOptionalJrxmlPath(txtReceiptTemplatePath, "receipt"));
+            settings.setShowBarcodeOnReceipt(chkReceiptShowBarcode.isSelected());
             receiptSettingsDAO.saveSettings(settings);
+            loadReceiptSettings();
             org.example.MediManage.util.ToastNotification.success("Receipt branding saved.");
             logSettingsEvent("RECEIPT_BRANDING_SAVED", "Saved receipt branding",
                     new JSONObject()
                             .put("pharmacyName", settings.getPharmacyName())
                             .put("phone", settings.getPhone())
                             .put("email", settings.getEmail())
+                            .put("invoiceTemplate", settings.getInvoiceTemplatePath())
+                            .put("receiptTemplate", settings.getReceiptTemplatePath())
                             .put("showBarcode", settings.isShowBarcodeOnReceipt()));
         } catch (Exception e) {
             showAlert(Alert.AlertType.ERROR, "Receipt Settings Error", "Failed to save receipt branding: " + e.getMessage());
@@ -504,37 +577,61 @@ public class SettingsController {
 
     @FXML
     private void handleRefreshWhatsApp() {
+        refreshWhatsAppStatus(true);
+    }
+
+    private void refreshWhatsAppStatus(boolean resetAutoRefreshBudget) {
+        if (resetAutoRefreshBudget) {
+            whatsAppAutoRefreshAttempts.set(0);
+        }
+        cancelWhatsAppStatusRefresh();
         applyWhatsAppState("CHECKING");
         setWhatsAppQrImage(null);
         setWhatsAppQrPlaceholder("Checking WhatsApp Bridge status...");
         AppExecutors.runBackground(() -> {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.statusUrl()))
-                        .GET()
-                        .build();
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                        .GET();
+                org.example.MediManage.config.WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() != 200) {
+                    throw new IllegalStateException("Bridge status request failed with HTTP " + response.statusCode());
+                }
                 String status = new JSONObject(response.body()).optString("status", "UNKNOWN");
-                Platform.runLater(() -> {
-                    applyWhatsAppState(status);
-                    if ("QR_REQUIRED".equalsIgnoreCase(status)) {
-                        fetchAndDisplayQR();
-                    }
-                });
+                Platform.runLater(() -> updateWhatsAppStatus(status));
             } catch (Exception e) {
-                Platform.runLater(() -> applyWhatsAppState("NOT_RUNNING"));
+                LOGGER.log(Level.FINE, "WhatsApp status refresh failed.", e);
+                Platform.runLater(() -> updateWhatsAppStatus("NOT_RUNNING"));
             }
         });
+    }
+
+    private void updateWhatsAppStatus(String rawStatus) {
+        String status = normalizeWhatsAppStatus(rawStatus);
+        applyWhatsAppState(status);
+        if (shouldFetchWhatsAppQr(status)) {
+            fetchAndDisplayQR();
+        }
+        if (isWhatsAppStatusTransient(status)) {
+            scheduleWhatsAppStatusRefresh();
+        } else {
+            whatsAppAutoRefreshAttempts.set(0);
+            cancelWhatsAppStatusRefresh();
+        }
     }
 
     private void fetchAndDisplayQR() {
         AppExecutors.runBackground(() -> {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(org.example.MediManage.config.WhatsAppBridgeConfig.qrUrl()))
-                        .GET()
-                        .build();
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                        .GET();
+                org.example.MediManage.config.WhatsAppBridgeConfig.applyAdminHeader(requestBuilder);
+                HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() != 200) {
+                    return;
+                }
                 JSONObject json = new JSONObject(response.body());
                 if (!json.has("qr") || json.isNull("qr")) return;
                 String qrData = json.getString("qr");
@@ -559,18 +656,19 @@ public class SettingsController {
 
     @FXML
     private void handleStartWhatsAppBridge() {
+        whatsAppAutoRefreshAttempts.set(0);
+        cancelWhatsAppStatusRefresh();
         applyWhatsAppState("INITIALIZING");
         AppExecutors.runBackground(() -> {
             try {
                 MediManageApplication app = MediManageApplication.getInstance();
                 if (app == null) throw new IllegalStateException("Application instance is unavailable.");
                 app.startWhatsAppBridge();
-                Thread.sleep(3000);
-                Platform.runLater(this::handleRefreshWhatsApp);
+                scheduleWhatsAppStatusRefresh();
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Failed to start WhatsApp bridge.", e);
                 Platform.runLater(() -> {
-                    applyWhatsAppState("NOT_RUNNING");
+                    updateWhatsAppStatus("NOT_RUNNING");
                     lblWhatsAppHint.setText("Bridge failed to start: " + e.getMessage());
                 });
             }
@@ -579,6 +677,7 @@ public class SettingsController {
 
     @FXML
     private void handleDisconnectWhatsApp() {
+        cancelWhatsAppStatusRefresh();
         applyWhatsAppState("DISCONNECTING");
         AppExecutors.runBackground(() -> {
             try {
@@ -589,21 +688,21 @@ public class SettingsController {
                 HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
                 Platform.runLater(() -> {
                     if (response.statusCode() == 200) {
-                        applyWhatsAppState("DISCONNECTED");
+                        updateWhatsAppStatus("DISCONNECTED");
                         showAlert(Alert.AlertType.INFORMATION, "WhatsApp", "WhatsApp disconnected successfully. Scan QR to reconnect.");
                     } else {
-                        applyWhatsAppState("CONNECTED");
+                        updateWhatsAppStatus("CONNECTED");
                         lblWhatsAppHint.setText("Disconnect failed. Try again.");
                     }
                 });
             } catch (Exception e) {
-                Platform.runLater(() -> applyWhatsAppState("NOT_RUNNING"));
+                Platform.runLater(() -> updateWhatsAppStatus("NOT_RUNNING"));
             }
         });
     }
 
     private void applyWhatsAppState(String rawStatus) {
-        String status = rawStatus == null ? "UNKNOWN" : rawStatus.trim().toUpperCase(java.util.Locale.ROOT);
+        String status = normalizeWhatsAppStatus(rawStatus);
         switch (status) {
             case "CONNECTED" -> {
                 lblWhatsAppStatus.setText("Connected");
@@ -628,20 +727,23 @@ public class SettingsController {
                 setWhatsAppDisconnectVisible(true);
             }
             case "INITIALIZING", "CHECKING", "DISCONNECTING", "AUTHENTICATING" -> {
-                lblWhatsAppStatus.setText(status.equals("DISCONNECTING") ? "Disconnecting..." : "Starting...");
+                lblWhatsAppStatus.setText(
+                        "DISCONNECTING".equals(status)
+                                ? "Disconnecting..."
+                                : "CHECKING".equals(status) ? "Checking..." : "Starting...");
                 lblWhatsAppStatus.setStyle("-fx-text-fill: #e8c66a; -fx-font-weight: bold;");
-                lblWhatsAppHint.setText("Please wait while the WhatsApp bridge updates.");
+                lblWhatsAppHint.setText("WhatsApp starts automatically at launch. Please wait while the bridge reconnects.");
                 setWhatsAppQrImage(null);
                 setWhatsAppQrPlaceholder("QR code will appear here if pairing is needed.");
                 btnStartBridge.setText("Working...");
                 btnStartBridge.setDisable(true);
-                btnRefreshWhatsApp.setDisable(true);
+                btnRefreshWhatsApp.setDisable(false);
                 setWhatsAppDisconnectVisible(false);
             }
             default -> {
                 lblWhatsAppStatus.setText("Not connected");
                 lblWhatsAppStatus.setStyle("-fx-text-fill: #ff6b6b; -fx-font-weight: bold;");
-                lblWhatsAppHint.setText("Tap Start WhatsApp. A QR code appears here only when pairing is required.");
+                lblWhatsAppHint.setText("WhatsApp starts automatically at launch. If it was stopped, tap Start WhatsApp. A QR code appears only when pairing is required.");
                 setWhatsAppQrImage(null);
                 setWhatsAppQrPlaceholder("QR code appears here after WhatsApp starts.");
                 btnStartBridge.setText("Start WhatsApp");
@@ -667,6 +769,226 @@ public class SettingsController {
         btnDisconnectWhatsApp.setManaged(visible);
     }
 
+    private void scheduleWhatsAppStatusRefresh() {
+        if (whatsAppAutoRefreshAttempts.incrementAndGet() > MAX_WHATSAPP_AUTO_REFRESH_ATTEMPTS) {
+            return;
+        }
+        cancelWhatsAppStatusRefresh();
+        whatsAppStatusRefreshTask = AppExecutors.schedule(
+                () -> Platform.runLater(() -> refreshWhatsAppStatus(false)),
+                WHATSAPP_STATUS_REFRESH_DELAY_SECONDS,
+                TimeUnit.SECONDS);
+    }
+
+    private void cancelWhatsAppStatusRefresh() {
+        ScheduledFuture<?> task = whatsAppStatusRefreshTask;
+        whatsAppStatusRefreshTask = null;
+        if (task != null) {
+            task.cancel(false);
+        }
+    }
+
+    static String normalizeWhatsAppStatus(String rawStatus) {
+        return rawStatus == null ? "UNKNOWN" : rawStatus.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    static boolean isWhatsAppStatusTransient(String rawStatus) {
+        return switch (normalizeWhatsAppStatus(rawStatus)) {
+            case "INITIALIZING", "CHECKING", "DISCONNECTING", "AUTHENTICATING" -> true;
+            default -> false;
+        };
+    }
+
+    static boolean shouldFetchWhatsAppQr(String rawStatus) {
+        return "QR_REQUIRED".equals(normalizeWhatsAppStatus(rawStatus));
+    }
+
+    static String formatAuditEventTitle(AuditEvent event) {
+        if (event == null) {
+            return "";
+        }
+        String entityType = humanizeAuditToken(event.entityType());
+        if (entityType.isBlank()) {
+            return humanizeAuditToken(event.eventType());
+        }
+        return humanizeAuditToken(event.eventType()) + " on " + entityType;
+    }
+
+    static String formatAuditEventMeta(AuditEvent event) {
+        if (event == null) {
+            return "";
+        }
+
+        List<String> segments = new java.util.ArrayList<>();
+        if (event.actorUsername() != null && !event.actorUsername().isBlank()) {
+            segments.add("By " + event.actorUsername());
+        } else if (event.actorUserId() != null) {
+            segments.add("By user #" + event.actorUserId());
+        }
+
+        String entityToken = humanizeAuditToken(event.entityType());
+        if (!entityToken.isBlank() && event.entityId() != null) {
+            segments.add(entityToken + " #" + event.entityId());
+        }
+
+        String details = summarizeAuditDetails(event.detailsJson());
+        if (!details.isBlank()) {
+            segments.add(details);
+        }
+
+        return String.join(" | ", segments);
+    }
+
+    static String summarizeAuditDetails(String rawDetailsJson) {
+        if (rawDetailsJson == null || rawDetailsJson.isBlank()) {
+            return "";
+        }
+
+        try {
+            JSONObject json = new JSONObject(rawDetailsJson);
+            java.util.List<String> keys = json.keySet().stream()
+                    .sorted()
+                    .limit(4)
+                    .toList();
+            java.util.List<String> segments = new java.util.ArrayList<>();
+            for (String key : keys) {
+                Object value = json.opt(key);
+                if (value == null) {
+                    continue;
+                }
+                String renderedValue = isSensitiveAuditKey(key)
+                        ? "[hidden]"
+                        : shortenAuditValue(String.valueOf(value), 42);
+                if (renderedValue.isBlank()) {
+                    continue;
+                }
+                segments.add(humanizeAuditToken(key) + ": " + renderedValue);
+            }
+            return String.join(" | ", segments);
+        } catch (Exception ignored) {
+            return shortenAuditValue(rawDetailsJson.replaceAll("\\s+", " ").trim(), 140);
+        }
+    }
+
+    private static boolean isSensitiveAuditKey(String key) {
+        String normalized = normalizeWhatsAppStatus(key);
+        return normalized.contains("PASSWORD")
+                || normalized.contains("TOKEN")
+                || normalized.contains("SECRET")
+                || normalized.contains("KEY");
+    }
+
+    private static String shortenAuditValue(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, Math.max(0, maxLength - 3)) + "...";
+    }
+
+    private static String humanizeAuditToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return "";
+        }
+        String[] parts = rawToken.trim().replace('-', '_').split("_+");
+        java.util.List<String> words = new java.util.ArrayList<>();
+        for (String part : parts) {
+            if (part == null || part.isBlank()) {
+                continue;
+            }
+            String normalized = part.toLowerCase(java.util.Locale.ROOT);
+            words.add(Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1));
+        }
+        return String.join(" ", words);
+    }
+
+    private static final class AuditEventListCell extends ListCell<AuditEvent> {
+        private final Label titleLabel = new Label();
+        private final Label timestampLabel = new Label();
+        private final Label summaryLabel = new Label();
+        private final Label metaLabel = new Label();
+        private final Region spacer = new Region();
+        private final HBox header = new HBox(10);
+        private final VBox container = new VBox(4);
+
+        private AuditEventListCell() {
+            setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+
+            titleLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #e6f0ff;");
+            timestampLabel.getStyleClass().add("text-muted");
+            summaryLabel.setWrapText(true);
+            summaryLabel.setStyle("-fx-text-fill: #bfc9e6;");
+            metaLabel.setWrapText(true);
+            metaLabel.getStyleClass().add("text-muted");
+
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            header.getChildren().addAll(titleLabel, spacer, timestampLabel);
+            container.getChildren().addAll(header, summaryLabel, metaLabel);
+            container.setFillWidth(true);
+            container.prefWidthProperty().bind(widthProperty().subtract(32));
+        }
+
+        @Override
+        protected void updateItem(AuditEvent event, boolean empty) {
+            super.updateItem(event, empty);
+            if (empty || event == null) {
+                setText(null);
+                setGraphic(null);
+                return;
+            }
+
+            titleLabel.setText(formatAuditEventTitle(event));
+            timestampLabel.setText(nullToDash(event.occurredAt()));
+            summaryLabel.setText(nullToDash(event.summary()));
+
+            String meta = formatAuditEventMeta(event);
+            metaLabel.setVisible(!meta.isBlank());
+            metaLabel.setManaged(!meta.isBlank());
+            metaLabel.setText(meta);
+
+            setText(null);
+            setGraphic(container);
+        }
+
+        private static String nullToDash(String value) {
+            return value == null || value.isBlank() ? "-" : value;
+        }
+    }
+
+    private void refreshTemplatePreviews() {
+        String pharmacyName = valueOrDefault(txtReceiptPharmacyName, "MediManage Pharmacy");
+        if (txtWhatsAppPreview != null) {
+            txtWhatsAppPreview.setText(MessageTemplate.render(
+                    valueOrDefault(txtWhatsAppTemplate, messageTemplateDAO.getDefaultBody(MessageTemplateDAO.KEY_WHATSAPP_INVOICE)),
+                    TEMPLATE_PREVIEW_CUSTOMER_NAME,
+                    TEMPLATE_PREVIEW_BILL_ID,
+                    TEMPLATE_PREVIEW_TOTAL_AMOUNT,
+                    pharmacyName,
+                    TEMPLATE_PREVIEW_CARE_NOTE));
+        }
+        if (txtEmailSubjectPreview != null) {
+            txtEmailSubjectPreview.setText(MessageTemplate.render(
+                    valueOrDefault(txtEmailSubjectTemplate, messageTemplateDAO.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_SUBJECT)),
+                    TEMPLATE_PREVIEW_CUSTOMER_NAME,
+                    TEMPLATE_PREVIEW_BILL_ID,
+                    TEMPLATE_PREVIEW_TOTAL_AMOUNT,
+                    pharmacyName,
+                    TEMPLATE_PREVIEW_CARE_NOTE));
+        }
+        if (txtEmailBodyPreview != null) {
+            txtEmailBodyPreview.setText(MessageTemplate.render(
+                    valueOrDefault(txtEmailBodyTemplate, messageTemplateDAO.getDefaultBody(MessageTemplateDAO.KEY_EMAIL_INVOICE_BODY)),
+                    TEMPLATE_PREVIEW_CUSTOMER_NAME,
+                    TEMPLATE_PREVIEW_BILL_ID,
+                    TEMPLATE_PREVIEW_TOTAL_AMOUNT,
+                    pharmacyName,
+                    TEMPLATE_PREVIEW_CARE_NOTE));
+        }
+    }
+
     private Integer currentUserId() {
         return UserSession.getInstance().getUser() == null ? null : UserSession.getInstance().getUser().getId();
     }
@@ -684,6 +1006,56 @@ public class SettingsController {
     private String valueOrDefault(javafx.scene.control.TextInputControl field, String defaultValue) {
         if (field == null || field.getText() == null || field.getText().trim().isEmpty()) return defaultValue;
         return field.getText().trim();
+    }
+
+    private String resolveTemplateText(MessageTemplate template, String templateKey) {
+        if (template == null) {
+            return messageTemplateDAO.getDefaultBody(templateKey);
+        }
+        String value = template.getBodyTemplate();
+        if ((value == null || value.isBlank()) && template.getSubjectTemplate() != null) {
+            value = template.getSubjectTemplate();
+        }
+        if (value == null || value.isBlank()) {
+            return messageTemplateDAO.getDefaultBody(templateKey);
+        }
+        return value;
+    }
+
+    private void browseReportTemplate(TextField targetField, String dialogTitle) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(dialogTitle);
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("JasperReports JRXML", "*.jrxml"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        String currentPath = targetField.getText();
+        if (currentPath != null && !currentPath.isBlank()) {
+            File currentFile = new File(currentPath);
+            File parent = currentFile.isDirectory() ? currentFile : currentFile.getParentFile();
+            if (parent != null && parent.exists()) {
+                chooser.setInitialDirectory(parent);
+            }
+        }
+        File selected = chooser.showOpenDialog(targetField.getScene().getWindow());
+        if (selected != null) {
+            targetField.setText(selected.getAbsolutePath());
+        }
+    }
+
+    private String validateOptionalJrxmlPath(TextField field, String templateLabel) {
+        String value = valueOrDefault(field, "");
+        if (value.isBlank()) {
+            return "";
+        }
+        File file = new File(value);
+        if (!file.isFile()) {
+            throw new IllegalArgumentException("The selected " + templateLabel + " template file was not found.");
+        }
+        String fileName = file.getName().toLowerCase(java.util.Locale.ROOT);
+        if (!fileName.endsWith(".jrxml")) {
+            throw new IllegalArgumentException("The " + templateLabel + " template must be a .jrxml file.");
+        }
+        return file.getAbsolutePath();
     }
 
     private String nullToEmpty(String value) {

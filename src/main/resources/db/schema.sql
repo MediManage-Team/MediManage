@@ -236,6 +236,30 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_plans_status ON subscription_plans(status);
 
+-- 8C. SUBSCRIPTION ENROLLMENTS
+CREATE TABLE IF NOT EXISTS subscription_enrollments (
+    enrollment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    plan_id INTEGER NOT NULL,
+    enrollment_code TEXT UNIQUE,
+    start_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    end_date TEXT,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    approved_by_user_id INTEGER,
+    approval_reference TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (plan_id) REFERENCES subscription_plans(plan_id),
+    FOREIGN KEY (approved_by_user_id) REFERENCES users(user_id),
+    CHECK (status IN ('PENDING', 'ACTIVE', 'GRACE', 'EXPIRED', 'CANCELLED'))
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_enrollments_customer_status
+    ON subscription_enrollments(customer_id, status);
+CREATE INDEX IF NOT EXISTS idx_subscription_enrollments_plan_status
+    ON subscription_enrollments(plan_id, status);
+
 -- Phase 1 Subscription Discount Columns
 ALTER TABLE bills
 ADD COLUMN subscription_enrollment_id INTEGER;
@@ -309,9 +333,15 @@ CREATE TABLE IF NOT EXISTS receipt_settings (
     gst_number TEXT,
     logo_path TEXT,
     footer_text TEXT DEFAULT 'Thank you for your purchase!',
+    invoice_template_path TEXT,
+    receipt_template_path TEXT,
     show_barcode_on_receipt INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE receipt_settings
+ADD COLUMN invoice_template_path TEXT;
+ALTER TABLE receipt_settings
+ADD COLUMN receipt_template_path TEXT;
 -- 23. PRICE OVERRIDE ON BILL ITEMS
 ALTER TABLE bill_items
 ADD COLUMN price_override REAL;

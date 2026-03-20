@@ -7,7 +7,7 @@ import threading
 from flask import Blueprint, jsonify, request  # type: ignore
 
 from app.services import prompts  # type: ignore
-from app.services.cloud import cloud_api_client  # type: ignore
+from app.services.cloud import CloudProviderError, cloud_api_client  # type: ignore
 from app.services.db_search import search_pharmacy_db  # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ ADMIN_TOKEN_HEADER = "X-MediManage-Admin-Token"
 SERVICE_NAME = "medimanage-ai-engine"
 ADMIN_PROTECTED_ROUTES = {"/orchestrate", "/shutdown"}
 ADMIN_TOKEN = (os.getenv(ADMIN_TOKEN_ENV, "") or "").strip()
+CARE_PROTOCOL_ACTIONS = {"checkout_protocol", "detailed_protocol"}
 
 
 def _is_owner_verified() -> bool:
@@ -155,6 +156,20 @@ def orchestrate():
 
         response = cloud_api_client.chat(provider, model, api_key, prompt)
         return jsonify({"response": response, "source": "cloud", "provider": provider})
+    except CloudProviderError as e:
+        if action in CARE_PROTOCOL_ACTIONS:
+            logger.warning("Care protocol fallback triggered: %s", e)
+            return jsonify(
+                {
+                    "response": "",
+                    "source": "local_fallback",
+                    "provider": provider,
+                    "warning": str(e),
+                }
+            )
+        logger.warning("Cloud orchestration failure: %s", e)
+        status = 503 if e.retryable or e.status_code is None else e.status_code
+        return jsonify({"error": str(e)}), status
     except Exception as e:
         logger.error("Orchestration Error: %s", e, exc_info=True)
         return jsonify({"error": str(e)}), 500

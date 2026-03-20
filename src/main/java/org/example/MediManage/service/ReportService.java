@@ -113,21 +113,23 @@ public class ReportService {
             throw new JRException("Failed to prepare output path: " + filePath, e);
         }
 
-        // Load Template
-        InputStream reportStream = getClass().getResourceAsStream("/reports/invoice.jrxml");
-        if (reportStream == null) {
-            throw new JRException("Invoice template not found!");
+        ReceiptSettings receiptSettings = loadReceiptSettings();
+        JasperReport jasperReport;
+        try (InputStream reportStream = openReportTemplate(
+                "/reports/invoice.jrxml",
+                receiptSettings.getInvoiceTemplatePath(),
+                "invoice")) {
+            jasperReport = JasperCompileManager.compileReport(reportStream);
+        } catch (IOException e) {
+            throw new JRException("Failed to load invoice template.", e);
         }
-
-        // Compile Report
-        JasperReport jasperReport = JasperCompileManager.compileReport(reportStream);
 
         // Parameters
         Map<String, Object> parameters = buildDocumentParameters(
                 customerName,
                 totalAmount,
                 careProtocol,
-                loadReceiptSettings(),
+                receiptSettings,
                 buildDocumentLabel("Invoice", billId),
                 null);
 
@@ -174,17 +176,18 @@ public class ReportService {
             throw new JRException("Failed to prepare output path: " + filePath, e);
         }
 
-        // Load Template
-        InputStream reportStream = getClass().getResourceAsStream("/reports/receipt.jrxml");
-        if (reportStream == null) {
-            throw new JRException("Receipt template not found!");
+        ReceiptSettings receiptSettings = loadReceiptSettings();
+        JasperReport jasperReport;
+        try (InputStream reportStream = openReportTemplate(
+                "/reports/receipt.jrxml",
+                receiptSettings.getReceiptTemplatePath(),
+                "receipt")) {
+            jasperReport = JasperCompileManager.compileReport(reportStream);
+        } catch (IOException e) {
+            throw new JRException("Failed to load receipt template.", e);
         }
 
-        // Compile Report
-        JasperReport jasperReport = JasperCompileManager.compileReport(reportStream);
-
         // Parameters
-        ReceiptSettings receiptSettings = loadReceiptSettings();
         Image barcodeImage = receiptSettings.isShowBarcodeOnReceipt()
                 ? buildBarcodeImage("RCT-" + (billId == null ? "UNSAVED" : billId))
                 : null;
@@ -339,6 +342,31 @@ public class ReportService {
         if (parent != null) {
             Files.createDirectories(parent);
         }
+    }
+
+    private InputStream openReportTemplate(String bundledResource, String customTemplatePath, String templateLabel)
+            throws IOException, JRException {
+        Path customTemplate = optionalFilePath(customTemplatePath);
+        if (customTemplate != null) {
+            return Files.newInputStream(customTemplate);
+        }
+
+        InputStream bundledTemplate = getClass().getResourceAsStream(bundledResource);
+        if (bundledTemplate == null) {
+            throw new JRException("Bundled " + templateLabel + " template not found: " + bundledResource);
+        }
+        return bundledTemplate;
+    }
+
+    private Path optionalFilePath(String rawPath) throws IOException {
+        if (rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        Path path = Path.of(rawPath.trim()).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(path)) {
+            throw new IOException("Custom template file not found: " + path);
+        }
+        return path;
     }
 
     private Map<String, Object> buildDocumentParameters(

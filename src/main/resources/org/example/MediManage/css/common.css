@@ -1,7 +1,7 @@
 /*
  * ============================================================
  *  MediManage — Tokyo Night (Vibrant) Dark Theme
- *  Cascadia Code font · Neon accents · Gradient backgrounds
+ *  Humanist UI font · Neon accents · Gradient backgrounds
  * ============================================================
  *
  *  Palette:
@@ -57,7 +57,7 @@
     -fx-background: linear-gradient(to bottom, #1e1a38, #0f1724);
     -fx-control-inner-background: #252042;
     -fx-control-inner-background-alt: #1c1836;
-    -fx-font-family: "Cascadia Code", "Segoe UI", sans-serif;
+    -fx-font-family: "Segoe UI", "Noto Sans", "Ubuntu", "Cantarell", "DejaVu Sans";
     -fx-font-size: 13px;
     -fx-text-fill: #e6f0ff;
     -fx-accent: #00d4ff;
@@ -346,10 +346,6 @@
     -fx-border-color: #00d4ff;
     -fx-background-color: #2a2450;
     -fx-effect: dropshadow(three-pass-box, #00d4ff20, 8, 0, 0, 0);
-}
-
-.text-area {
-    -fx-font-family: "Cascadia Code", sans-serif;
 }
 
 .text-area .content {

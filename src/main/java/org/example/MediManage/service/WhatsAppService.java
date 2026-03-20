@@ -43,7 +43,7 @@ public class WhatsAppService {
 
                 String careNote = "";
                 if (careProtocol != null && !careProtocol.isBlank()) {
-                    careNote = "\uD83D\uDCA1 *Note:* A personalized Patient Care Protocol for your medicines has been included at the end of the attached PDF. Please review it for dosage guidelines, interactions, and dietary advice.";
+                    careNote = "Patient Care Protocol note: a personalized care guide for these medicines is included at the end of the attached PDF.";
                 }
 
                 MessageTemplate template = templateDAO.getByKey(MessageTemplateDAO.KEY_WHATSAPP_INVOICE);

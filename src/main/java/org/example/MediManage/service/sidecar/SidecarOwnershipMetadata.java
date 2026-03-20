@@ -1,6 +1,7 @@
 package org.example.MediManage.service.sidecar;
 
 import org.json.JSONObject;
+import org.example.MediManage.util.AppPaths;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -67,7 +68,6 @@ public final class SidecarOwnershipMetadata {
     }
 
     private static Path metadataPath(String serviceName) {
-        return Path.of(System.getProperty("user.home"), "MediManage", "runtime", "sidecars",
-                serviceName + ".json");
+        return AppPaths.appDataPath("runtime", "sidecars", serviceName + ".json");
     }
 }

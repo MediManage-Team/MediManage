@@ -2,8 +2,18 @@ import requests
 import json
 import time
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+
+class CloudProviderError(RuntimeError):
+    def __init__(self, provider: str, message: str, *, status_code: int | None = None, retryable: bool = False):
+        super().__init__(message)
+        self.provider = provider
+        self.status_code = status_code
+        self.retryable = retryable
+
 
 class CloudAPIClient:
     """
@@ -12,7 +22,7 @@ class CloudAPIClient:
     """
 
     def __init__(self):
-        self.timeout = 90  # seconds
+        self.timeout = int(os.getenv("MEDIMANAGE_CLOUD_TIMEOUT_SECONDS", "25"))
         self.default_models = {
             "GEMINI": "gemini-2.5-flash",
             "GROQ": "llama-3.3-70b-versatile",
@@ -49,13 +59,15 @@ class CloudAPIClient:
                     return self._parse_json_response(response_text)
                 return response_text
 
-            except Exception as e:
+            except CloudProviderError as e:
                 # Basic rate limit check
-                if "429" in str(e) and attempt < retries:
+                if e.status_code == 429 and attempt < retries:
                     logger.warning(f"Rate limited by {provider}. Retrying in 15 seconds... ({retries - attempt} left)")
                     time.sleep(15)
                 else:
                     raise
+            except Exception:
+                raise
 
     def _resolve_model(self, provider: str, model: str) -> str:
         configured_model = (model or "").strip()
@@ -68,7 +80,12 @@ class CloudAPIClient:
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
         }
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=self.timeout)
+        res = self._post_json(
+            "GEMINI",
+            url,
+            payload,
+            {"Content-Type": "application/json"},
+        )
         if res.status_code == 200:
             data = res.json()
             return data["candidates"][0]["content"]["parts"][0]["text"]
@@ -100,7 +117,7 @@ class CloudAPIClient:
             headers["HTTP-Referer"] = "https://medimanage.app"
             headers["X-Title"] = "MediManage"
 
-        res = requests.post(base_url, json=payload, headers=headers, timeout=self.timeout)
+        res = self._post_json(provider, base_url, payload, headers)
         if res.status_code == 200:
             data = res.json()
             return data["choices"][0]["message"]["content"]
@@ -119,28 +136,50 @@ class CloudAPIClient:
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01"
         }
-        res = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+        res = self._post_json("CLAUDE", url, payload, headers)
         if res.status_code == 200:
             data = res.json()
             return data["content"][0]["text"]
         self._raise_for_status(provider="CLAUDE", res=res)
         raise RuntimeError("CLAUDE: no response")
 
+    def _post_json(self, provider: str, url: str, payload: dict, headers: dict) -> requests.Response:
+        try:
+            return requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+        except requests.exceptions.Timeout:
+            raise CloudProviderError(
+                provider,
+                f"{provider} request timed out after {self.timeout}s.",
+                retryable=True,
+            ) from None
+        except requests.exceptions.ConnectionError:
+            raise CloudProviderError(
+                provider,
+                f"{provider} connection failed. Check internet access or provider availability.",
+                retryable=True,
+            ) from None
+        except requests.exceptions.RequestException as error:
+            raise CloudProviderError(
+                provider,
+                f"{provider} request failed: {error}",
+                retryable=True,
+            ) from None
+
     def _raise_for_status(self, provider: str, res: requests.Response):
         """Format an informative error explicitly."""
         code = res.status_code
         if code == 429:
-            raise RuntimeError(f"429: Rate limited by {provider}")
+            raise CloudProviderError(f"{provider}", f"429: Rate limited by {provider}", status_code=429, retryable=True)
         try:
             err_data = res.json()
             if "error" in err_data:
                 err = err_data["error"]
                 if isinstance(err, dict) and "message" in err:
-                    raise RuntimeError(f"{provider} Error ({code}): {err['message']}")
-                raise RuntimeError(f"{provider} Error ({code}): {err}")
+                    raise CloudProviderError(provider, f"{provider} Error ({code}): {err['message']}", status_code=code)
+                raise CloudProviderError(provider, f"{provider} Error ({code}): {err}", status_code=code)
         except json.JSONDecodeError:
             pass
-        raise RuntimeError(f"{provider} Error ({code}): {res.text}")
+        raise CloudProviderError(provider, f"{provider} Error ({code}): {res.text}", status_code=code)
 
     def _parse_json_response(self, raw_text: str) -> str:
         """Strip markdown fences to expose raw JSON."""

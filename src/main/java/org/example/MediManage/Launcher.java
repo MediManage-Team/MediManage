@@ -2,6 +2,7 @@ package org.example.MediManage;
 
 import org.example.MediManage.util.LogContext;
 import org.example.MediManage.util.StructuredLogFormatter;
+import org.example.MediManage.util.AppPaths;
 
 import java.util.logging.ConsoleHandler;
 import java.util.logging.FileHandler;
@@ -22,11 +23,7 @@ public class Launcher {
 
     private static void setupLogging() {
         try {
-            String appData = System.getenv("APPDATA");
-            if (appData == null) {
-                appData = System.getProperty("user.home") + "/AppData/Roaming";
-            }
-            java.io.File logDir = new java.io.File(appData, "MediManage/logs");
+            java.io.File logDir = AppPaths.appDataPath("logs").toFile();
             if (!logDir.exists()) {
                 logDir.mkdirs();
             }

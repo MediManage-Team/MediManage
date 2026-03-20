@@ -16,52 +16,52 @@ public class SidebarManager {
 
         // Add Common Dashboard Button (Admin, Manager, and Pharmacist)
         if (role == UserRole.ADMIN || role == UserRole.MANAGER || role == UserRole.PHARMACIST) {
-            addButton(container, "\ud83d\udcca Dashboard", "dashboard-view", switcher);
+            addButton(container, "Dashboard", "dashboard-view", switcher);
         }
 
         // Add Role-Specific Buttons
         if (role != null) {
             switch (role) {
                 case ADMIN:
-                    addButton(container, "\ud83d\udc64 Users", "users-view", switcher);
-                    addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
-                    addButton(container, "\ud83d\udea8 Alerts", "alerts-view", switcher);
-                    addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
-                    addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
-                    addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
-                    addButton(container, "\ud83d\udcc8 Reports", "reports-view", switcher);
-                    addButton(container, "\ud83d\udd50 Attendance", "attendance-view", switcher);
-                    addButton(container, "\ud83d\udcb3 Billing", "billing-view", switcher);
-                    addButton(container, "\ud83d\udc65 Customers", "customers-view", switcher);
-                    addButton(container, "\u2699 Settings", "settings-view", switcher);
+                    addButton(container, "Users", "users-view", switcher);
+                    addButton(container, "Inventory", "inventory-view", switcher);
+                    addButton(container, "Alerts", "alerts-view", switcher);
+                    addButton(container, "Suppliers", "supplier-view", switcher);
+                    addButton(container, "Purchases", "purchases-view", switcher);
+                    addButton(container, "Expenses", "expenses-view", switcher);
+                    addButton(container, "Reports", "reports-view", switcher);
+                    addButton(container, "Attendance", "attendance-view", switcher);
+                    addButton(container, "Billing", "billing-view", switcher);
+                    addButton(container, "Customers", "customers-view", switcher);
+                    addButton(container, "Settings", "settings-view", switcher);
                     break;
                 case MANAGER:
-                    addButton(container, "\ud83d\udce6 Inventory", "inventory-view", switcher);
-                    addButton(container, "\ud83d\udea8 Alerts", "alerts-view", switcher);
-                    addButton(container, "\ud83c\udfed Suppliers", "supplier-view", switcher);
-                    addButton(container, "\ud83d\udce6 Purchases", "purchases-view", switcher);
-                    addButton(container, "\ud83d\udcb8 Expenses", "expenses-view", switcher);
-                    addButton(container, "\ud83d\udcc8 Reports", "reports-view", switcher);
-                    addButton(container, "\ud83d\udd50 Attendance", "attendance-view", switcher);
-                    addButton(container, "\u2699 Settings", "settings-view", switcher);
+                    addButton(container, "Inventory", "inventory-view", switcher);
+                    addButton(container, "Alerts", "alerts-view", switcher);
+                    addButton(container, "Suppliers", "supplier-view", switcher);
+                    addButton(container, "Purchases", "purchases-view", switcher);
+                    addButton(container, "Expenses", "expenses-view", switcher);
+                    addButton(container, "Reports", "reports-view", switcher);
+                    addButton(container, "Attendance", "attendance-view", switcher);
+                    addButton(container, "Settings", "settings-view", switcher);
                     break;
                 case PHARMACIST:
-                    addButton(container, "\ud83d\udd0d Medicine Search", "medicine-search-view", switcher);
+                    addButton(container, "Medicine Search", "medicine-search-view", switcher);
                     break;
                 case CASHIER:
-                    addButton(container, "\ud83d\udcb3 Billing", "billing-view", switcher);
-                    addButton(container, "\ud83d\udc65 Customers", "customers-view", switcher);
+                    addButton(container, "Billing", "billing-view", switcher);
+                    addButton(container, "Customers", "customers-view", switcher);
                     break;
                 case STAFF:
-                    addButton(container, "\ud83d\udcb3 Billing", "billing-view", switcher);
-                    addButton(container, "\ud83d\udd0d Medicine Search", "medicine-search-view", switcher);
+                    addButton(container, "Billing", "billing-view", switcher);
+                    addButton(container, "Medicine Search", "medicine-search-view", switcher);
                     break;
             }
         }
 
         // AI Assistant — controlled by feature flag for staged rollouts
         if (FeatureFlags.isEnabled(FeatureFlag.AI_ASSISTANT)) {
-            addButton(container, "\ud83e\udd16 AI Assistant", "ai-view", switcher);
+            addButton(container, "AI Assistant", "ai-view", switcher);
         }
 
         // Spacer to push Logout to bottom
@@ -70,7 +70,7 @@ public class SidebarManager {
         container.getChildren().add(spacer);
 
         // Logout Button at bottom
-        Button logoutBtn = new Button("\u23fb Logout");
+        Button logoutBtn = new Button("Logout");
         logoutBtn.setMaxWidth(Double.MAX_VALUE);
         logoutBtn.setOnAction(e -> onLogout.run());
         logoutBtn.getStyleClass().add("sidebar-button-logout");

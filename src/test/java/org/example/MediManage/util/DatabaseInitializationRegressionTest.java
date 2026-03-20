@@ -92,6 +92,7 @@ class DatabaseInitializationRegressionTest {
 
         assertTrue(tableExists("suppliers"));
         assertTrue(tableExists("message_templates"));
+        assertTrue(tableExists("receipt_settings"));
         assertTrue(tableExists("analytics_report_dispatch_schedules"));
         assertFalse(tableExists("prescriptions"));
         assertFalse(tableExists("locations"));
@@ -99,6 +100,8 @@ class DatabaseInitializationRegressionTest {
         assertTrue(columnExists("bills", "payment_mode"));
         assertFalse(columnExists("bills", "location_id"));
         assertTrue(columnExists("bill_items", "price_override"));
+        assertTrue(columnExists("receipt_settings", "invoice_template_path"));
+        assertTrue(columnExists("receipt_settings", "receipt_template_path"));
     }
 
     @Test
@@ -111,7 +114,31 @@ class DatabaseInitializationRegressionTest {
 
         assertEquals(3, countRows("message_templates"));
         assertTrue(tableExists("subscription_plans"));
+        assertTrue(tableExists("subscription_enrollments"));
         assertTrue(columnExists("stock", "quantity"));
+    }
+
+    @Test
+    void upgradedLegacyBillsSchemaKeepsInvoiceInsertsWorking() throws Exception {
+        useFreshDatabase();
+        executeSql(LEGACY_CORE_SCHEMA);
+        executeSql("ALTER TABLE bills ADD COLUMN location_id INTEGER");
+
+        DatabaseUtil.initDB();
+
+        assertTrue(tableExists("subscription_enrollments"));
+        assertFalse(columnExists("bills", "location_id"));
+
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "INSERT INTO bills (total_amount, bill_date, payment_mode) VALUES (?, ?, ?)")) {
+            stmt.setDouble(1, 118.0);
+            stmt.setString(2, "2026-03-20 19:45:00");
+            stmt.setString(3, "CASH");
+            assertEquals(1, stmt.executeUpdate());
+        }
+
+        assertEquals(1, countRows("bills"));
     }
 
     @Test

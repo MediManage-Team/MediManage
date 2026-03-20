@@ -19,6 +19,7 @@ import org.example.MediManage.service.sidecar.SidecarHttpProbe;
 import org.example.MediManage.service.sidecar.SidecarOwnershipMetadata;
 import org.example.MediManage.service.sidecar.SidecarProbeResult;
 import org.example.MediManage.service.sidecar.SidecarStartupAdvisor;
+import org.example.MediManage.util.AppPaths;
 import org.example.MediManage.util.AppExecutors;
 import org.example.MediManage.controller.*;
 
@@ -26,8 +27,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -35,11 +40,14 @@ public class MediManageApplication extends Application {
         private static final Logger LOGGER = Logger.getLogger(MediManageApplication.class.getName());
         private static final String AI_SERVICE_NAME = "medimanage-ai-engine";
         private static final int AI_PORT = 5000;
+        private static final String AI_ENGINE_PATH_OVERRIDE_PROPERTY = "medimanage.ai.engine.path";
 
         private static MediManageApplication instance;
         private volatile Process pythonProcess;
         private volatile Process mcpProcess;
         private volatile Process whatsappBridgeProcess;
+        private volatile boolean shuttingDown;
+        private final AtomicBoolean startingWhatsAppBridge = new AtomicBoolean();
 
         public static MediManageApplication getInstance() {
                 return instance;
@@ -70,8 +78,9 @@ public class MediManageApplication extends Application {
                 // Start Python Server in background (non-blocking)
                 startPythonServer();
 
-                // WhatsApp Bridge is started on demand from Settings to avoid slowing
-                // down normal app startup for users who do not need it immediately.
+                // Start or reuse the WhatsApp bridge automatically so invoice sending
+                // is ready without requiring a manual click in Settings.
+                startWhatsAppBridge();
         }
 
         private boolean initializeDatabase() {
@@ -126,36 +135,37 @@ public class MediManageApplication extends Application {
                                 }
                                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences
                                                 .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
-                                java.io.File rawServerScript = new java.io.File(System.getProperty("user.dir"),
-                                                "ai_engine/server/server.py");
-                                java.io.File bundledExe = new java.io.File(System.getProperty("user.dir"),
-                                                "ai_engine/python/python.exe");
-                                java.io.File protectedScript = new java.io.File(System.getProperty("user.dir"),
-                                                "ai_engine/dist/server/server.py");
-                                boolean useProtectedBundle = !rawServerScript.exists()
-                                                && bundledExe.exists()
-                                                && protectedScript.exists();
+                                Path aiEngineRoot = resolveAiEngineRoot();
+                                if (aiEngineRoot == null) {
+                                        throw new IllegalStateException("ai_engine directory not found.");
+                                }
+                                Path rawServerScript = aiEngineRoot.resolve("server").resolve("server.py");
+                                Path protectedScript = aiEngineRoot.resolve("dist").resolve("server").resolve("server.py");
+                                boolean useProtectedBundle = !Files.exists(rawServerScript)
+                                                && Files.exists(protectedScript);
 
-                                String pythonExe = bundledExe.exists() ? bundledExe.getAbsolutePath() : "python";
+                                String pythonExe = resolvePythonExecutable(aiEngineRoot, useProtectedBundle);
                                 String serverScript = useProtectedBundle
-                                                ? protectedScript.getAbsolutePath()
-                                                : rawServerScript.getAbsolutePath();
+                                                ? protectedScript.toString()
+                                                : rawServerScript.toString();
+                                java.io.File pythonWorkingDir = aiEngineRoot.toFile();
                                 java.io.File protectedDistRoot = useProtectedBundle
-                                                ? protectedScript.getParentFile().getParentFile()
+                                                ? protectedScript.getParent().getParent().toFile()
                                                 : null;
                                 final String pythonExeFinal = pythonExe;
                                 LOGGER.info("🚀 Starting AI Engine (" + serverScript + ")...");
                                 ProcessBuilder pb = createPythonProcessBuilder(pythonExe, serverScript, protectedDistRoot);
                                 pb.redirectErrorStream(true);
-                                configureProtectedPythonPath(pb, protectedDistRoot);
+                                configurePythonProcess(pb, pythonWorkingDir, protectedDistRoot);
                                 pb.environment().put(LocalAdminTokenManager.ENV_NAME,
                                                 LocalAdminTokenManager.getOrCreateToken());
 
                                 pb.environment().put("MEDIMANAGE_DB_BACKEND", "sqlite");
                                 pb.environment().put("MEDIMANAGE_DB_PATH",
                                                 prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_DB_PATH,
-                                                                System.getProperty("user.dir")
-                                                                                + "/medimanage.db"));
+                                                                org.example.MediManage.config.DatabaseConfig
+                                                                                .getResolvedDatabaseFile()
+                                                                                .getAbsolutePath()));
 
                                 pythonProcess = pb.start();
                                 SidecarOwnershipMetadata.write(AI_SERVICE_NAME, AI_PORT, pythonProcess.pid());
@@ -194,8 +204,20 @@ public class MediManageApplication extends Application {
                                         LOGGER.warning("❌ " + failureMessage);
                                         org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                                 }
+                        } catch (InterruptedException e) {
+                                SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
+                                Thread.currentThread().interrupt();
+                                if (shuttingDown) {
+                                        LOGGER.info("AI Engine watcher interrupted during application shutdown.");
+                                        return;
+                                }
+                                LOGGER.log(Level.WARNING, "AI Engine watcher interrupted unexpectedly.", e);
                         } catch (Exception e) {
                                 SidecarOwnershipMetadata.delete(AI_SERVICE_NAME);
+                                if (shuttingDown) {
+                                        LOGGER.info("AI Engine startup watcher stopped during shutdown.");
+                                        return;
+                                }
                                 LOGGER.log(Level.SEVERE, "❌ Failed to start AI Engine: " + e.getMessage(), e);
                                 org.example.MediManage.util.ToastNotification.error("AI Engine failed to start");
                         }
@@ -229,6 +251,10 @@ public class MediManageApplication extends Application {
          */
         public void startWhatsAppBridge() {
                 AppExecutors.runBackground(() -> {
+                        if (!startingWhatsAppBridge.compareAndSet(false, true)) {
+                                LOGGER.fine("WhatsApp Bridge startup already in progress.");
+                                return;
+                        }
                         try {
                                 SidecarStartupAdvisor.Decision decision = evaluateBridgeStartup();
                                 if (decision.clearStaleMetadata()) {
@@ -264,20 +290,30 @@ public class MediManageApplication extends Application {
                                 // Check if node_modules exists, run npm install if missing
                                 java.io.File nodeModules = new java.io.File(serverDir, "node_modules");
                                 if (!nodeModules.isDirectory()) {
-                                        LOGGER.info("📦 Installing WhatsApp Bridge dependencies (npm install)...");
-                                        ProcessBuilder installPb = new ProcessBuilder("npm", "install");
-                                        installPb.directory(serverDir);
-                                        installPb.redirectErrorStream(true);
-                                        Process installProc = installPb.start();
-                                        // Consume install output
-                                        try (java.io.BufferedReader r = new java.io.BufferedReader(
-                                                        new java.io.InputStreamReader(installProc.getInputStream()))) {
-                                                String l;
-                                                while ((l = r.readLine()) != null) {
-                                                        LOGGER.info("[npm install]: " + l);
-                                                }
+                                        if (!WhatsAppBridgeConfig.isNpmAvailable()) {
+                                                LOGGER.warning(
+                                                                "⚠️ npm is not installed. Cannot provision WhatsApp Bridge dependencies.");
+                                                return;
                                         }
-                                        installProc.waitFor();
+                                        LOGGER.info("📦 Installing WhatsApp Bridge dependencies (npm install)...");
+                                        runLoggedProcess(
+                                                        WhatsAppBridgeConfig
+                                                                        .createDependencyInstallProcessBuilder(serverDir),
+                                                        "[npm install]");
+                                }
+
+                                if (!WhatsAppBridgeConfig.isBrowserAvailable(serverDir)) {
+                                        if (!WhatsAppBridgeConfig.isNpmAvailable()) {
+                                                LOGGER.warning(
+                                                                "⚠️ Chromium/Chrome is missing and npm is unavailable. WhatsApp Bridge cannot start.");
+                                                return;
+                                        }
+                                        LOGGER.info(
+                                                        "🌐 No Chrome/Chromium detected for WhatsApp Bridge. Installing Puppeteer-managed browser...");
+                                        runLoggedProcess(
+                                                        WhatsAppBridgeConfig
+                                                                        .createBrowserInstallProcessBuilder(serverDir),
+                                                        "[puppeteer install]");
                                 }
 
                                 LOGGER.info("🟢 Starting WhatsApp Bridge (" + nodeExe + ", port "
@@ -294,10 +330,14 @@ public class MediManageApplication extends Application {
                                 while ((line = reader.readLine()) != null) {
                                         LOGGER.info("[WhatsApp Bridge]: " + line);
                                 }
+                                whatsappBridgeProcess = null;
                                 SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
                         } catch (Exception e) {
+                                whatsappBridgeProcess = null;
                                 SidecarOwnershipMetadata.delete(WhatsAppBridgeConfig.SERVICE_NAME);
                                 LOGGER.log(Level.WARNING, "⚠️ WhatsApp Bridge failed to start: " + e.getMessage(), e);
+                        } finally {
+                                startingWhatsAppBridge.set(false);
                         }
                 });
         }
@@ -349,21 +389,25 @@ public class MediManageApplication extends Application {
 
                                 LOGGER.info("🔌 Starting MCP Server (port 5001)...");
                                 
-                                java.io.File rawMcpScript = new java.io.File(System.getProperty("user.dir"),
-                                                "ai_engine/server/mcp_server.py");
-                                java.io.File protectedMcpScript = new java.io.File(System.getProperty("user.dir"),
-                                                "ai_engine/dist/server/mcp_server.py");
-                                boolean useProtectedBundle = !rawMcpScript.exists() && protectedMcpScript.exists();
+                                Path aiEngineRoot = resolveAiEngineRoot();
+                                if (aiEngineRoot == null) {
+                                        throw new IllegalStateException("ai_engine directory not found.");
+                                }
+                                Path rawMcpScript = aiEngineRoot.resolve("server").resolve("mcp_server.py");
+                                Path protectedMcpScript = aiEngineRoot.resolve("dist").resolve("server")
+                                                .resolve("mcp_server.py");
+                                boolean useProtectedBundle = !Files.exists(rawMcpScript) && Files.exists(protectedMcpScript);
 
                                 String mcpScript = useProtectedBundle
-                                                ? protectedMcpScript.getAbsolutePath()
-                                                : rawMcpScript.getAbsolutePath();
+                                                ? protectedMcpScript.toString()
+                                                : rawMcpScript.toString();
+                                java.io.File pythonWorkingDir = aiEngineRoot.toFile();
                                 java.io.File protectedDistRoot = useProtectedBundle
-                                                ? protectedMcpScript.getParentFile().getParentFile()
+                                                ? protectedMcpScript.getParent().getParent().toFile()
                                                 : null;
                                 ProcessBuilder mcpPb = createPythonProcessBuilder(pythonExe, mcpScript, protectedDistRoot);
                                 mcpPb.redirectErrorStream(true);
-                                configureProtectedPythonPath(mcpPb, protectedDistRoot);
+                                configurePythonProcess(mcpPb, pythonWorkingDir, protectedDistRoot);
                                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences
                                                 .userNodeForPackage(org.example.MediManage.MediManageApplication.class);
                                 mcpPb.environment().put(LocalAdminTokenManager.ENV_NAME,
@@ -371,8 +415,9 @@ public class MediManageApplication extends Application {
                                 mcpPb.environment().put("MEDIMANAGE_DB_BACKEND", "sqlite");
                                 mcpPb.environment().put("MEDIMANAGE_DB_PATH",
                                                 prefs.get(org.example.MediManage.config.DatabaseConfig.PREF_DB_PATH,
-                                                                System.getProperty("user.dir")
-                                                                                + "/medimanage.db"));
+                                                                org.example.MediManage.config.DatabaseConfig
+                                                                                .getResolvedDatabaseFile()
+                                                                                .getAbsolutePath()));
                                 mcpProcess = mcpPb.start();
 
                                 // Consume MCP output in background
@@ -388,12 +433,17 @@ public class MediManageApplication extends Application {
                 });
         }
 
-        private void configureProtectedPythonPath(ProcessBuilder processBuilder, java.io.File distRoot) {
-                if (processBuilder == null || distRoot == null || !distRoot.isDirectory()) {
+        private void configurePythonProcess(ProcessBuilder processBuilder, java.io.File workingDir,
+                        java.io.File distRoot) {
+                if (processBuilder == null) {
                         return;
                 }
 
-                processBuilder.directory(distRoot);
+                if (distRoot != null && distRoot.isDirectory()) {
+                        processBuilder.directory(distRoot);
+                } else if (workingDir != null && workingDir.isDirectory()) {
+                        processBuilder.directory(workingDir);
+                }
 
                 Map<String, String> env = processBuilder.environment();
                 env.putIfAbsent("PYTHONIOENCODING", "utf-8");
@@ -414,6 +464,172 @@ public class MediManageApplication extends Application {
 
         private String toPythonLiteralPath(String path) {
                 return path.replace("\\", "/").replace("'", "\\'");
+        }
+
+        private Path resolveAiEngineRoot() {
+                List<Path> candidates = new ArrayList<>();
+
+                String override = System.getProperty(AI_ENGINE_PATH_OVERRIDE_PROPERTY, "").trim();
+                if (!override.isBlank()) {
+                        candidates.add(Path.of(override));
+                }
+
+                Path installRoot = AppPaths.resolveInstallRoot();
+                candidates.add(installRoot.resolve("ai_engine"));
+                candidates.add(installRoot.resolve("app").resolve("ai_engine"));
+                candidates.add(installRoot.resolve("lib").resolve("app").resolve("ai_engine"));
+                candidates.add(Path.of(System.getProperty("user.dir")).resolve("ai_engine"));
+
+                for (Path candidate : candidates) {
+                        if (candidate != null && Files.isDirectory(candidate)) {
+                                return candidate.toAbsolutePath().normalize();
+                        }
+                }
+                return null;
+        }
+
+        private String resolvePythonExecutable(Path aiEngineRoot, boolean useProtectedBundle) throws Exception {
+                Path bundledPython = findPythonExecutable(aiEngineRoot.resolve("python"));
+                if (bundledPython != null) {
+                        return bundledPython.toString();
+                }
+
+                Path venvDir = AppPaths.appDataPath("ai_engine", ".venv");
+                Path venvPython = findPythonExecutable(venvDir);
+                if (venvPython != null) {
+                        return venvPython.toString();
+                }
+
+                if (!useProtectedBundle) {
+                        String systemPython = findAvailableCommand(
+                                        AppPaths.isWindows() ? new String[] { "python", "py" }
+                                                        : new String[] { "python3", "python" });
+                        if (systemPython == null) {
+                                throw new IllegalStateException("Python 3 runtime not found on PATH.");
+                        }
+
+                        Path requirements = aiEngineRoot.resolve("requirements").resolve("requirements.txt");
+                        if (Files.isRegularFile(requirements)) {
+                                try {
+                                        bootstrapPythonVenv(systemPython, aiEngineRoot, requirements, venvDir);
+                                        Path bootstrappedPython = findPythonExecutable(venvDir);
+                                        if (bootstrappedPython != null) {
+                                                return bootstrappedPython.toString();
+                                        }
+                                } catch (Exception e) {
+                                        LOGGER.log(Level.WARNING,
+                                                        "Failed to provision AI Engine virtual environment. Falling back to system Python.",
+                                                        e);
+                                }
+                        }
+
+                        return systemPython;
+                }
+
+                throw new IllegalStateException("Bundled Python runtime not found for the protected AI Engine.");
+        }
+
+        static List<Path> pythonExecutableCandidates(Path root) {
+                if (root == null) {
+                        return List.of();
+                }
+
+                if (AppPaths.isWindows()) {
+                        return List.of(
+                                        root.resolve("python.exe"),
+                                        root.resolve("Scripts").resolve("python.exe"),
+                                        root.resolve("bin").resolve("python.exe"),
+                                        root.resolve("bin").resolve("python"));
+                }
+
+                return List.of(
+                                root.resolve("bin").resolve("python3"),
+                                root.resolve("bin").resolve("python"),
+                                root.resolve("python3"),
+                                root.resolve("python"));
+        }
+
+        private Path findPythonExecutable(Path root) {
+                if (root == null) {
+                        return null;
+                }
+
+                for (Path candidate : pythonExecutableCandidates(root)) {
+                        if (Files.isRegularFile(candidate)) {
+                                return candidate.toAbsolutePath().normalize();
+                        }
+                }
+                return null;
+        }
+
+        private String findAvailableCommand(String[] commands) {
+                for (String command : commands) {
+                        if (isCommandAvailable(command)) {
+                                return command;
+                        }
+                }
+                return null;
+        }
+
+        private boolean isCommandAvailable(String command) {
+                try {
+                        Process process = new ProcessBuilder(command, "--version")
+                                        .redirectErrorStream(true)
+                                        .start();
+                        int exitCode = process.waitFor();
+                        return exitCode == 0;
+                } catch (Exception e) {
+                        return false;
+                }
+        }
+
+        private void bootstrapPythonVenv(String basePython, Path aiEngineRoot, Path requirements,
+                        Path venvDir) throws Exception {
+                if (findPythonExecutable(venvDir) != null) {
+                        return;
+                }
+
+                if (venvDir.getParent() != null) {
+                        Files.createDirectories(venvDir.getParent());
+                }
+
+                ProcessBuilder venvBuilder = new ProcessBuilder(basePython, "-m", "venv", venvDir.toString());
+                venvBuilder.directory(aiEngineRoot.toFile());
+                runLoggedProcess(venvBuilder, "[AI Engine setup]");
+
+                Path venvPython = findPythonExecutable(venvDir);
+                if (venvPython == null) {
+                        throw new IllegalStateException("Python virtual environment was created without a runnable interpreter.");
+                }
+
+                ProcessBuilder pipBuilder = new ProcessBuilder(
+                                venvPython.toString(),
+                                "-m",
+                                "pip",
+                                "install",
+                                "--disable-pip-version-check",
+                                "-r",
+                                requirements.toString());
+                pipBuilder.directory(aiEngineRoot.toFile());
+                runLoggedProcess(pipBuilder, "[AI Engine setup]");
+        }
+
+        private void runLoggedProcess(ProcessBuilder processBuilder, String logPrefix) throws Exception {
+                processBuilder.redirectErrorStream(true);
+                Process process = processBuilder.start();
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                                new java.io.InputStreamReader(process.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                                LOGGER.info(logPrefix + ": " + line);
+                        }
+                }
+
+                int exitCode = process.waitFor();
+                if (exitCode != 0) {
+                        throw new IllegalStateException(
+                                        logPrefix + " exited with code " + exitCode + ".");
+                }
         }
 
         private void showLoginScreen(Stage stage) {
@@ -461,6 +677,7 @@ public class MediManageApplication extends Application {
         @Override
         public void stop() throws Exception {
                 super.stop();
+                shuttingDown = true;
                 if (pythonProcess != null) {
                         LOGGER.info("🛑 Stopping AI Engine...");
                         pythonProcess.destroyForcibly();

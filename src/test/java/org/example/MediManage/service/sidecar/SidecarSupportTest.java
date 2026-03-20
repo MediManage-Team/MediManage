@@ -2,6 +2,7 @@ package org.example.MediManage.service.sidecar;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import org.example.MediManage.util.AppPaths;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +31,7 @@ class SidecarSupportTest {
             SidecarOwnershipMetadata.delete(metadataServiceName);
         }
         System.setProperty("user.home", originalUserHome);
+        System.clearProperty(AppPaths.APP_DATA_ROOT_OVERRIDE_PROPERTY);
         if (tempHome != null) {
             try (var stream = java.nio.file.Files.walk(tempHome)) {
                 stream.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
@@ -85,6 +87,7 @@ class SidecarSupportTest {
     void clearsStaleOwnershipMetadataBeforeStartingNewProcess() throws Exception {
         tempHome = java.nio.file.Files.createTempDirectory("sidecar-metadata-home-");
         System.setProperty("user.home", tempHome.toString());
+        System.setProperty(AppPaths.APP_DATA_ROOT_OVERRIDE_PROPERTY, tempHome.resolve("appdata").toString());
         metadataServiceName = "test-sidecar-" + System.nanoTime();
         SidecarOwnershipMetadata.write(metadataServiceName, 6553, 999999L);
 

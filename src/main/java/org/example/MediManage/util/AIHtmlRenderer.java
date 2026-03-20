@@ -57,9 +57,9 @@ public final class AIHtmlRenderer {
                       padding: 0;
                       background: var(--bg);
                       color: var(--fg);
-                      font-family: "Segoe UI", "Cascadia Code", sans-serif;
-                      font-size: 13px;
-                      line-height: 1.55;
+                      font-family: "Noto Sans", "DejaVu Sans", "Segoe UI", sans-serif;
+                      font-size: 14px;
+                      line-height: 1.6;
                     }
                     body {
                       padding: 16px 18px 18px 18px;
@@ -105,6 +105,7 @@ public final class AIHtmlRenderer {
                     code {
                       background: rgba(0, 0, 0, 0.22);
                       color: #fde68a;
+                      font-family: "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace;
                       padding: 2px 6px;
                       border-radius: 6px;
                     }
@@ -112,6 +113,7 @@ public final class AIHtmlRenderer {
                       white-space: pre-wrap;
                       background: rgba(0, 0, 0, 0.24);
                       color: var(--fg);
+                      font-family: "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace;
                       padding: 12px;
                       border-radius: 10px;
                       border: 1px solid var(--border);

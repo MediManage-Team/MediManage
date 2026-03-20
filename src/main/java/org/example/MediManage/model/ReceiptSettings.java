@@ -14,6 +14,8 @@ public class ReceiptSettings {
     private String gstNumber;
     private String logoPath;
     private String footerText = "Thank you for your purchase!";
+    private String invoiceTemplatePath;
+    private String receiptTemplatePath;
     private boolean showBarcodeOnReceipt = true;
 
     public ReceiptSettings() {
@@ -98,6 +100,24 @@ public class ReceiptSettings {
 
     public void setFooterText(String v) {
         footerText = v;
+    }
+
+    // invoiceTemplatePath
+    public String getInvoiceTemplatePath() {
+        return invoiceTemplatePath;
+    }
+
+    public void setInvoiceTemplatePath(String v) {
+        invoiceTemplatePath = v;
+    }
+
+    // receiptTemplatePath
+    public String getReceiptTemplatePath() {
+        return receiptTemplatePath;
+    }
+
+    public void setReceiptTemplatePath(String v) {
+        receiptTemplatePath = v;
     }
 
     // showBarcodeOnReceipt

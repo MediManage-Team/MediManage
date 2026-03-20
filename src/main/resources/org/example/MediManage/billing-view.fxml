@@ -15,8 +15,8 @@
 
             <!-- Hold / Recall Toolbar -->
             <HBox spacing="8" alignment="CENTER_LEFT">
-                <Button fx:id="btnHoldOrder" text="⏸ Hold" onAction="#handleHoldOrder" styleClass="button-outlined" prefHeight="32"/>
-                <Button fx:id="btnRecallOrder" text="📋 Recall" onAction="#handleRecallOrder" styleClass="button-outlined" prefHeight="32"/>
+                <Button fx:id="btnHoldOrder" text="Hold" onAction="#handleHoldOrder" styleClass="button-outlined" prefHeight="32"/>
+                <Button fx:id="btnRecallOrder" text="Recall" onAction="#handleRecallOrder" styleClass="button-outlined" prefHeight="32"/>
                 <Region HBox.hgrow="ALWAYS"/>
                 <Label fx:id="lblHeldCount" text="" styleClass="text-muted"/>
             </HBox>
@@ -35,7 +35,7 @@
 
             <HBox alignment="CENTER_RIGHT" spacing="10" styleClass="dark-section">
                 <Label text="Total Payable:" styleClass="total-label"/>
-                <Label fx:id="lblTotal" text="₹ 0.00" styleClass="total-value"/>
+                <Label fx:id="lblTotal" text="Rs. 0.00" styleClass="total-value"/>
             </HBox>
         </VBox>
 
@@ -46,7 +46,7 @@
                 <Label text="Customer Details" styleClass="label-strong"/>
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <TextField fx:id="txtSearchCustomer" promptText="Phone / Name" HBox.hgrow="ALWAYS"/>
-                    <Button text="🔍" onAction="#handleCustomerSearch"/>
+                    <Button text="Search" onAction="#handleCustomerSearch"/>
                     <Button text="+" onAction="#handleAddCustomer" styleClass="button-success"/>
                 </HBox>
                 <GridPane hgap="10" vgap="5">
@@ -70,7 +70,7 @@
 
                 <!-- Barcode Scanner Input -->
                 <HBox spacing="8" alignment="CENTER_LEFT">
-                    <Label text="🔖"/>
+                    <Label text="Loyalty"/>
                     <TextField fx:id="txtBarcode" promptText="Scan or type barcode..." HBox.hgrow="ALWAYS"/>
                 </HBox>
 
@@ -95,14 +95,14 @@
                 <Region VBox.vgrow="ALWAYS"/>
 
                 <Label text="Shortcuts:" styleClass="text-muted"/>
-                <Label text="Ctrl+F → Search | Ctrl+L → Customer" styleClass="text-muted"/>
-                <Label text="Ctrl+Enter → Checkout | Esc → Clear" styleClass="text-muted"/>
+                <Label text="Ctrl+F -> Search | Ctrl+L -> Customer" styleClass="text-muted"/>
+                <Label text="Ctrl+Enter -> Checkout | Esc -> Clear" styleClass="text-muted"/>
             </VBox>
 
             <!-- Patient Care Assistant (Cloud AI) -->
             <VBox spacing="10" styleClass="billing-section">
                 <Label text="Patient Care Assistant (AI)" styleClass="label-strong"/>
-                <Button fx:id="btnGenerateCareProtocol" text="✨ Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="45" styleClass="button-purple"/>
+                <Button fx:id="btnGenerateCareProtocol" text="Generate Care Protocol" onAction="#handleGenerateCareProtocol" maxWidth="Infinity" prefHeight="45" styleClass="button-purple"/>
                 <Label text="Care Protocol results will appear in a popup dialog" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
             </VBox>
 
