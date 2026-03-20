@@ -7,12 +7,18 @@ import javafx.application.Platform;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.Customer;
-import org.example.MediManage.model.Medicine;
 import org.example.MediManage.model.HeldOrder;
+import org.example.MediManage.model.Medicine;
 import org.example.MediManage.model.PaymentSplit;
+import org.example.MediManage.model.PrescriptionDirection;
 import org.example.MediManage.dao.HeldOrderDAO;
 import org.example.MediManage.dao.MedicineDAO;
 import org.example.MediManage.service.BillingService;
@@ -79,6 +85,10 @@ public class BillingController {
     private Label lblLoyaltyPoints;
     @FXML
     private Button btnRedeemPoints;
+    @FXML
+    private Button btnEditPrescriptionSchedule;
+    @FXML
+    private Label lblPrescriptionSummary;
 
     private final BillingService billingService = new BillingService();
     private final HeldOrderDAO heldOrderDAO = new HeldOrderDAO();
@@ -95,6 +105,7 @@ public class BillingController {
     private double pendingLoyaltyDiscountPercent = 0.0;
     private ScheduledFuture<?> pendingMedicineSearch;
     private int medicineSearchGeneration = 0;
+    private String prescriptionHighlights = "";
 
     private static final int MIN_MEDICINE_SEARCH_CHARS = 2;
     private static final long MEDICINE_SEARCH_DEBOUNCE_MS = 180L;
@@ -113,6 +124,7 @@ public class BillingController {
         setupGlobalShortcuts();
         applyCustomerNameStyle(false);
         refreshHeldCount();
+        updatePrescriptionSummary();
     }
 
     // ═══════════════════════════════════════════════
@@ -433,6 +445,7 @@ public class BillingController {
             billingTable.refresh();
 
         updateTotal();
+        updatePrescriptionSummary();
         selectedMedicine = null;
         txtSearchMedicine.clear();
         txtQty.clear();
@@ -442,6 +455,274 @@ public class BillingController {
     private void updateTotal() {
         double sum = billingService.calculateTotal(billList, pendingLoyaltyDiscountPercent);
         lblTotal.setText(String.format("Rs. %.2f", sum));
+    }
+
+    @FXML
+    private void handleEditPrescriptionSchedule() {
+        if (billList.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Empty Bill", "Add medicines before opening the prescription schedule.");
+            return;
+        }
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Verified Prescription Schedule");
+        dialog.setHeaderText("Add structured timing, meal relation, duration, and highlights for this invoice.");
+        dialog.getDialogPane().setPrefWidth(1040);
+        dialog.getDialogPane().setPrefHeight(720);
+
+        ButtonType saveButtonType = new ButtonType("Save Schedule", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
+
+        Map<BillItem, PrescriptionDirection> workingDirections = new LinkedHashMap<>();
+        for (BillItem item : billList) {
+            workingDirections.put(item, item.getPrescriptionDirection().copy());
+        }
+
+        TextArea highlightsArea = new TextArea(prescriptionHighlights);
+        highlightsArea.setPromptText("One highlight per line. Example:\nAfter food\nComplete full antibiotic course");
+        highlightsArea.setPrefRowCount(4);
+        highlightsArea.setWrapText(true);
+
+        ListView<BillItem> medicineList = new ListView<>(FXCollections.observableArrayList(billList));
+        medicineList.setPrefWidth(260);
+        medicineList.setPrefHeight(440);
+        medicineList.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(BillItem item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                PrescriptionDirection direction = workingDirections.get(item);
+                String status = direction != null && !direction.isEmpty() ? "[Set]" : "[Pending]";
+                String summary = direction == null ? "" : direction.buildSlotSummary();
+                if (summary.isBlank()) {
+                    summary = direction == null ? "" : direction.buildSummary();
+                }
+                setText(summary.isBlank()
+                        ? status + " " + item.getName()
+                        : status + " " + item.getName() + "\n" + summary);
+            }
+        });
+
+        TextField morningField = new TextField();
+        TextField afternoonField = new TextField();
+        TextField eveningField = new TextField();
+        TextField nightField = new TextField();
+        TextField exactTimeField = new TextField();
+        ComboBox<String> mealRelationBox = new ComboBox<>(FXCollections.observableArrayList(
+                "",
+                "Before meal",
+                "After meal",
+                "With meal",
+                "Empty stomach",
+                "Any time"));
+        mealRelationBox.setPromptText("Meal relation");
+        TextField durationField = new TextField();
+        TextArea noteArea = new TextArea();
+        noteArea.setWrapText(true);
+        noteArea.setPrefRowCount(4);
+
+        morningField.setPromptText("1 tab / 5 ml");
+        afternoonField.setPromptText("1 tab / 5 ml");
+        eveningField.setPromptText("1 tab / 5 ml");
+        nightField.setPromptText("1 tab / 5 ml");
+        exactTimeField.setPromptText("8:00 AM / bedtime");
+        durationField.setPromptText("5 days / 2 weeks");
+        noteArea.setPromptText("Short counselling note for this medicine");
+
+        Runnable clearEditor = () -> {
+            morningField.clear();
+            afternoonField.clear();
+            eveningField.clear();
+            nightField.clear();
+            exactTimeField.clear();
+            mealRelationBox.getSelectionModel().clearSelection();
+            durationField.clear();
+            noteArea.clear();
+        };
+
+        final BillItem[] selectedItemHolder = new BillItem[1];
+
+        Runnable saveEditorToSelection = () -> {
+            BillItem selected = selectedItemHolder[0];
+            if (selected == null) {
+                return;
+            }
+            PrescriptionDirection direction = new PrescriptionDirection();
+            direction.setMorningDose(morningField.getText());
+            direction.setAfternoonDose(afternoonField.getText());
+            direction.setEveningDose(eveningField.getText());
+            direction.setNightDose(nightField.getText());
+            direction.setExactTime(exactTimeField.getText());
+            direction.setMealRelation(mealRelationBox.getValue());
+            direction.setDuration(durationField.getText());
+            direction.setShortNote(noteArea.getText());
+            workingDirections.put(selected, direction);
+            medicineList.refresh();
+        };
+
+        Runnable loadSelectionIntoEditor = () -> {
+            BillItem selected = selectedItemHolder[0];
+            if (selected == null) {
+                clearEditor.run();
+                return;
+            }
+            PrescriptionDirection direction = workingDirections.getOrDefault(selected, new PrescriptionDirection());
+            morningField.setText(direction.getMorningDose());
+            afternoonField.setText(direction.getAfternoonDose());
+            eveningField.setText(direction.getEveningDose());
+            nightField.setText(direction.getNightDose());
+            exactTimeField.setText(direction.getExactTime());
+            mealRelationBox.setValue(direction.getMealRelation().isBlank() ? null : direction.getMealRelation());
+            durationField.setText(direction.getDuration());
+            noteArea.setText(direction.getShortNote());
+        };
+
+        medicineList.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+            if (oldSelection != null) {
+                saveEditorToSelection.run();
+            }
+            selectedItemHolder[0] = newSelection;
+            loadSelectionIntoEditor.run();
+        });
+
+        Button preset101 = new Button("1-0-1");
+        preset101.setOnAction(e -> {
+            morningField.setText("1 tab");
+            afternoonField.clear();
+            eveningField.setText("1 tab");
+            nightField.clear();
+        });
+
+        Button preset111 = new Button("1-1-1");
+        preset111.setOnAction(e -> {
+            morningField.setText("1 tab");
+            afternoonField.setText("1 tab");
+            eveningField.setText("1 tab");
+            nightField.clear();
+        });
+
+        Button preset001 = new Button("0-0-1");
+        preset001.setOnAction(e -> {
+            morningField.clear();
+            afternoonField.clear();
+            eveningField.clear();
+            nightField.setText("1 tab");
+        });
+
+        Button clearCurrent = new Button("Clear Current");
+        clearCurrent.setOnAction(e -> clearEditor.run());
+
+        HBox presetsRow = new HBox(8, preset101, preset111, preset001, clearCurrent);
+
+        GridPane editorGrid = new GridPane();
+        editorGrid.setHgap(12);
+        editorGrid.setVgap(10);
+
+        editorGrid.add(new Label("Morning"), 0, 0);
+        editorGrid.add(morningField, 1, 0);
+        editorGrid.add(new Label("Afternoon"), 2, 0);
+        editorGrid.add(afternoonField, 3, 0);
+
+        editorGrid.add(new Label("Evening"), 0, 1);
+        editorGrid.add(eveningField, 1, 1);
+        editorGrid.add(new Label("Night"), 2, 1);
+        editorGrid.add(nightField, 3, 1);
+
+        editorGrid.add(new Label("Exact Time"), 0, 2);
+        editorGrid.add(exactTimeField, 1, 2);
+        editorGrid.add(new Label("Meal"), 2, 2);
+        editorGrid.add(mealRelationBox, 3, 2);
+
+        editorGrid.add(new Label("Duration"), 0, 3);
+        editorGrid.add(durationField, 1, 3);
+        editorGrid.add(new Label("Short Note"), 0, 4);
+        editorGrid.add(noteArea, 1, 4, 3, 1);
+
+        GridPane.setHgrow(morningField, Priority.ALWAYS);
+        GridPane.setHgrow(afternoonField, Priority.ALWAYS);
+        GridPane.setHgrow(eveningField, Priority.ALWAYS);
+        GridPane.setHgrow(nightField, Priority.ALWAYS);
+        GridPane.setHgrow(exactTimeField, Priority.ALWAYS);
+        GridPane.setHgrow(mealRelationBox, Priority.ALWAYS);
+        GridPane.setHgrow(durationField, Priority.ALWAYS);
+        GridPane.setHgrow(noteArea, Priority.ALWAYS);
+        GridPane.setVgrow(noteArea, Priority.ALWAYS);
+
+        VBox editorBox = new VBox(
+                10,
+                new Label("Bill Highlights"),
+                highlightsArea,
+                new Label("Per-Medicine Schedule"),
+                presetsRow,
+                editorGrid);
+        VBox.setVgrow(highlightsArea, Priority.NEVER);
+
+        HBox body = new HBox(16, medicineList, editorBox);
+        HBox.setHgrow(editorBox, Priority.ALWAYS);
+        VBox root = new VBox(12, body);
+        VBox.setVgrow(body, Priority.ALWAYS);
+        dialog.getDialogPane().setContent(root);
+
+        medicineList.getSelectionModel().selectFirst();
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType == saveButtonType) {
+                saveEditorToSelection.run();
+                return saveButtonType;
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(result -> {
+            if (result == saveButtonType) {
+                for (BillItem item : billList) {
+                    item.setPrescriptionDirection(workingDirections.get(item));
+                }
+                prescriptionHighlights = normalizeMultilineText(highlightsArea.getText());
+                billingTable.refresh();
+                updatePrescriptionSummary();
+            }
+        });
+    }
+
+    private void updatePrescriptionSummary() {
+        if (lblPrescriptionSummary == null) {
+            return;
+        }
+        int itemCount = billList.size();
+        if (itemCount == 0) {
+            lblPrescriptionSummary.setText("No medicines added yet.");
+            return;
+        }
+        long configuredCount = billList.stream()
+                .filter(BillItem::hasPrescriptionDirection)
+                .count();
+        int highlightCount = countHighlightLines(prescriptionHighlights);
+        String highlightsPart = highlightCount == 0
+                ? "No bill highlights yet"
+                : highlightCount + " highlight" + (highlightCount == 1 ? "" : "s");
+        lblPrescriptionSummary.setText(configuredCount + " of " + itemCount
+                + " medicines configured. " + highlightsPart + ".");
+    }
+
+    private int countHighlightLines(String value) {
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        return (int) value.lines()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .count();
+    }
+
+    private String normalizeMultilineText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\r\n", "\n").trim();
     }
 
     // ═══════════════════════════════════════════════
@@ -481,13 +762,16 @@ public class BillingController {
                     int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
                     BillingService.CheckoutResult checkoutResult = billingService.completeCheckout(
                             checkoutItems, checkoutCustomer, userId, splits, paymentMode, careProtocol,
+                            prescriptionHighlights,
                             redeemLoyalty);
 
                     checkoutSupport.showPostCheckoutDialog(checkoutResult, checkoutCustomer, totalAmount, careProtocol);
 
                     billList.clear();
+                    prescriptionHighlights = "";
                     clearPendingLoyaltyDiscount();
                     updateTotal();
+                    updatePrescriptionSummary();
                     selectedCustomer = null;
                     lblCustomerName.setText(WALK_IN_CUSTOMER_LABEL);
                     applyCustomerNameStyle(false);
@@ -617,9 +901,15 @@ public class BillingController {
                 m.put("qty", item.getQty());
                 m.put("price", item.getPrice());
                 m.put("total", item.getTotal());
+                if (item.hasPrescriptionDirection()) {
+                    m.put("prescriptionDirection", item.getPrescriptionDirection());
+                }
                 itemMaps.add(m);
             }
-            String json = gson.toJson(itemMaps);
+            Map<String, Object> holdPayload = new LinkedHashMap<>();
+            holdPayload.put("items", itemMaps);
+            holdPayload.put("prescriptionHighlights", prescriptionHighlights);
+            String json = gson.toJson(holdPayload);
             double total = billingService.calculateTotal(billList);
             Integer cid = selectedCustomer != null ? selectedCustomer.getCustomerId() : null;
             int userId = org.example.MediManage.util.UserSession.getInstance().getUser().getId();
@@ -628,8 +918,10 @@ public class BillingController {
                     "Order #" + holdId + " held successfully (" + billList.size() + " items, Rs. "
                             + String.format("%.2f", total) + ").");
             billList.clear();
+            prescriptionHighlights = "";
             clearPendingLoyaltyDiscount();
             updateTotal();
+            updatePrescriptionSummary();
             refreshHeldCount();
         } catch (SQLException e) {
             showAlert(Alert.AlertType.ERROR, "Hold Failed", e.getMessage());
@@ -663,9 +955,22 @@ public class BillingController {
                     return;
             }
 
-            List<Map<String, Object>> itemMaps = gson.fromJson(selected.getItemsJson(),
-                    new TypeToken<List<Map<String, Object>>>() {
-                    }.getType());
+            List<Map<String, Object>> itemMaps;
+            String recalledHighlights = "";
+            Object payload = gson.fromJson(selected.getItemsJson(), Object.class);
+            if (payload instanceof Map<?, ?> payloadMap && payloadMap.get("items") instanceof List<?> rawItems) {
+                itemMaps = gson.fromJson(gson.toJson(rawItems),
+                        new TypeToken<List<Map<String, Object>>>() {
+                        }.getType());
+                Object rawHighlights = payloadMap.get("prescriptionHighlights");
+                if (rawHighlights != null) {
+                    recalledHighlights = normalizeMultilineText(rawHighlights.toString());
+                }
+            } else {
+                itemMaps = gson.fromJson(selected.getItemsJson(),
+                        new TypeToken<List<Map<String, Object>>>() {
+                        }.getType());
+            }
             billList.clear();
             clearPendingLoyaltyDiscount();
             for (Map<String, Object> m : itemMaps) {
@@ -673,9 +978,17 @@ public class BillingController {
                 String name = (String) m.get("name");
                 int qty = ((Number) m.get("qty")).intValue();
                 double price = ((Number) m.get("price")).doubleValue();
-                billList.add(new BillItem(medId, name, null, qty, price, 0.0));
+                BillItem item = new BillItem(medId, name, null, qty, price, 0.0);
+                Object rawDirection = m.get("prescriptionDirection");
+                if (rawDirection != null) {
+                    PrescriptionDirection direction = gson.fromJson(gson.toJson(rawDirection), PrescriptionDirection.class);
+                    item.setPrescriptionDirection(direction);
+                }
+                billList.add(item);
             }
+            prescriptionHighlights = recalledHighlights;
             updateTotal();
+            updatePrescriptionSummary();
             heldOrderDAO.recallOrder(selected.getHoldId());
             refreshHeldCount();
             showAlert(Alert.AlertType.INFORMATION, "Order Recalled",

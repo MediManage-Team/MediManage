@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+    name="InvoicePrescriptionSchedule" whenNoDataType="AllSectionsNoDetail"
+    pageWidth="555" pageHeight="600" columnWidth="555" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0">
+
+    <parameter name="PrescriptionHighlightsHtml" class="java.lang.String"/>
+    <parameter name="HasPrescriptionHighlights" class="java.lang.Boolean"/>
+    <parameter name="HasPrescriptionSchedule" class="java.lang.Boolean"/>
+
+    <field name="name" class="java.lang.String"/>
+    <field name="morningDose" class="java.lang.String"/>
+    <field name="afternoonDose" class="java.lang.String"/>
+    <field name="eveningDose" class="java.lang.String"/>
+    <field name="nightDose" class="java.lang.String"/>
+    <field name="exactTime" class="java.lang.String"/>
+    <field name="mealRelation" class="java.lang.String"/>
+    <field name="duration" class="java.lang.String"/>
+    <field name="shortNote" class="java.lang.String"/>
+
+    <title>
+        <band height="64" splitType="Stretch">
+            <staticText>
+                <reportElement x="0" y="0" width="555" height="18"/>
+                <textElement>
+                    <font size="12" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Verified Prescription Schedule]]></text>
+            </staticText>
+
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="24" width="555" height="20" isRemoveLineWhenBlank="true">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionHighlights})]]></printWhenExpression>
+                </reportElement>
+                <textElement markup="html">
+                    <font size="9"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{PrescriptionHighlightsHtml} == null ? "" : $P{PrescriptionHighlightsHtml}]]></textFieldExpression>
+            </textField>
+        </band>
+    </title>
+
+    <columnHeader>
+        <band height="22">
+            <staticText>
+                <reportElement x="0" y="0" width="110" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement>
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Medicine]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="110" y="0" width="40" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[AM]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="150" y="0" width="40" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Noon]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="190" y="0" width="40" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[PM]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="230" y="0" width="40" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Night]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="270" y="0" width="50" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Time]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="320" y="0" width="55" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Meal]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="375" y="0" width="45" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center">
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Duration]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="420" y="0" width="135" height="22">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <textElement>
+                    <font size="8" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Short Note]]></text>
+            </staticText>
+        </band>
+    </columnHeader>
+
+    <detail>
+        <band height="24" splitType="Stretch">
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="0" width="110" height="24" stretchType="ElementGroupHeight"/>
+                <textElement>
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{name} == null ? "" : $F{name}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="110" y="0" width="40" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{morningDose} == null || $F{morningDose}.trim().isEmpty() ? "-" : $F{morningDose}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="150" y="0" width="40" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{afternoonDose} == null || $F{afternoonDose}.trim().isEmpty() ? "-" : $F{afternoonDose}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="190" y="0" width="40" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{eveningDose} == null || $F{eveningDose}.trim().isEmpty() ? "-" : $F{eveningDose}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="230" y="0" width="40" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{nightDose} == null || $F{nightDose}.trim().isEmpty() ? "-" : $F{nightDose}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="270" y="0" width="50" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{exactTime} == null || $F{exactTime}.trim().isEmpty() ? "-" : $F{exactTime}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="320" y="0" width="55" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{mealRelation} == null || $F{mealRelation}.trim().isEmpty() ? "-" : $F{mealRelation}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="375" y="0" width="45" height="24" stretchType="ElementGroupHeight"/>
+                <textElement textAlignment="Center">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{duration} == null || $F{duration}.trim().isEmpty() ? "-" : $F{duration}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="420" y="0" width="135" height="24" stretchType="ElementGroupHeight"/>
+                <textElement>
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{shortNote} == null || $F{shortNote}.trim().isEmpty() ? "-" : $F{shortNote}]]></textFieldExpression>
+            </textField>
+        </band>
+    </detail>
+
+</jasperReport>

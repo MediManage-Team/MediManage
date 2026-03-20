@@ -4,6 +4,7 @@ import org.example.MediManage.util.DatabaseUtil;
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.BillHistoryRecord;
 import org.example.MediManage.model.PaymentSplit;
+import org.example.MediManage.model.PrescriptionDirection;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -19,6 +20,22 @@ public class BillDAO {
 
     public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
             List<PaymentSplit> paymentSplits, String paymentMode, int loyaltyPointsToRedeem, int loyaltyPointsToAward)
+            throws SQLException {
+        return generateInvoice(
+                totalAmount,
+                items,
+                customerId,
+                userId,
+                paymentSplits,
+                paymentMode,
+                loyaltyPointsToRedeem,
+                loyaltyPointsToAward,
+                "");
+    }
+
+    public int generateInvoice(double totalAmount, List<BillItem> items, Integer customerId, Integer userId,
+            List<PaymentSplit> paymentSplits, String paymentMode, int loyaltyPointsToRedeem, int loyaltyPointsToAward,
+            String prescriptionHighlights)
             throws SQLException {
         Connection conn = null;
         int billId = -1;
@@ -38,8 +55,8 @@ public class BillDAO {
             }
 
             String billSql = "INSERT INTO bills (" +
-                    "total_amount, bill_date, customer_id, user_id, payment_mode" +
-                    ") VALUES (?, ?, ?, ?, ?)";
+                    "total_amount, bill_date, customer_id, user_id, payment_mode, prescription_highlights" +
+                    ") VALUES (?, ?, ?, ?, ?, ?)";
             try (PreparedStatement psBill = conn.prepareStatement(billSql, Statement.RETURN_GENERATED_KEYS)) {
                 psBill.setDouble(1, totalAmount);
                 String now = java.time.LocalDateTime.now()
@@ -48,6 +65,7 @@ public class BillDAO {
                 psBill.setObject(3, customerId);
                 psBill.setObject(4, userId);
                 psBill.setString(5, paymentMode != null ? paymentMode : "CASH");
+                psBill.setString(6, normalizeMultilineText(prescriptionHighlights));
                 psBill.executeUpdate();
                 ResultSet rs = psBill.getGeneratedKeys();
                 if (rs.next()) {
@@ -84,6 +102,7 @@ public class BillDAO {
                         billItemId = itemKeys.getInt(1);
                     }
                     saveBatchAllocations(conn, billId, billItemId, item.getMedicineId(), allocations);
+                    savePrescriptionDirection(conn, billItemId, item.getPrescriptionDirection());
                 }
             }
 
@@ -188,6 +207,40 @@ public class BillDAO {
                 ps.addBatch();
             }
             ps.executeBatch();
+        }
+    }
+
+    private void savePrescriptionDirection(Connection conn, int billItemId, PrescriptionDirection direction)
+            throws SQLException {
+        if (direction == null || direction.isEmpty()) {
+            return;
+        }
+
+        String sql = """
+                INSERT INTO bill_item_prescription_directions (
+                    bill_item_id,
+                    morning_dose,
+                    afternoon_dose,
+                    evening_dose,
+                    night_dose,
+                    exact_time,
+                    meal_relation,
+                    duration_text,
+                    short_note
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billItemId);
+            ps.setString(2, direction.getMorningDose());
+            ps.setString(3, direction.getAfternoonDose());
+            ps.setString(4, direction.getEveningDose());
+            ps.setString(5, direction.getNightDose());
+            ps.setString(6, direction.getExactTime());
+            ps.setString(7, direction.getMealRelation());
+            ps.setString(8, direction.getDuration());
+            ps.setString(9, direction.getShortNote());
+            ps.executeUpdate();
         }
     }
 
@@ -367,12 +420,33 @@ public class BillDAO {
 
     public List<BillItem> getBillItemsExtended(int billId) {
         List<BillItem> items = new java.util.ArrayList<>();
-        String sql = "SELECT bi.medicine_id, m.name, m.expiry_date, bi.quantity, bi.price, bi.total FROM bill_items bi LEFT JOIN medicines m ON bi.medicine_id = m.medicine_id WHERE bi.bill_id = ?";
+        String sql = """
+                SELECT bi.item_id,
+                       bi.medicine_id,
+                       m.name,
+                       m.expiry_date,
+                       bi.quantity,
+                       bi.price,
+                       bi.total,
+                       pd.morning_dose,
+                       pd.afternoon_dose,
+                       pd.evening_dose,
+                       pd.night_dose,
+                       pd.exact_time,
+                       pd.meal_relation,
+                       pd.duration_text,
+                       pd.short_note
+                FROM bill_items bi
+                LEFT JOIN medicines m ON bi.medicine_id = m.medicine_id
+                LEFT JOIN bill_item_prescription_directions pd ON pd.bill_item_id = bi.item_id
+                WHERE bi.bill_id = ?
+                """;
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, billId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    int itemId = rs.getInt("item_id");
                     int mid = rs.getInt("medicine_id");
                     String name = rs.getString("name");
                     if (name == null)
@@ -382,13 +456,29 @@ public class BillDAO {
                     double price = rs.getDouble("price");
                     double total = rs.getDouble("total");
                     double gst = total - (price * qty);
-                    items.add(new BillItem(mid, name, expiry, qty, price, gst));
+                    BillItem item = new BillItem(mid, name, expiry, qty, price, gst);
+                    item.setItemId(itemId);
+                    item.setPrescriptionDirection(readPrescriptionDirection(rs));
+                    items.add(item);
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return items;
+    }
+
+    private PrescriptionDirection readPrescriptionDirection(ResultSet rs) throws SQLException {
+        PrescriptionDirection direction = new PrescriptionDirection();
+        direction.setMorningDose(rs.getString("morning_dose"));
+        direction.setAfternoonDose(rs.getString("afternoon_dose"));
+        direction.setEveningDose(rs.getString("evening_dose"));
+        direction.setNightDose(rs.getString("night_dose"));
+        direction.setExactTime(rs.getString("exact_time"));
+        direction.setMealRelation(rs.getString("meal_relation"));
+        direction.setDuration(rs.getString("duration_text"));
+        direction.setShortNote(rs.getString("short_note"));
+        return direction;
     }
 
     // For Business Intelligence: Sales by Item (Medicine)
@@ -708,6 +798,23 @@ public class BillDAO {
         return null;
     }
 
+    public String getPrescriptionHighlights(int billId) {
+        String sql = "SELECT prescription_highlights FROM bills WHERE bill_id = ?";
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String value = rs.getString("prescription_highlights");
+                    return value == null ? "" : value;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to load prescription highlights for bill " + billId + ": " + e.getMessage());
+        }
+        return "";
+    }
+
     /**
      * Get payment mode for a bill.
      */
@@ -752,6 +859,13 @@ public class BillDAO {
             return DEFAULT_HISTORY_LIMIT;
         }
         return Math.min(limit, MAX_HISTORY_LIMIT);
+    }
+
+    private String normalizeMultilineText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\r\n", "\n").trim();
     }
 
     private double round2(double value) {

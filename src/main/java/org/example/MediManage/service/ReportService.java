@@ -93,11 +93,18 @@ public class ReportService {
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
             String careProtocol, Integer billId)
             throws JRException {
+        generateInvoicePDF(items, totalAmount, customerName, filePath, careProtocol, billId, "");
+    }
+
+    public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
+            String careProtocol, Integer billId, String prescriptionHighlights)
+            throws JRException {
         if (hasLegacyInvoiceOverride()) {
             generateInvoicePDF(items, totalAmount, customerName, filePath, careProtocol);
             return;
         }
-        generateInvoicePdfInternal(items, totalAmount, customerName, filePath, careProtocol, billId);
+        generateInvoicePdfInternal(items, totalAmount, customerName, filePath, careProtocol, billId,
+                prescriptionHighlights);
     }
 
     private void generateInvoicePdfInternal(
@@ -106,7 +113,8 @@ public class ReportService {
             String customerName,
             String filePath,
             String careProtocol,
-            Integer billId) throws JRException {
+            Integer billId,
+            String prescriptionHighlights) throws JRException {
         try {
             ensureParentDirectory(filePath);
         } catch (IOException e) {
@@ -124,14 +132,32 @@ public class ReportService {
             throw new JRException("Failed to load invoice template.", e);
         }
 
+        List<BillItem> scheduleItems = buildPrescriptionScheduleItems(items);
+        JasperReport prescriptionScheduleReport = null;
+        if (!scheduleItems.isEmpty() || (prescriptionHighlights != null && !prescriptionHighlights.isBlank())) {
+            try (InputStream subreportStream = getClass()
+                    .getResourceAsStream("/reports/invoice-prescription-schedule.jrxml")) {
+                if (subreportStream == null) {
+                    throw new JRException("Bundled prescription schedule subreport not found.");
+                }
+                prescriptionScheduleReport = JasperCompileManager.compileReport(subreportStream);
+            } catch (IOException e) {
+                throw new JRException("Failed to load prescription schedule subreport.", e);
+            }
+        }
+
         // Parameters
         Map<String, Object> parameters = buildDocumentParameters(
+                items,
                 customerName,
                 totalAmount,
                 careProtocol,
+                prescriptionHighlights,
                 receiptSettings,
                 buildDocumentLabel("Invoice", billId),
-                null);
+                null,
+                prescriptionScheduleReport,
+                new JRBeanCollectionDataSource(scheduleItems));
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
@@ -151,7 +177,7 @@ public class ReportService {
     public void generateInvoicePDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
             String careProtocol)
             throws JRException {
-        generateInvoicePdfInternal(items, totalAmount, customerName, filePath, careProtocol, null);
+        generateInvoicePdfInternal(items, totalAmount, customerName, filePath, careProtocol, null, "");
     }
 
     public void generateReceiptPDF(List<BillItem> items, double totalAmount, String customerName, String filePath,
@@ -192,12 +218,16 @@ public class ReportService {
                 ? buildBarcodeImage("RCT-" + (billId == null ? "UNSAVED" : billId))
                 : null;
         Map<String, Object> parameters = buildDocumentParameters(
+                items,
                 customerName,
                 totalAmount,
                 "",
+                "",
                 receiptSettings,
                 buildDocumentLabel("Receipt", billId),
-                barcodeImage);
+                barcodeImage,
+                null,
+                new JRBeanCollectionDataSource(List.of()));
 
         // Data Source
         JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(items);
@@ -370,17 +400,31 @@ public class ReportService {
     }
 
     private Map<String, Object> buildDocumentParameters(
+            List<BillItem> items,
             String customerName,
             double totalAmount,
             String careProtocol,
+            String prescriptionHighlights,
             ReceiptSettings receiptSettings,
             String documentLabel,
-            Image barcodeImage) {
+            Image barcodeImage,
+            JasperReport prescriptionScheduleReport,
+            JRDataSource prescriptionScheduleDataSource) {
         ReceiptSettings safeSettings = receiptSettings == null ? new ReceiptSettings() : receiptSettings;
+        List<BillItem> scheduleItems = buildPrescriptionScheduleItems(items);
+        boolean hasPrescriptionHighlights = prescriptionHighlights != null && !prescriptionHighlights.isBlank();
+        boolean hasPrescriptionSchedule = !scheduleItems.isEmpty();
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("CustomerName", customerName);
         parameters.put("TotalAmount", totalAmount);
         parameters.put("CareProtocol", careProtocol == null ? "" : careProtocol);
+        parameters.put("PrescriptionHighlights", prescriptionHighlights == null ? "" : prescriptionHighlights);
+        parameters.put("PrescriptionHighlightsHtml", buildPrescriptionHighlightsHtml(prescriptionHighlights));
+        parameters.put("PrescriptionScheduleText", buildPrescriptionScheduleText(scheduleItems));
+        parameters.put("HasPrescriptionHighlights", hasPrescriptionHighlights);
+        parameters.put("HasPrescriptionSchedule", hasPrescriptionSchedule);
+        parameters.put("PrescriptionScheduleReport", prescriptionScheduleReport);
+        parameters.put("PrescriptionScheduleDataSource", prescriptionScheduleDataSource);
         parameters.put("PharmacyName", defaultIfBlank(safeSettings.getPharmacyName(), "MediManage Pharmacy"));
         parameters.put("AddressBlock", buildAddressBlock(safeSettings));
         parameters.put("ContactLine", buildContactLine(safeSettings));
@@ -389,6 +433,47 @@ public class ReportService {
         parameters.put("LogoImage", loadLogoImage(safeSettings.getLogoPath()));
         parameters.put("BarcodeImage", barcodeImage);
         return parameters;
+    }
+
+    private List<BillItem> buildPrescriptionScheduleItems(List<BillItem> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        return items.stream()
+                .filter(BillItem::hasPrescriptionDirection)
+                .toList();
+    }
+
+    private String buildPrescriptionHighlightsHtml(String prescriptionHighlights) {
+        if (prescriptionHighlights == null || prescriptionHighlights.isBlank()) {
+            return "";
+        }
+        List<String> lines = prescriptionHighlights.lines()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .toList();
+        if (lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder html = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) {
+                html.append("<br/>");
+            }
+            html.append("&#8226; ").append(escapeHtml(lines.get(i)));
+        }
+        return html.toString();
+    }
+
+    private String buildPrescriptionScheduleText(List<BillItem> scheduleItems) {
+        if (scheduleItems == null || scheduleItems.isEmpty()) {
+            return "";
+        }
+        List<String> lines = new ArrayList<>();
+        for (BillItem item : scheduleItems) {
+            lines.add(item.getName() + ": " + item.getPrescriptionSummary());
+        }
+        return String.join("\n", lines);
     }
 
     private ReceiptSettings loadReceiptSettings() {
@@ -464,6 +549,16 @@ public class ReportService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? defaultValue : trimmed;
+    }
+
+    private String escapeHtml(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
     private void exportAnalyticsToCsv(AnalyticsExportPayload payload, Path filePath) throws IOException {

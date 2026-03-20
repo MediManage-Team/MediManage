@@ -99,6 +99,12 @@
                 <Label text="Ctrl+Enter -> Checkout | Esc -> Clear" styleClass="text-muted"/>
             </VBox>
 
+            <VBox spacing="10" styleClass="billing-section">
+                <Label text="Verified Prescription Schedule" styleClass="label-strong"/>
+                <Button fx:id="btnEditPrescriptionSchedule" text="Edit Prescription Schedule" onAction="#handleEditPrescriptionSchedule" maxWidth="Infinity" prefHeight="42" styleClass="button-outlined"/>
+                <Label fx:id="lblPrescriptionSummary" text="No medicines added yet." wrapText="true" style="-fx-text-fill: #7a8399; -fx-font-size: 11px;"/>
+            </VBox>
+
             <!-- Patient Care Assistant (Cloud AI) -->
             <VBox spacing="10" styleClass="billing-section">
                 <Label text="Patient Care Assistant (AI)" styleClass="label-strong"/>

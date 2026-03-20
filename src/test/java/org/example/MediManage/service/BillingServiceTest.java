@@ -82,6 +82,7 @@ class BillingServiceTest {
                 paymentSplits,
                 "CASH",
                 "",
+                "",
                 false);
 
         assertEquals(77, result.billId());
@@ -103,7 +104,8 @@ class BillingServiceTest {
                 List<PaymentSplit> paymentSplits,
                 String paymentMode,
                 int loyaltyPointsToRedeem,
-                int loyaltyPointsToAward) {
+                int loyaltyPointsToAward,
+                String prescriptionHighlights) {
             called = true;
             return 77;
         }

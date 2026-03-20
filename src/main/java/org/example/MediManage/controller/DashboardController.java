@@ -498,7 +498,7 @@ public class DashboardController {
 
         DialogPane pane = dialog.getDialogPane();
         pane.getButtonTypes().add(ButtonType.CLOSE);
-        pane.setPrefWidth(600);
+        pane.setPrefWidth(900);
 
         TableView<BillItem> table = new TableView<>();
         table.setItems(FXCollections.observableArrayList(items));
@@ -513,13 +513,18 @@ public class DashboardController {
         TableColumn<BillItem, Integer> colQty = new TableColumn<>("Qty");
         colQty.setCellValueFactory(d -> d.getValue().qtyProperty().asObject());
 
+        TableColumn<BillItem, String> colPrescription = new TableColumn<>("Prescription");
+        colPrescription.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().getPrescriptionSummary().isBlank() ? "-" : d.getValue().getPrescriptionSummary()));
+        colPrescription.setPrefWidth(230);
+
         TableColumn<BillItem, Double> colPr = new TableColumn<>("Price");
         colPr.setCellValueFactory(d -> d.getValue().priceProperty().asObject());
 
         TableColumn<BillItem, Double> colTotal = new TableColumn<>("Total");
         colTotal.setCellValueFactory(d -> d.getValue().totalProperty().asObject());
 
-        table.getColumns().setAll(List.of(colName, colBillExpiry, colQty, colPr, colTotal));
+        table.getColumns().setAll(List.of(colName, colBillExpiry, colQty, colPrescription, colPr, colTotal));
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPrefHeight(300);
 
@@ -535,6 +540,7 @@ public class DashboardController {
             if (file != null) {
                 try {
                     String storedProtocol = billDAO.getAICareProtocol(bill.getBillId());
+                    String prescriptionHighlights = billDAO.getPrescriptionHighlights(bill.getBillId());
                     if (storedProtocol == null) storedProtocol = "";
                     else {
                         storedProtocol = storedProtocol
@@ -545,7 +551,8 @@ public class DashboardController {
                             .trim();
                     }
                     reportService.generateInvoicePDF(items, bill.totalProperty().get(),
-                            bill.customerNameProperty().get(), file.getAbsolutePath(), storedProtocol, bill.getBillId());
+                            bill.customerNameProperty().get(), file.getAbsolutePath(), storedProtocol, bill.getBillId(),
+                            prescriptionHighlights);
                     showAlert(Alert.AlertType.INFORMATION, "Success", "Invoice saved.");
                 } catch (Exception ex) {
                     showAlert(Alert.AlertType.ERROR, "Error", "Failed to save PDF: " + ex.getMessage());
@@ -585,6 +592,7 @@ public class DashboardController {
                     try {
                         File tempFile = File.createTempFile("Invoice_" + bill.getBillId(), ".pdf");
                         String storedProtocol = billDAO.getAICareProtocol(bill.getBillId());
+                        String prescriptionHighlights = billDAO.getPrescriptionHighlights(bill.getBillId());
                         if (storedProtocol == null) storedProtocol = "";
                         else {
                             storedProtocol = storedProtocol
@@ -594,7 +602,8 @@ public class DashboardController {
                                 .replaceAll("`", "")
                                 .trim();
                         }
-                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol, bill.getBillId());
+                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(),
+                                tempFile.getAbsolutePath(), storedProtocol, bill.getBillId(), prescriptionHighlights);
                         
                         org.example.MediManage.service.WhatsAppService.sendInvoiceWhatsApp(
                                 phone.trim(), bill.customerNameProperty().get(), bill.totalProperty().get(),
@@ -624,6 +633,7 @@ public class DashboardController {
                     try {
                         File tempFile = File.createTempFile("Invoice_" + bill.getBillId(), ".pdf");
                         String storedProtocol = billDAO.getAICareProtocol(bill.getBillId());
+                        String prescriptionHighlights = billDAO.getPrescriptionHighlights(bill.getBillId());
                         if (storedProtocol == null) storedProtocol = "";
                         else {
                             storedProtocol = storedProtocol
@@ -633,7 +643,8 @@ public class DashboardController {
                                 .replaceAll("`", "")
                                 .trim();
                         }
-                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(), tempFile.getAbsolutePath(), storedProtocol, bill.getBillId());
+                        reportService.generateInvoicePDF(items, bill.totalProperty().get(), bill.customerNameProperty().get(),
+                                tempFile.getAbsolutePath(), storedProtocol, bill.getBillId(), prescriptionHighlights);
                         
                         org.example.MediManage.service.EmailService.sendInvoiceEmail(
                                 email.trim(), bill.customerNameProperty().get(), storedProtocol,

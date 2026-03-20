@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS bills (
     bill_date TEXT DEFAULT CURRENT_TIMESTAMP,
     payment_mode TEXT DEFAULT 'CASH',
     ai_care_protocol TEXT,
+    prescription_highlights TEXT,
     FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
@@ -61,6 +62,21 @@ CREATE TABLE IF NOT EXISTS bill_items (
     total REAL,
     FOREIGN KEY (bill_id) REFERENCES bills(bill_id),
     FOREIGN KEY (medicine_id) REFERENCES medicines(medicine_id)
+);
+CREATE TABLE IF NOT EXISTS bill_item_prescription_directions (
+    direction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bill_item_id INTEGER NOT NULL UNIQUE,
+    morning_dose TEXT,
+    afternoon_dose TEXT,
+    evening_dose TEXT,
+    night_dose TEXT,
+    exact_time TEXT,
+    meal_relation TEXT,
+    duration_text TEXT,
+    short_note TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bill_item_id) REFERENCES bill_items(item_id) ON DELETE CASCADE
 );
 -- 7. EXPENSES
 CREATE TABLE IF NOT EXISTS expenses (
@@ -145,6 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(bill_date);
 CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customer_id);
 CREATE INDEX IF NOT EXISTS idx_bill_items_bill ON bill_items(bill_id);
 CREATE INDEX IF NOT EXISTS idx_bill_items_medicine ON bill_items(medicine_id);
+CREATE INDEX IF NOT EXISTS idx_bill_item_directions_item ON bill_item_prescription_directions(bill_item_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
@@ -193,6 +210,8 @@ ALTER TABLE bills
 ADD COLUMN payment_mode TEXT DEFAULT 'CASH';
 ALTER TABLE bills
 ADD COLUMN ai_care_protocol TEXT;
+ALTER TABLE bills
+ADD COLUMN prescription_highlights TEXT;
 ALTER TABLE medicines
 ADD COLUMN active INTEGER DEFAULT 1;
 -- Index on the new generic_name column

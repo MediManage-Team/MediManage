@@ -152,6 +152,7 @@ public class BillingService {
             List<PaymentSplit> paymentSplits,
             String paymentMode,
             String careProtocol,
+            String prescriptionHighlights,
             boolean redeemLoyalty) throws SQLException {
         if (billItems == null || billItems.isEmpty()) {
             throw new IllegalArgumentException("No bill items found for checkout.");
@@ -178,7 +179,8 @@ public class BillingService {
                 paymentSplits,
                 paymentMode,
                 pointsToRedeem,
-                pointsToAward);
+                pointsToAward,
+                prescriptionHighlights);
         DashboardKpiService.invalidateSalesMetrics();
 
         // Save AI protocol to the database so the Dashboard History can rebuild the invoice PDFs later
@@ -204,7 +206,14 @@ public class BillingService {
         System.out.println("PLAIN CARE PROTOCOL START: [" + (plainCareProtocol.length() > 50 ? plainCareProtocol.substring(0, 50) : plainCareProtocol) + "]");
 
         try {
-            reportService.generateInvoicePDF(billItems, total, customerName, pdfPath, plainCareProtocol, billId);
+            reportService.generateInvoicePDF(
+                    billItems,
+                    total,
+                    customerName,
+                    pdfPath,
+                    plainCareProtocol,
+                    billId,
+                    prescriptionHighlights);
             return new CheckoutResult(billId, pdfPath, total, customerName, true, "");
         } catch (Exception pdfError) {
             return new CheckoutResult(
@@ -301,8 +310,13 @@ public class BillingService {
             return List.of();
         }
         return billItems.stream()
-                .map(i -> new BillItem(i.getMedicineId(), i.getName(), i.getExpiry(), i.getQty(), i.getPrice(),
-                        i.getGst()))
+                .map(i -> {
+                    BillItem copy = new BillItem(i.getMedicineId(), i.getName(), i.getExpiry(), i.getQty(), i.getPrice(),
+                            i.getGst());
+                    copy.setItemId(i.getItemId());
+                    copy.setPrescriptionDirection(i.getPrescriptionDirection());
+                    return copy;
+                })
                 .toList();
     }
 

@@ -7,6 +7,13 @@
     <parameter name="CustomerName" class="java.lang.String"/>
     <parameter name="TotalAmount" class="java.lang.Double"/>
     <parameter name="CareProtocol" class="java.lang.String"/>
+    <parameter name="PrescriptionHighlights" class="java.lang.String"/>
+    <parameter name="PrescriptionHighlightsHtml" class="java.lang.String"/>
+    <parameter name="PrescriptionScheduleText" class="java.lang.String"/>
+    <parameter name="HasPrescriptionHighlights" class="java.lang.Boolean"/>
+    <parameter name="HasPrescriptionSchedule" class="java.lang.Boolean"/>
+    <parameter name="PrescriptionScheduleReport" class="net.sf.jasperreports.engine.JasperReport"/>
+    <parameter name="PrescriptionScheduleDataSource" class="net.sf.jasperreports.engine.JRDataSource"/>
     <parameter name="PharmacyName" class="java.lang.String"/>
     <parameter name="AddressBlock" class="java.lang.String"/>
     <parameter name="ContactLine" class="java.lang.String"/>
@@ -144,7 +151,7 @@
     </detail>
 
     <summary>
-        <band height="220" splitType="Stretch">
+        <band height="420" splitType="Stretch">
             <textField>
                 <reportElement x="350" y="10" width="205" height="30"/>
                 <textElement textAlignment="Right">
@@ -188,8 +195,29 @@
                 <reportElement positionType="Float" x="0" y="114" width="555" height="1"/>
             </line>
 
+            <subreport isUsingCache="false">
+                <reportElement positionType="Float" x="0" y="124" width="555" height="120" isRemoveLineWhenBlank="true">
+                    <printWhenExpression><![CDATA[Boolean.TRUE.equals($P{HasPrescriptionHighlights}) || Boolean.TRUE.equals($P{HasPrescriptionSchedule})]]></printWhenExpression>
+                </reportElement>
+                <subreportParameter name="PrescriptionHighlightsHtml">
+                    <subreportParameterExpression><![CDATA[$P{PrescriptionHighlightsHtml}]]></subreportParameterExpression>
+                </subreportParameter>
+                <subreportParameter name="HasPrescriptionHighlights">
+                    <subreportParameterExpression><![CDATA[$P{HasPrescriptionHighlights}]]></subreportParameterExpression>
+                </subreportParameter>
+                <subreportParameter name="HasPrescriptionSchedule">
+                    <subreportParameterExpression><![CDATA[$P{HasPrescriptionSchedule}]]></subreportParameterExpression>
+                </subreportParameter>
+                <dataSourceExpression><![CDATA[$P{PrescriptionScheduleDataSource}]]></dataSourceExpression>
+                <subreportExpression><![CDATA[$P{PrescriptionScheduleReport}]]></subreportExpression>
+            </subreport>
+
+            <line>
+                <reportElement positionType="Float" x="0" y="252" width="555" height="1"/>
+            </line>
+
             <staticText>
-                <reportElement positionType="Float" x="0" y="124" width="555" height="20"/>
+                <reportElement positionType="Float" x="0" y="262" width="555" height="20"/>
                 <textElement>
                     <font size="12" isBold="true"/>
                 </textElement>
@@ -197,7 +225,7 @@
             </staticText>
 
             <textField textAdjust="StretchHeight">
-                <reportElement positionType="Float" stretchType="ElementGroupHeight" x="0" y="149" width="555" height="20" isPrintWhenDetailOverflows="true"/>
+                <reportElement positionType="Float" stretchType="ElementGroupHeight" x="0" y="287" width="555" height="20" isPrintWhenDetailOverflows="true"/>
                 <textElement markup="html">
                     <font size="10"/>
                 </textElement>
@@ -205,11 +233,11 @@
             </textField>
 
             <line>
-                <reportElement positionType="Float" x="0" y="176" width="555" height="1"/>
+                <reportElement positionType="Float" x="0" y="314" width="555" height="1"/>
             </line>
 
             <textField textAdjust="StretchHeight">
-                <reportElement positionType="Float" x="0" y="184" width="555" height="22"/>
+                <reportElement positionType="Float" x="0" y="322" width="555" height="22"/>
                 <textElement textAlignment="Center">
                     <font size="10" isItalic="true"/>
                 </textElement>

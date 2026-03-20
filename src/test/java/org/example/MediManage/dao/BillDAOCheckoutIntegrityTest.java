@@ -2,6 +2,7 @@ package org.example.MediManage.dao;
 
 import org.example.MediManage.model.BillItem;
 import org.example.MediManage.model.PaymentSplit;
+import org.example.MediManage.model.PrescriptionDirection;
 import org.example.MediManage.util.DatabaseUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -17,6 +18,7 @@ import java.sql.Statement;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BillDAOCheckoutIntegrityTest {
@@ -105,6 +107,43 @@ class BillDAOCheckoutIntegrityTest {
         assertEquals(4, getStock(medicineId));
         assertEquals(68.0, getCustomerBalance(customerId), 0.0001);
         assertEquals(2, countPaymentSplitsForBill(billId));
+    }
+
+    @Test
+    void generateInvoicePersistsPrescriptionDirectionsAndHighlights() throws Exception {
+        BillDAO dao = new BillDAO();
+        int userId = insertUser("rx_guard_" + System.nanoTime());
+        int medicineId = insertMedicine("RxMed-" + System.nanoTime(), 5);
+
+        BillItem item = new BillItem(medicineId, "RxMed", "2030-12-31", 1, 100.0, 18.0);
+        item.setPrescriptionDirection(new PrescriptionDirection(
+                "1 tab",
+                "",
+                "1 tab",
+                "",
+                "8 PM",
+                "After meal",
+                "5 days",
+                "Swallow with water"));
+
+        int billId = dao.generateInvoice(
+                118.0,
+                List.of(item),
+                null,
+                userId,
+                List.of(new PaymentSplit("Cash", 118.0)),
+                "CASH",
+                0,
+                0,
+                "After food\nComplete full course");
+
+        assertEquals("After food\nComplete full course", dao.getPrescriptionHighlights(billId));
+        List<BillItem> storedItems = dao.getBillItemsExtended(billId);
+        assertEquals(1, storedItems.size());
+        assertFalse(storedItems.get(0).getPrescriptionSummary().isBlank());
+        assertEquals("1 tab", storedItems.get(0).getMorningDose());
+        assertEquals("1 tab", storedItems.get(0).getEveningDose());
+        assertEquals("After meal", storedItems.get(0).getMealRelation());
     }
 
     private static int insertUser(String username) throws Exception {
