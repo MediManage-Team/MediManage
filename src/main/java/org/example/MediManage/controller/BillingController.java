@@ -4,9 +4,13 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -466,9 +470,10 @@ public class BillingController {
 
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Verified Prescription Schedule");
-        dialog.setHeaderText("Add structured timing, meal relation, duration, and highlights for this invoice.");
-        dialog.getDialogPane().setPrefWidth(1040);
-        dialog.getDialogPane().setPrefHeight(720);
+        dialog.setHeaderText("Review bill highlights and fill the verified schedule for each medicine.");
+        dialog.setResizable(true);
+        dialog.getDialogPane().setPrefWidth(1260);
+        dialog.getDialogPane().setPrefHeight(860);
 
         ButtonType saveButtonType = new ButtonType("Save Schedule", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
@@ -480,29 +485,63 @@ public class BillingController {
 
         TextArea highlightsArea = new TextArea(prescriptionHighlights);
         highlightsArea.setPromptText("One highlight per line. Example:\nAfter food\nComplete full antibiotic course");
-        highlightsArea.setPrefRowCount(4);
+        highlightsArea.setPrefRowCount(6);
+        highlightsArea.setPrefHeight(160);
         highlightsArea.setWrapText(true);
 
+        Label configuredCountLabel = createPrescriptionDialogBadge("");
+        Label highlightCountLabel = createMutedDialogLabel("");
+
         ListView<BillItem> medicineList = new ListView<>(FXCollections.observableArrayList(billList));
-        medicineList.setPrefWidth(260);
-        medicineList.setPrefHeight(440);
+        medicineList.setPrefWidth(340);
+        medicineList.setMinWidth(300);
+        medicineList.setPrefHeight(640);
+        medicineList.setPlaceholder(createMutedDialogLabel("No medicines in this bill yet."));
         medicineList.setCellFactory(lv -> new ListCell<>() {
             @Override
             protected void updateItem(BillItem item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
+                    setGraphic(null);
                     return;
                 }
                 PrescriptionDirection direction = workingDirections.get(item);
-                String status = direction != null && !direction.isEmpty() ? "[Set]" : "[Pending]";
+                boolean configured = direction != null && !direction.isEmpty();
                 String summary = direction == null ? "" : direction.buildSlotSummary();
                 if (summary.isBlank()) {
                     summary = direction == null ? "" : direction.buildSummary();
                 }
-                setText(summary.isBlank()
-                        ? status + " " + item.getName()
-                        : status + " " + item.getName() + "\n" + summary);
+
+                Label nameLabel = new Label(item.getName());
+                nameLabel.setWrapText(true);
+                nameLabel.setStyle("-fx-text-fill: #f8fafc; -fx-font-size: 14px; -fx-font-weight: 700;");
+
+                Label statusLabel = createPrescriptionDialogBadge(configured ? "Configured" : "Pending");
+                statusLabel.setStyle((configured
+                        ? "-fx-background-color: rgba(16,185,129,0.18); -fx-border-color: rgba(16,185,129,0.45);"
+                        : "-fx-background-color: rgba(245,158,11,0.15); -fx-border-color: rgba(245,158,11,0.38);")
+                        + " -fx-background-radius: 999; -fx-border-radius: 999;"
+                        + " -fx-padding: 4 10; -fx-text-fill: #e5e7eb; -fx-font-size: 11px; -fx-font-weight: 700;");
+
+                Label summaryLabel = new Label(summary.isBlank()
+                        ? "No verified timings added yet."
+                        : summary);
+                summaryLabel.setWrapText(true);
+                summaryLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
+
+                Region spacer = new Region();
+                HBox.setHgrow(spacer, Priority.ALWAYS);
+
+                HBox topRow = new HBox(10, nameLabel, spacer, statusLabel);
+                topRow.setAlignment(Pos.CENTER_LEFT);
+
+                VBox content = new VBox(6, topRow, summaryLabel);
+                content.setPadding(new Insets(8, 10, 8, 10));
+
+                setText(null);
+                setGraphic(content);
+                setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
             }
         });
 
@@ -522,7 +561,8 @@ public class BillingController {
         TextField durationField = new TextField();
         TextArea noteArea = new TextArea();
         noteArea.setWrapText(true);
-        noteArea.setPrefRowCount(4);
+        noteArea.setPrefRowCount(6);
+        noteArea.setPrefHeight(180);
 
         morningField.setPromptText("1 tab / 5 ml");
         afternoonField.setPromptText("1 tab / 5 ml");
@@ -531,6 +571,23 @@ public class BillingController {
         exactTimeField.setPromptText("8:00 AM / bedtime");
         durationField.setPromptText("5 days / 2 weeks");
         noteArea.setPromptText("Short counselling note for this medicine");
+        morningField.setMaxWidth(Double.MAX_VALUE);
+        afternoonField.setMaxWidth(Double.MAX_VALUE);
+        eveningField.setMaxWidth(Double.MAX_VALUE);
+        nightField.setMaxWidth(Double.MAX_VALUE);
+        exactTimeField.setMaxWidth(Double.MAX_VALUE);
+        durationField.setMaxWidth(Double.MAX_VALUE);
+        mealRelationBox.setMaxWidth(Double.MAX_VALUE);
+
+        Label selectedMedicineLabel = new Label("Select a medicine");
+        selectedMedicineLabel.setWrapText(true);
+        selectedMedicineLabel.setStyle("-fx-text-fill: #f8fafc; -fx-font-size: 18px; -fx-font-weight: 700;");
+
+        Label selectedMedicineSummaryLabel = createMutedDialogLabel(
+                "Choose a medicine from the left to enter dose timing, meal relation, duration, and notes.");
+
+        final BillItem[] selectedItemHolder = new BillItem[1];
+        final boolean[] editorLoading = new boolean[1];
 
         Runnable clearEditor = () -> {
             morningField.clear();
@@ -543,9 +600,41 @@ public class BillingController {
             noteArea.clear();
         };
 
-        final BillItem[] selectedItemHolder = new BillItem[1];
+        Runnable updateSidebarSummary = () -> {
+            long configuredCount = workingDirections.values().stream()
+                    .filter(direction -> direction != null && !direction.isEmpty())
+                    .count();
+            int highlightCount = countHighlightLines(highlightsArea.getText());
+            configuredCountLabel.setText(configuredCount + " / " + billList.size() + " medicines configured");
+            highlightCountLabel.setText(highlightCount == 0
+                    ? "No bill highlights yet."
+                    : highlightCount + " bill highlight" + (highlightCount == 1 ? "" : "s") + " ready for the invoice.");
+        };
+
+        Runnable updateSelectionSummary = () -> {
+            BillItem selected = selectedItemHolder[0];
+            if (selected == null) {
+                selectedMedicineLabel.setText("Select a medicine");
+                selectedMedicineSummaryLabel.setText(
+                        "Choose a medicine from the left to enter dose timing, meal relation, duration, and notes.");
+                return;
+            }
+            PrescriptionDirection direction = workingDirections.getOrDefault(selected, new PrescriptionDirection());
+            selectedMedicineLabel.setText(selected.getName());
+            if (direction.isEmpty()) {
+                selectedMedicineSummaryLabel.setText("No verified schedule saved yet for this medicine.");
+                return;
+            }
+            String summary = direction.buildSummary();
+            selectedMedicineSummaryLabel.setText(summary.isBlank()
+                    ? "Schedule details are saved for this medicine."
+                    : summary);
+        };
 
         Runnable saveEditorToSelection = () -> {
+            if (editorLoading[0]) {
+                return;
+            }
             BillItem selected = selectedItemHolder[0];
             if (selected == null) {
                 return;
@@ -561,12 +650,17 @@ public class BillingController {
             direction.setShortNote(noteArea.getText());
             workingDirections.put(selected, direction);
             medicineList.refresh();
+            updateSelectionSummary.run();
+            updateSidebarSummary.run();
         };
 
         Runnable loadSelectionIntoEditor = () -> {
             BillItem selected = selectedItemHolder[0];
+            editorLoading[0] = true;
             if (selected == null) {
                 clearEditor.run();
+                editorLoading[0] = false;
+                updateSelectionSummary.run();
                 return;
             }
             PrescriptionDirection direction = workingDirections.getOrDefault(selected, new PrescriptionDirection());
@@ -578,7 +672,19 @@ public class BillingController {
             mealRelationBox.setValue(direction.getMealRelation().isBlank() ? null : direction.getMealRelation());
             durationField.setText(direction.getDuration());
             noteArea.setText(direction.getShortNote());
+            editorLoading[0] = false;
+            updateSelectionSummary.run();
         };
+
+        morningField.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        afternoonField.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        eveningField.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        nightField.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        exactTimeField.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        durationField.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        noteArea.textProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        mealRelationBox.valueProperty().addListener((obs, oldValue, newValue) -> saveEditorToSelection.run());
+        highlightsArea.textProperty().addListener((obs, oldValue, newValue) -> updateSidebarSummary.run());
 
         medicineList.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
             if (oldSelection != null) {
@@ -613,60 +719,100 @@ public class BillingController {
         });
 
         Button clearCurrent = new Button("Clear Current");
-        clearCurrent.setOnAction(e -> clearEditor.run());
+        clearCurrent.setOnAction(e -> {
+            clearEditor.run();
+            saveEditorToSelection.run();
+        });
 
         HBox presetsRow = new HBox(8, preset101, preset111, preset001, clearCurrent);
+        presetsRow.setAlignment(Pos.CENTER_RIGHT);
 
         GridPane editorGrid = new GridPane();
-        editorGrid.setHgap(12);
-        editorGrid.setVgap(10);
+        editorGrid.setHgap(18);
+        editorGrid.setVgap(18);
+        editorGrid.setMaxWidth(Double.MAX_VALUE);
+        ColumnConstraints firstEditorColumn = new ColumnConstraints();
+        firstEditorColumn.setFillWidth(true);
+        firstEditorColumn.setHgrow(Priority.ALWAYS);
+        ColumnConstraints secondEditorColumn = new ColumnConstraints();
+        secondEditorColumn.setFillWidth(true);
+        secondEditorColumn.setHgrow(Priority.ALWAYS);
+        editorGrid.getColumnConstraints().addAll(firstEditorColumn, secondEditorColumn);
+        editorGrid.add(createPrescriptionFieldGroup("Morning", morningField, "Dose to be taken in the morning slot."), 0, 0);
+        editorGrid.add(createPrescriptionFieldGroup("Afternoon", afternoonField, "Dose to be taken in the afternoon slot."), 1, 0);
+        editorGrid.add(createPrescriptionFieldGroup("Evening", eveningField, "Dose to be taken in the evening slot."), 0, 1);
+        editorGrid.add(createPrescriptionFieldGroup("Night", nightField, "Dose to be taken at night or bedtime."), 1, 1);
+        editorGrid.add(createPrescriptionFieldGroup("Exact Time", exactTimeField, "Optional exact time such as 8:00 AM or bedtime."), 0, 2);
+        editorGrid.add(createPrescriptionFieldGroup("Meal Relation", mealRelationBox, "State whether it should be taken before, after, or with food."), 1, 2);
+        editorGrid.add(createPrescriptionFieldGroup("Duration", durationField, "Optional length such as 5 days or 2 weeks."), 0, 3);
+        editorGrid.add(createPrescriptionFieldGroup("Short Note", noteArea, "Optional counselling note printed for this medicine."), 1, 3);
+        GridPane.setHgrow(editorGrid.getChildren().get(0), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(1), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(2), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(3), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(4), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(5), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(6), Priority.ALWAYS);
+        GridPane.setHgrow(editorGrid.getChildren().get(7), Priority.ALWAYS);
 
-        editorGrid.add(new Label("Morning"), 0, 0);
-        editorGrid.add(morningField, 1, 0);
-        editorGrid.add(new Label("Afternoon"), 2, 0);
-        editorGrid.add(afternoonField, 3, 0);
+        HBox medicineHeader = new HBox(12);
+        Label medicineListTitle = new Label("Medicines in This Bill");
+        medicineListTitle.setStyle("-fx-text-fill: #f8fafc; -fx-font-size: 18px; -fx-font-weight: 700;");
+        Label medicineListHint = createMutedDialogLabel("Select one medicine at a time. The list shows which schedules are still pending.");
+        VBox medicineHeaderText = new VBox(4, medicineListTitle, medicineListHint);
+        Region medicineHeaderSpacer = new Region();
+        HBox.setHgrow(medicineHeaderSpacer, Priority.ALWAYS);
+        medicineHeader.getChildren().addAll(medicineHeaderText, medicineHeaderSpacer, configuredCountLabel);
+        medicineHeader.setAlignment(Pos.TOP_LEFT);
 
-        editorGrid.add(new Label("Evening"), 0, 1);
-        editorGrid.add(eveningField, 1, 1);
-        editorGrid.add(new Label("Night"), 2, 1);
-        editorGrid.add(nightField, 3, 1);
+        VBox medicinePane = createPrescriptionSection(
+                medicineHeader,
+                medicineList,
+                highlightCountLabel);
+        VBox.setVgrow(medicineList, Priority.ALWAYS);
 
-        editorGrid.add(new Label("Exact Time"), 0, 2);
-        editorGrid.add(exactTimeField, 1, 2);
-        editorGrid.add(new Label("Meal"), 2, 2);
-        editorGrid.add(mealRelationBox, 3, 2);
+        HBox scheduleHeader = new HBox(16);
+        VBox selectedMedicineBox = new VBox(6, selectedMedicineLabel, selectedMedicineSummaryLabel);
+        Region scheduleHeaderSpacer = new Region();
+        HBox.setHgrow(scheduleHeaderSpacer, Priority.ALWAYS);
+        HBox.setHgrow(selectedMedicineBox, Priority.ALWAYS);
+        scheduleHeader.getChildren().addAll(selectedMedicineBox, scheduleHeaderSpacer, presetsRow);
+        scheduleHeader.setAlignment(Pos.CENTER_LEFT);
 
-        editorGrid.add(new Label("Duration"), 0, 3);
-        editorGrid.add(durationField, 1, 3);
-        editorGrid.add(new Label("Short Note"), 0, 4);
-        editorGrid.add(noteArea, 1, 4, 3, 1);
+        VBox highlightPane = createPrescriptionSection(
+                createPrescriptionDialogTitle("Bill Highlights"),
+                createMutedDialogLabel("Add one verified highlight per line. These appear above the schedule table on the invoice."),
+                highlightsArea);
 
-        GridPane.setHgrow(morningField, Priority.ALWAYS);
-        GridPane.setHgrow(afternoonField, Priority.ALWAYS);
-        GridPane.setHgrow(eveningField, Priority.ALWAYS);
-        GridPane.setHgrow(nightField, Priority.ALWAYS);
-        GridPane.setHgrow(exactTimeField, Priority.ALWAYS);
-        GridPane.setHgrow(mealRelationBox, Priority.ALWAYS);
-        GridPane.setHgrow(durationField, Priority.ALWAYS);
-        GridPane.setHgrow(noteArea, Priority.ALWAYS);
-        GridPane.setVgrow(noteArea, Priority.ALWAYS);
-
-        VBox editorBox = new VBox(
-                10,
-                new Label("Bill Highlights"),
-                highlightsArea,
-                new Label("Per-Medicine Schedule"),
-                presetsRow,
+        VBox editorPane = createPrescriptionSection(
+                createPrescriptionDialogTitle("Per-Medicine Schedule"),
+                createMutedDialogLabel("Use the selected medicine card below to fill its verified timing, meal relation, duration, and note."),
+                scheduleHeader,
                 editorGrid);
-        VBox.setVgrow(highlightsArea, Priority.NEVER);
 
-        HBox body = new HBox(16, medicineList, editorBox);
-        HBox.setHgrow(editorBox, Priority.ALWAYS);
-        VBox root = new VBox(12, body);
-        VBox.setVgrow(body, Priority.ALWAYS);
+        VBox rightColumn = new VBox(18, highlightPane, editorPane);
+        rightColumn.setFillWidth(true);
+
+        ScrollPane rightScroll = new ScrollPane(rightColumn);
+        rightScroll.setFitToWidth(true);
+        rightScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        rightScroll.setStyle("-fx-background-color: transparent;");
+
+        SplitPane splitPane = new SplitPane(medicinePane, rightScroll);
+        splitPane.setDividerPositions(0.31);
+
+        VBox root = new VBox(splitPane);
+        root.setPadding(new Insets(14));
+        VBox.setVgrow(splitPane, Priority.ALWAYS);
         dialog.getDialogPane().setContent(root);
 
+        Button saveButton = (Button) dialog.getDialogPane().lookupButton(saveButtonType);
+        if (saveButton != null) {
+            saveButton.setDefaultButton(true);
+        }
+
         medicineList.getSelectionModel().selectFirst();
+        updateSidebarSummary.run();
 
         dialog.setResultConverter(buttonType -> {
             if (buttonType == saveButtonType) {
@@ -686,6 +832,61 @@ public class BillingController {
                 updatePrescriptionSummary();
             }
         });
+    }
+
+    private VBox createPrescriptionSection(Node... children) {
+        VBox box = new VBox(12, children);
+        box.setPadding(new Insets(18));
+        box.setStyle(
+                "-fx-background-color: rgba(15,23,42,0.68);"
+                        + " -fx-background-radius: 16;"
+                        + " -fx-border-color: rgba(96,165,250,0.18);"
+                        + " -fx-border-radius: 16;");
+        return box;
+    }
+
+    private Label createPrescriptionDialogTitle(String text) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        label.setStyle("-fx-text-fill: #f8fafc; -fx-font-size: 18px; -fx-font-weight: 700;");
+        return label;
+    }
+
+    private Label createMutedDialogLabel(String text) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        label.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
+        return label;
+    }
+
+    private Label createPrescriptionDialogBadge(String text) {
+        Label label = new Label(text);
+        label.setStyle(
+                "-fx-background-color: rgba(59,130,246,0.18);"
+                        + " -fx-border-color: rgba(96,165,250,0.38);"
+                        + " -fx-background-radius: 999;"
+                        + " -fx-border-radius: 999;"
+                        + " -fx-padding: 5 12;"
+                        + " -fx-text-fill: #dbeafe;"
+                        + " -fx-font-size: 11px;"
+                        + " -fx-font-weight: 700;");
+        return label;
+    }
+
+    private VBox createPrescriptionFieldGroup(String labelText, Control input, String helperText) {
+        Label titleLabel = new Label(labelText);
+        titleLabel.setStyle("-fx-text-fill: #e5e7eb; -fx-font-size: 13px; -fx-font-weight: 700;");
+
+        VBox fieldGroup = new VBox(6, titleLabel, input);
+        if (helperText != null && !helperText.isBlank()) {
+            fieldGroup.getChildren().add(createMutedDialogLabel(helperText));
+        }
+        fieldGroup.setFillWidth(true);
+        input.setMaxWidth(Double.MAX_VALUE);
+        if (input instanceof TextArea) {
+            VBox.setVgrow(input, Priority.ALWAYS);
+        }
+        return fieldGroup;
     }
 
     private void updatePrescriptionSummary() {
